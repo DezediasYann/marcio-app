@@ -30,16 +30,34 @@ fn is_port_open(host: &str, port: u16) -> bool {
 
 /// Spawna o bot Node.js no diretório do projeto.
 /// No Windows usa `cmd /c npx` porque `npx` é um .cmd file.
+/// Passa MARCIO_DATA_DIR (appDataDir) pra o bot guardar dados num local fixo
+/// (não solto na pasta do .exe).
 fn spawn_bot_process() -> Option<Child> {
     let cwd = std::env::current_dir().ok()?;
     let project_dir = cwd.parent().unwrap_or(&cwd).to_path_buf();
 
+    // Resolve o appDataDir: %APPDATA%\com.marcio.app no Windows.
+    // Se não conseguir, usa o diretório do projeto (fallback pra dev).
+    let data_dir = std::env::var("APPDATA")
+        .map(|appdata| {
+            let mut p = std::path::PathBuf::from(appdata);
+            p.push("MarcioApp");
+            p
+        })
+        .ok()
+        .unwrap_or_else(|| project_dir.clone());
+
+    // Cria o diretório se não existir
+    let _ = std::fs::create_dir_all(&data_dir);
+
     println!("[TAURI] Iniciando bot Node.js em: {}", project_dir.display());
+    println!("[TAURI] Data dir: {}", data_dir.display());
 
     #[cfg(windows)]
     let child = Command::new("cmd")
         .arg("/c").arg("npx").arg("tsx").arg("src/bot.ts")
         .current_dir(&project_dir)
+        .env("MARCIO_DATA_DIR", &data_dir)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn();
@@ -48,6 +66,7 @@ fn spawn_bot_process() -> Option<Child> {
     let child = Command::new("npx")
         .arg("tsx").arg("src/bot.ts")
         .current_dir(&project_dir)
+        .env("MARCIO_DATA_DIR", &data_dir)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn();

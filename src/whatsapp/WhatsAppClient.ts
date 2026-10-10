@@ -50,8 +50,8 @@ export class WhatsAppClient {
     this.app = app;
     this.app.log('WA', 'Construindo WhatsAppClient...');
 
-    // LocalAuth: se legacyAuthPath for setado, reaproveita a sessão do bot
-    // velho. Senão, usa o default (.wwebjs_auth/ no cwd).
+    // LocalAuth: se legacyAuthPath for setado, usa ele (produção: AppData).
+    // Senão, usa o default (.wwebjs_auth/ no cwd — dev mode).
     const authStrategy = app.config.legacyAuthPath
       ? new LocalAuth({ dataPath: app.config.legacyAuthPath })
       : new LocalAuth();

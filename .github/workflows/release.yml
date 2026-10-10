@@ -1,0 +1,48 @@
+name: Release
+
+# Trigger: quando você criar uma tag tipo "v1.0.1"
+# O GitHub Actions compila o .exe, assina, e publica um release
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # Chave de signing do updater (gerar com: tauri signer generate -w ~/.tauri/marcio.key)
+          # Colocar a CHAVE PRIVADA como secret no GitHub (Settings → Secrets → Actions)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Márcio App ${{ github.ref_name }}'
+          releaseBody: 'Nova versão do Márcio App. Baixe o instalador e execute.'
+          releaseDraft: true
+          prerelease: false
+
+      - name: Upload latest.json (pro updater encontrar)
+        uses: softprops/action-gh-release@v1
+        with:
+          files: src-tauri/target/release/bundle/nsis/latest.json

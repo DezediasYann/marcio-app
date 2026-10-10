@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/bot.ts",
     "start": "tsx src/bot.ts",
-    "build": "tsc",
+    "build": "tsc && node copy-assets.js",
     "typecheck": "tsc --noEmit",
     "postinstall": "node patch-whatsapp-web.js",
     "tauri": "tauri",
@@ -16,6 +16,7 @@
   "dependencies": {
     "@tauri-apps/plugin-autostart": "^2.7.0",
     "@tauri-apps/plugin-notification": "^2.6.0",
+    "@tauri-apps/plugin-updater": "^2.13.3",
     "@types/ws": "^8.18.2",
     "mathjs": "^15.2.0",
     "qrcode-terminal": "^0.12.0",

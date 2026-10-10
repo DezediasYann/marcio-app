@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3001",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../src/control/public"
   },
   "app": {
@@ -43,5 +43,14 @@
     "shortDescription": "Márcio App — bot do WhatsApp com IA",
     "longDescription": "Márcio App é um bot do WhatsApp com IA conversacional, memória permanente, figurinhas, comandos assistivos e painel de controle web."
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/ydm-r/marcio-app/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZCMTg4MDA3RDc3OTA3QTYKUldTbUIzblhCNEFZKzVGNlkzTnNWbm56NmgzMlhxMGxyN3ZiRXJKeVlkZy84TXhPR2h0cmFvNWUK"
+    }
+  }
 }

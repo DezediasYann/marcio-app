@@ -2358,48 +2358,47 @@
       "vc": 3,
       "msm": 3,
       "ne": 5,
-      "q": 22,
+      "q": 21,
       "agr": 3,
       "n": 14,
       "s": 12,
       "pq": 6,
-      "kkkkkk": 3,
+      "kkkkkk": 2,
       "krl": 1,
-      "mds": 6,
+      "mds": 5,
       "tbm": 2,
       "gente": 2,
       "nossa": 3,
       "cara": 1
     },
     "style": {
-      "totalMessages": 156,
-      "totalLength": 5988,
+      "totalMessages": 153,
+      "totalLength": 5776,
       "lowercaseMessages": 70,
       "punctuatedMessages": 18,
-      "emojiMessages": 7,
-      "totalEmojis": 10,
-      "capsMessages": 8
+      "emojiMessages": 6,
+      "totalEmojis": 9,
+      "capsMessages": 6
     },
     "userActivity": {
       "Yann": 27,
-      "Leticia Dezedias": 61,
+      "Leticia Dezedias": 58,
       "Luiza 🫶": 68
     },
     "firstSeen": "2026-10-09T16:39:44.995Z",
-    "lastUpdated": "2026-10-10T18:21:13.462Z",
+    "lastUpdated": "2026-10-10T14:57:35.693Z",
     "userProfiles": {
       "Leticia Dezedias": {
         "vocabulary": {
-          "q": 6,
+          "q": 5,
           "pq": 3,
           "ne": 1,
           "gente": 1,
           "nossa": 1,
-          "kkkkkk": 2,
-          "mds": 1
+          "kkkkkk": 1
         },
-        "msgCount": 18,
-        "totalLength": 1045,
+        "msgCount": 15,
+        "totalLength": 833,
         "topics": {
           "https": 1,
           "instagram": 2,
@@ -2420,8 +2419,8 @@
           "rico": 1,
           "achando": 2,
           "máximo": 1,
-          "respondendo": 3,
-          "luiza": 2,
+          "respondendo": 2,
+          "luiza": 1,
           "sabemos": 1,
           "apoia": 1,
           "kkkkkkkkkkkk": 1,
@@ -2436,7 +2435,7 @@
           "votar": 3,
           "blusa": 1,
           "brasil": 1,
-          "vídeo": 2,
+          "vídeo": 1,
           "yuri": 1,
           "marçal": 1,
           "mandando": 1,
@@ -2464,23 +2463,11 @@
           "pinto": 1,
           "levar": 1,
           "confia": 1,
-          "kkkkkk": 2,
+          "kkkkkk": 1,
           "senti": 1,
-          "deboche": 1,
-          "porta": 1,
-          "fazendo": 1,
-          "morrendo": 1,
-          "medo": 1,
-          "algum": 1,
-          "apareça": 1,
-          "caso": 1,
-          "aconteça": 1,
-          "negar": 1,
-          "morte": 1,
-          "cadeeee": 1,
-          "kkkkkkkkkkkkkkkk": 1
+          "deboche": 1
         },
-        "avgLength": 58
+        "avgLength": 56
       },
       "Yann": {
         "vocabulary": {

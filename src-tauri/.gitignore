@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build TS
+dist/
+
+# Sessão do WhatsApp (NUNCA commitar — é a auth do seu número)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Logs
+logs/
+*.log
+
+# Estado runtime
+# data/memories.json
+# data/decision-log.json
+
+# Tauri build artifacts
+src-tauri/target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

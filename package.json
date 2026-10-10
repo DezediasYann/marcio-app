@@ -8,7 +8,10 @@
     "start": "tsx src/bot.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node patch-whatsapp-web.js"
+    "postinstall": "node patch-whatsapp-web.js",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@types/ws": "^8.18.2",
@@ -21,6 +24,7 @@
     "twitter-api-v2": "^1.20.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1",
     "@types/node": "^22.0.0",
     "@types/qrcode-terminal": "^0.12.2",
     "tsx": "^4.19.0",

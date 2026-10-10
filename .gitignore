@@ -16,6 +16,11 @@ logs/
 # data/memories.json
 # data/decision-log.json
 
+# Rust / Tauri — build artifacts (NUNCA commitar, é tipo node_modules)
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/gen/
+
 # OS
 .DS_Store
 Thumbs.db

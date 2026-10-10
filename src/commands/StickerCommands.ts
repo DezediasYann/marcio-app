@@ -94,7 +94,7 @@ export class StickerCommands implements CommandModule {
         } else {
           await this.app.reportError(
             msg, chatId,
-            'a mensagem respondida não tem mídia. Responda a uma *imagem, vídeo ou figurinha* com *!figurinha*.'
+            'a mensagem respondida não tem mídia. Responda a uma *imagem/vídeo/figurinha* com *!figurinha*.'
           );
           return;
         }
@@ -106,8 +106,7 @@ export class StickerCommands implements CommandModule {
         if (!match) {
           await this.app.reportError(
             msg, chatId,
-            'para usar o comando corretamente, se atente à sintaxe: *!figurinha <link do Twitter/X>* — envie um link válido junto com o comando.',
-            new Error('Link inválido.')
+            'use *!figurinha <link do Twitter/X>*'
           );
           return;
         }
@@ -117,7 +116,7 @@ export class StickerCommands implements CommandModule {
         if (!response.ok) {
           await this.app.reportError(
             msg, chatId,
-            'não consegui acessar o link do tweet. Verifique se o link está correto e tente novamente.',
+            'não consegui acessar o link do tweet.',
             new Error(`vxtwitter respondeu ${response.status}`)
           );
           return;
@@ -131,7 +130,7 @@ export class StickerCommands implements CommandModule {
         } else {
           await this.app.reportError(
             msg, chatId,
-            'nenhuma mídia encontrada no tweet. Verifique se o tweet realmente contém uma imagem ou vídeo.',
+            'nenhuma mídia no tweet.',
             new Error('Nenhuma mídia encontrada no tweet.')
           );
           return;
@@ -139,7 +138,7 @@ export class StickerCommands implements CommandModule {
       } else {
         await this.app.reportError(
           msg, chatId,
-          'para usar o comando corretamente, se atente à sintaxe:\n\n• Responda a uma *imagem, vídeo ou figurinha* com *!figurinha*; ou\n• Envie uma imagem com a legenda *!figurinha*; ou\n• Envie *!figurinha <link do Twitter/X>*.'
+          'responda a uma *imagem/vídeo/figurinha* com *!figurinha*, ou envie *!figurinha <link do Twitter/X>*.'
         );
         return;
       }
@@ -162,7 +161,7 @@ export class StickerCommands implements CommandModule {
       console.error('Falha ao processar arquivo:', error);
       await this.app.reportError(
         msg, chatId,
-        `ocorreu um erro ao criar a figurinha: ${e.message}. Tente novamente mais tarde.`,
+        `erro ao criar figurinha: ${e.message}`,
         e
       );
     }
@@ -242,10 +241,7 @@ export class StickerCommands implements CommandModule {
 
         await this.app.react(msg, EMOJI.SUCCESS);
         await this.app.notify(chatId,
-          `deduplicação concluída ✅\n\n` +
-          `Total analisado: ${files.length}\n` +
-          `Duplicadas removidas: ${duplicates.length}\n` +
-          `Únicas no vault: ${files.length - duplicates.length}`
+          `✅ dedup: ${duplicates.length} removidas | ${files.length - duplicates.length} únicas`
         );
         this.app.log('FIG', `Dedup de figurinhas: ${duplicates.length} removidas de ${files.length}.`);
         this.app.debug('FIG', `dedup removeu ${duplicates.length} duplicadas`);
@@ -259,18 +255,18 @@ export class StickerCommands implements CommandModule {
     if (subcommand === 'lista') {
       const named = this.app.stickers.listNamed();
       if (named.length === 0) {
-        await this.app.notify(chatId, 'nenhuma figurinha nomeada ou favorita ainda. Use */fig fav* ou */fig nome <texto>* respondendo a uma figurinha.');
+        await this.app.notify(chatId, 'nenhuma figurinha marcada. Use */fig fav* ou */fig nome <texto>* respondendo a uma figurinha.');
         await this.app.react(msg, EMOJI.SUCCESS);
         return;
       }
-      const lines = ['*Figurinhas marcadas:*', ''];
-      named.forEach((s, i) => {
+      const parts = named.map(s => {
         const marks: string[] = [];
-        if (s.favorite) marks.push('⭐ favorita');
-        if (s.name) marks.push(`nome: "${s.name}"`);
-        lines.push(`${i + 1}. ${marks.join(' | ') || 'sem marca'}`);
+        if (s.name) marks.push(s.name);
+        if (s.favorite) marks.push('⭐');
+        return marks.join(' ');
       });
-      await this.app.notify(chatId, lines.join('\n'));
+      const favCount = named.filter(s => s.favorite).length;
+      await this.app.notify(chatId, `${parts.join(' | ')} | fav: ${favCount}`);
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
@@ -278,16 +274,10 @@ export class StickerCommands implements CommandModule {
     // /fig (sem subcomando) — mostra ajuda
     if (!subcommand) {
       await this.app.notify(chatId, [
-        '*Comandos de figurinha:*',
+        '*/fig fav* | /fig unfav | /fig nome <texto> | /fig semnome',
+        '*/fig lista* | /fig dedup*',
         '',
-        '• Responda a uma figurinha com */fig fav* → marca como favorita',
-        '• Responda com */fig unfav* → remove dos favoritos',
-        '• Responda com */fig nome <texto>* → dá um nome (ex.: /fig nome risada)',
-        '• Responda com */fig semnome* → remove o nome',
-        '• */fig lista* → lista as figurinhas marcadas',
-        '• */fig dedup* → remove figurinhas duplicadas do vault (limpa as repetidas)',
-        '',
-        '_A IA pode pedir figurinhas específicas pelo nome ao responder._'
+        '_Responda a uma figurinha pra marcar._'
       ].join('\n'));
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
@@ -296,12 +286,12 @@ export class StickerCommands implements CommandModule {
     // Subcomandos que precisam de figurinha respondida: fav, unfav, nome, semnome
     const needsQuoted = ['fav', 'unfav', 'nome', 'semnome'];
     if (!needsQuoted.includes(subcommand)) {
-      await this.app.reportError(msg, chatId, `subcomando desconhecido: "${subcommand}". Use */fig* pra ver os comandos disponíveis.`);
+      await this.app.reportError(msg, chatId, `subcomando desconhecido: "${subcommand}". Use */fig*.`);
       return;
     }
 
     if (!msg.hasQuotedMsg) {
-      await this.app.reportError(msg, chatId, 'responda a uma *figurinha* com o comando. Ex.: responda a uma figurinha com */fig fav*.');
+      await this.app.reportError(msg, chatId, 'responda a uma *figurinha* com o comando.');
       return;
     }
 
@@ -315,7 +305,7 @@ export class StickerCommands implements CommandModule {
 
     // Valida que é figurinha
     if (!quoted.hasMedia || quoted.type !== 'sticker') {
-      await this.app.reportError(msg, chatId, 'a mensagem respondida não é uma figurinha. Responda a uma *figurinha* com o comando.');
+      await this.app.reportError(msg, chatId, 'a mensagem respondida não é uma figurinha.');
       return;
     }
 
@@ -329,7 +319,7 @@ export class StickerCommands implements CommandModule {
       return;
     }
     if (!media || !media.data) {
-      await this.app.reportError(msg, chatId, 'figurinha vazia ou inválida.');
+      await this.app.reportError(msg, chatId, 'figurinha vazia.');
       return;
     }
 
@@ -354,7 +344,7 @@ export class StickerCommands implements CommandModule {
     if (subcommand === 'fav') {
       this.app.stickers.setMeta(filename, { favorite: true });
       await this.app.react(msg, EMOJI.SUCCESS);
-      await this.app.notify(chatId, `figurinha marcada como favorita ⭐\nID: ${filename}`);
+      await this.app.notify(chatId, `⭐ favorita`);
       this.app.log('FIG', `Figurinha favorita: ${filename} (por ${sender.all.join(' / ')}).`);
       return;
     }
@@ -362,7 +352,7 @@ export class StickerCommands implements CommandModule {
     if (subcommand === 'unfav') {
       this.app.stickers.setMeta(filename, { favorite: false });
       await this.app.react(msg, EMOJI.SUCCESS);
-      await this.app.notify(chatId, `figurinha removida dos favoritos.\nID: ${filename}`);
+      await this.app.notify(chatId, `✅ unfav`);
       this.app.log('FIG', `Figurinha unfav: ${filename} (por ${sender.all.join(' / ')}).`);
       return;
     }
@@ -370,22 +360,22 @@ export class StickerCommands implements CommandModule {
     if (subcommand === 'nome') {
       const name = args.slice(1).join(' ').trim();
       if (!name) {
-        await this.app.reportError(msg, chatId, 'forneça um nome. Ex.: */fig nome risada*.');
+        await this.app.reportError(msg, chatId, 'use */fig nome <texto>*');
         return;
       }
       if (name.length > 60) {
-        await this.app.reportError(msg, chatId, 'nome muito longo (máx 60 caracteres).');
+        await this.app.reportError(msg, chatId, 'nome muito longo (máx 60).');
         return;
       }
       // Verifica se já existe figurinha com esse nome
       const existing = this.app.stickers.getByName(name);
       if (existing) {
-        await this.app.reportError(msg, chatId, `já existe uma figurinha com o nome "${name}". Escolha outro nome ou renomeie a outra primeiro.`);
+        await this.app.reportError(msg, chatId, `já existe figurinha com nome "${name}".`);
         return;
       }
       this.app.stickers.setMeta(filename, { name });
       await this.app.react(msg, EMOJI.SUCCESS);
-      await this.app.notify(chatId, `figurinha nomeada: "${name}"\nID: ${filename}\n\nA IA agora pode pedir essa figurinha com [FIGURINHA: ${name}].`);
+      await this.app.notify(chatId, `✅ nomeada: "${name}"`);
       this.app.log('FIG', `Figurinha nomeada: "${name}" (${filename}) (por ${sender.all.join(' / ')}).`);
       return;
     }
@@ -393,7 +383,7 @@ export class StickerCommands implements CommandModule {
     if (subcommand === 'semnome') {
       this.app.stickers.setMeta(filename, { name: null });
       await this.app.react(msg, EMOJI.SUCCESS);
-      await this.app.notify(chatId, `nome removido da figurinha.\nID: ${filename}`);
+      await this.app.notify(chatId, `✅ nome removido`);
       this.app.log('FIG', `Figurinha semnome: ${filename} (por ${sender.all.join(' / ')}).`);
       return;
     }

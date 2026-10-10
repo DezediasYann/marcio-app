@@ -27,6 +27,7 @@ import { MarcioBrain } from './brain/MarcioBrain';
 import { Retroactive } from './brain/Retroactive';
 import { PermissionSystem } from './permissions/PermissionSystem';
 import { StickerVault } from './stickers/StickerVault';
+import { ChatSettings } from './permissions/ChatSettings';
 import { CommandRegistry } from './commands/CommandRegistry';
 import { BasicCommands } from './commands/BasicCommands';
 import { StickerCommands } from './commands/StickerCommands';
@@ -90,6 +91,7 @@ export class MarcioApp {
   retroactive!: Retroactive;
   permissions!: PermissionSystem;
   stickers!: StickerVault;
+  chatSettings!: ChatSettings;
   commands!: CommandRegistry;
   twitter!: TwitterBot;
   scheduler!: Scheduler;
@@ -103,6 +105,16 @@ export class MarcioApp {
   // === Estado mutável de debug (runtime-tunable) ===
   debugEnabled: boolean = true;
   debugFullEnabled: boolean = false;
+
+  // === Modo manutenção — pausa o bot (não responde msgs) mas painel funciona ===
+  maintenanceMode: boolean = false;
+
+  // === Histórico de stats (pra gráficos do dashboard) ===
+  // A cada 60s, coleta um snapshot. Mantém as últimas 24h (1440 pontos).
+  statsHistory: Array<{ time: number; aiRequests: number; iaResponses: number; messages: number }> = [];
+  private statsHistoryTimer: NodeJS.Timeout | null = null;
+  private lastIaResponses: number = 0;
+  private lastMessages: number = 0;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -144,6 +156,11 @@ export class MarcioApp {
     // === FASE 2.5: MarcioBrain (o cérebro do Márcio — IA, prompt, fallback) ===
     this.brain = new MarcioBrain(this);
     this.log('BOOT', `Brain inicializado — modelo=${this.brain.getAIConfig().model} fallbacks=${this.brain.getAllFallbackModels().length - 1}`);
+
+    // === FASE 6b: ChatSettings (persiste IA/entrosão/mute por chat) ===
+    this.chatSettings = new ChatSettings(this);
+    this.chatSettings.loadIntoBrain();  // popula brain.aiDisabledChats, chatEntrosaoLevel, democraticallyMutedChats
+    this.log('BOOT', `ChatSettings inicializado — ${this.chatSettings.allChatIds().length} chat(s) com settings customizadas.`);
 
     // === FASE 2.6: Retroactive (conversas retroativas — "voltar" a msgs ignoradas) ===
     this.retroactive = new Retroactive(this);
@@ -217,7 +234,44 @@ export class MarcioApp {
     this.control.listen(3001);
     this.log('BOOT', 'ControlPanel ouvindo em http://localhost:3001');
 
+    // Starta coleta de stats pro gráfico (a cada 60s)
+    this.startStatsHistory();
+
     this.log('BOOT', 'Márcio App pronto e conectado.');
+  }
+
+  /**
+   * Coleta um snapshot de stats a cada 60s pra alimentar gráficos do dashboard.
+   * Mantém as últimas 24h (1440 pontos).
+   */
+  private startStatsHistory(): void {
+    // Snapshot inicial
+    this.collectStatsSnapshot();
+
+    this.statsHistoryTimer = setInterval(() => {
+      this.collectStatsSnapshot();
+    }, 60000); // 60s
+  }
+
+  private collectStatsSnapshot(): void {
+    const now = Date.now();
+    const currentIaResponses = this.brain?.aiRequestCount || 0;
+    const currentMessages = this.context?.count ? this.context.activeChatIds().reduce((sum, id) => sum + this.context.count(id), 0) : 0;
+
+    this.statsHistory.push({
+      time: now,
+      aiRequests: currentIaResponses,
+      iaResponses: currentIaResponses - this.lastIaResponses, // delta (responses neste minuto)
+      messages: currentMessages - this.lastMessages, // delta (msgs neste minuto)
+    });
+
+    this.lastIaResponses = currentIaResponses;
+    this.lastMessages = currentMessages;
+
+    // Mantém só as últimas 24h (1440 pontos de 60s)
+    if (this.statsHistory.length > 1440) {
+      this.statsHistory = this.statsHistory.slice(-1440);
+    }
   }
 
   /**
@@ -293,6 +347,7 @@ export class MarcioApp {
    * Sempre escreve, independente de debugEnabled.
    * Também faz broadcast pro ControlPanel (se ativo) — assim o painel
    * mostra logs em tempo real via WebSocket.
+   * Também detecta eventos críticos e manda notificação nativa do sistema.
    */
   log(tag: string, message: string): void {
     const time = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -307,6 +362,72 @@ export class MarcioApp {
     // Broadcast pro painel (se ativo)
     if (this.control) {
       this.control.broadcast('log', { tag, message, time });
+    }
+    // Detecta eventos críticos e manda notificação nativa
+    this.checkCriticalEvent(tag, message);
+  }
+
+  /**
+   * Última vez que cada tipo de notificação foi enviada (pra não spammar).
+   */
+  private lastNotification: Record<string, number> = {};
+
+  /**
+   * Detecta eventos críticos no log e manda notificação nativa do sistema.
+   * Só notifica se:
+   *  - O app tá rodando como Tauri (window.__TAURI__ existe no painel)
+   *  - Passou pelo menos 60s desde a última notificação do mesmo tipo
+   */
+  private checkCriticalEvent(tag: string, message: string): void {
+    if (!this.control) return;
+
+    const now = Date.now();
+    const minInterval = 60000; // 60s entre notificações do mesmo tipo
+    const canNotify = (type: string): boolean => {
+      const last = this.lastNotification[type] || 0;
+      if (now - last < minInterval) return false;
+      this.lastNotification[type] = now;
+      return true;
+    };
+
+    // IA offline
+    if (tag === 'AI' && message.includes('serviço de IA offline')) {
+      if (canNotify('ia-offline')) {
+        this.control.broadcast('notification', {
+          title: '⚠️ Márcio: IA offline',
+          body: 'O Gemini não está respondendo. O bot continua funcionando, mas não responde com IA.',
+        });
+      }
+    }
+
+    // WhatsApp desconectou
+    if (tag === 'WA' && message.includes('Desconectado')) {
+      if (canNotify('wa-disconnected')) {
+        this.control.broadcast('notification', {
+          title: '⚠️ Márcio: WhatsApp caiu',
+          body: 'A conexão com o WhatsApp foi perdida. Tentando reconectar...',
+        });
+      }
+    }
+
+    // Erro fatal
+    if (tag === 'FATAL' || (tag === 'ERROR' && message.includes('critical'))) {
+      if (canNotify('fatal')) {
+        this.control.broadcast('notification', {
+          title: '❌ Márcio: erro crítico',
+          body: message.slice(0, 100),
+        });
+      }
+    }
+
+    // Tweet aguardando aprovação
+    if (tag === 'TWITTER' && message.includes('tweet enviado pra aprovação')) {
+      if (canNotify('tweet-pending')) {
+        this.control.broadcast('notification', {
+          title: '🐦 Tweet aguardando aprovação',
+          body: 'Um tweet foi gerado e está pronto pra postar. Veja no painel.',
+        });
+      }
     }
   }
 
@@ -324,6 +445,67 @@ export class MarcioApp {
     if (this.control) {
       this.control.broadcast('log', { tag: `DEBUG ${tag}`, message, time });
     }
+  }
+
+  // ===========================================================================
+  // BOT LIFECYCLE — stop / start / restart
+  // Usados pelo ControlPanel (POST /api/bot/stop|start|restart).
+  // São diferentes do shutdown() — shutdown() é definitivo (sai do processo),
+  // esses methods permitem parar/iniciar o WhatsApp sem derrubar o resto.
+  // ===========================================================================
+
+  /**
+   * Para o bot graciosamente (salva estado, fecha WhatsApp).
+   * Os subsistemas de dados (memory, profile, retroactive, scheduler, twitter)
+   * são persistidos/fechados, mas continuam instanciados — podem ser
+   * re-utilizados quando startBot() re-inicializar o WhatsApp.
+   */
+  async stopBot(): Promise<void> {
+    this.log('BOT', 'Parando bot...');
+    try {
+      // Salva pendências
+      if (this.memory) this.memory.destroy();
+      if (this.profile) this.profile.destroy();
+      if (this.retroactive) this.retroactive.destroy();
+      if (this.scheduler) this.scheduler.destroy();
+      if (this.twitter) this.twitter.destroy();
+      // Fecha WhatsApp
+      if (this.whatsapp) await this.whatsapp.destroy();
+    } catch (e) {
+      this.log('BOT', `erro ao parar bot: ${(e as Error).message}`);
+    }
+    this.log('BOT', 'Bot parado.');
+  }
+
+  /**
+   * Inicia o bot (depois de parado).
+   * Cria um NOVO WhatsAppClient (não re-initializa o mesmo — o whatsapp-web.js
+   * não remove event handlers no destroy(), então re-initializar duplicaria
+   * os handlers de message_create → mensagens duplicadas).
+   */
+  async startBot(): Promise<void> {
+    this.log('BOT', 'Iniciando bot...');
+    try {
+      // Cria NOVO WhatsAppClient (não reusa o destruído)
+      this.whatsapp = new WhatsAppClient(this);
+      await this.whatsapp.initialize();
+    } catch (e) {
+      this.log('BOT', `erro ao iniciar bot: ${(e as Error).message}`);
+    }
+    this.log('BOT', 'Bot iniciado.');
+  }
+
+  /**
+   * Reinicia o bot (stop + start com pausa de 2s).
+   * Útil pra quando o WhatsApp fica travado/lento e o usuário quer
+   * forçar reconexão sem matar o processo.
+   */
+  async restartBot(): Promise<void> {
+    this.log('BOT', 'Reiniciando bot...');
+    await this.stopBot();
+    await new Promise(r => setTimeout(r, 2000)); // espera 2s
+    await this.startBot();
+    this.log('BOT', 'Bot reiniciado.');
   }
 
   // ===========================================================================

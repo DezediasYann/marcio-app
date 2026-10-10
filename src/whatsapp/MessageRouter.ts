@@ -60,6 +60,13 @@ export class MessageRouter {
       return;
     }
 
+    // 1c. Modo manutenção — loga mas não processa (não captura contexto,
+    // não responde IA, não roda comandos). Painel continua funcionando.
+    if (this.app.maintenanceMode) {
+      this.app.debug('ROUTER', `🔧 modo manutenção — msg ignorada: ${msg.body?.slice(0, 50) || '(sem texto)'}`);
+      return;
+    }
+
     // 2. Filtro de msg antiga (timestamp < startup - 10s)
     // Evita reprocessar histórico quando o bot reinicia
     if (!this.isFreshMessage(msg)) {

@@ -3,710 +3,1835 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0a0c">
   <title>🤖 Márcio Control Panel</title>
   <style>
     /* ================================================================
-       RESET + BASE — vibe terminal, dark theme, monospace
+       iOS 26/27 — LIQUID GLASS DESIGN LANGUAGE
+       Single-file dashboard. No build step, no external deps.
        ================================================================ */
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; height: 100%; }
+
+    /* ---------- DESIGN TOKENS ---------- */
+    :root {
+      --bg: #0a0a0c;
+      --bg-glass: rgba(28, 28, 30, 0.6);
+      --bg-glass-light: rgba(255, 255, 255, 0.08);
+      --bg-glass-hover: rgba(255, 255, 255, 0.14);
+      --bg-glass-strong: rgba(44, 44, 46, 0.72);
+
+      --border: rgba(255, 255, 255, 0.12);
+      --border-strong: rgba(255, 255, 255, 0.18);
+      --border-hairline: rgba(255, 255, 255, 0.06);
+
+      --text: #f5f5f7;
+      --text-secondary: #86868b;
+      --text-tertiary: #6e6e73;
+
+      --accent: #0a84ff;
+      --accent-hover: #409cff;
+      --success: #30d158;
+      --warning: #ff9f0a;
+      --error: #ff453a;
+      --pt-red: #e6242a;
+      --purple: #5b3abd;
+      --cyan: #64d2ff;
+      --pink: #ff375f;
+
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+      --shadow-glow-accent: 0 0 24px rgba(10, 132, 255, 0.4);
+
+      --radius-xs: 8px;
+      --radius-sm: 12px;
+      --radius-md: 16px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+      --radius-pill: 999px;
+
+      --blur: blur(40px) saturate(180%);
+      --blur-light: blur(20px) saturate(150%);
+
+      --ease: cubic-bezier(0.4, 0, 0.2, 1);
+      --transition: 0.25s var(--ease);
+
+      --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+              'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: 'SF Mono', ui-monospace, 'JetBrains Mono', 'Fira Code',
+                   Menlo, Monaco, Consolas, 'Courier New', monospace;
+    }
+
+    /* ---------- RESET ---------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
     body {
-      background: #14171a;
-      color: #c9d1d9;
-      font-family: 'Courier New', Consolas, 'Liberation Mono', Menlo, monospace;
-      font-size: 13px;
+      font-family: var(--font);
+      font-size: 15px;
       line-height: 1.5;
+      color: var(--text);
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background:
+        radial-gradient(circle at 18% 28%, rgba(230, 36, 42, 0.18), transparent 42%),
+        radial-gradient(circle at 82% 72%, rgba(91, 58, 189, 0.18), transparent 42%),
+        radial-gradient(circle at 50% 50%, rgba(0, 122, 255, 0.10), transparent 55%),
+        radial-gradient(circle at 95% 15%, rgba(48, 209, 88, 0.08), transparent 38%),
+        #0a0a0c;
+      background-attachment: fixed;
       min-height: 100vh;
+      overflow-x: hidden;
+    }
+    ::selection { background: rgba(10, 132, 255, 0.4); color: #fff; }
+
+    /* Scrollbars — slim, glassy */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-pill);
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+    a { color: var(--accent); text-decoration: none; transition: color var(--transition); }
+    a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+    /* ================================================================
+       APP LAYOUT
+       ================================================================ */
+    .app {
+      display: grid;
+      grid-template-columns: 264px 1fr;
+      gap: 18px;
+      padding: 18px;
+      max-width: 1600px;
+      margin: 0 auto;
+      min-height: 100vh;
+    }
+
+    /* ================================================================
+       SIDEBAR (floating glass panel)
+       ================================================================ */
+    .sidebar {
+      background: var(--bg-glass);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 12px;
+      height: calc(100vh - 36px);
+      position: sticky;
+      top: 18px;
+      overflow-y: auto;
+      box-shadow: var(--shadow-md);
       display: flex;
       flex-direction: column;
     }
-    ::selection { background: #1f6feb; color: #fff; }
 
-    /* Scrollbar custom */
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: #1a1f24; }
-    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #484f58; }
-
-    a { color: #58a6ff; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    /* ================================================================
-       HEADER (sticky) — logo + status indicador
-       ================================================================ */
-    header.app-header {
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      background: #0d1117;
-      border-bottom: 1px solid #30363d;
-      padding: 10px 16px;
+    .brand {
       display: flex;
       align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
+      gap: 12px;
+      padding: 8px 10px 18px;
+      border-bottom: 1px solid var(--border-hairline);
+      margin-bottom: 12px;
     }
-    .brand {
-      font-size: 16px;
-      font-weight: bold;
-      color: #7ee787;
-      letter-spacing: 0.5px;
+    .brand-icon {
+      width: 40px; height: 40px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--pt-red), #b8161c);
+      display: grid; place-items: center;
+      font-size: 22px;
+      box-shadow: 0 4px 16px rgba(230, 36, 42, 0.4);
+    }
+    .brand-text { display: flex; flex-direction: column; gap: 2px; }
+    .brand-name {
+      font-size: 17px; font-weight: 700; letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .brand-sub {
+      font-size: 11px; color: var(--text-secondary);
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    /* Status dot */
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--error);
+      box-shadow: 0 0 8px var(--error);
+      flex-shrink: 0;
+      transition: all var(--transition);
+    }
+    .status-dot.online {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse-soft 2.4s var(--ease) infinite;
+    }
+    .status-dot.connecting {
+      background: var(--warning);
+      box-shadow: 0 0 8px var(--warning);
+      animation: pulse-fast 1s var(--ease) infinite;
+    }
+    .status-dot.offline {
+      background: var(--error);
+      box-shadow: 0 0 8px var(--error);
+    }
+    @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes pulse-fast { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.3); } }
+
+    /* Nav groups */
+    .nav-group {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      padding: 14px 10px 6px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%;
+      padding: 9px 12px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: left;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition);
+      margin-bottom: 2px;
+    }
+    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+    .nav-item:hover {
+      background: var(--bg-glass-light);
+      color: var(--text);
+    }
+    .nav-item.active {
+      background: rgba(10, 132, 255, 0.18);
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.3);
+    }
+    .nav-item.active .icon { filter: drop-shadow(0 0 6px var(--accent)); }
+
+    /* ================================================================
+       CONTENT
+       ================================================================ */
+    .content {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .topbar {
+      background: var(--bg-glass);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: var(--shadow-md);
+      position: sticky; top: 18px; z-index: 20;
+    }
+    .topbar h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .topbar-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    .topbar-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    .sections { flex: 1; }
+    .section { display: none; animation: fadeIn 0.3s var(--ease); }
+    .section.active { display: block; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ================================================================
+       GLASS CARD
+       ================================================================ */
+    .glass-card {
+      background: var(--bg-glass);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      box-shadow: var(--shadow-md);
+      margin-bottom: 18px;
+    }
+    .glass-card.tight { padding: 16px; }
+    .glass-card.flush { padding: 0; overflow: hidden; }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text);
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .brand .tag {
-      color: #8b949e;
-      font-weight: normal;
-      font-size: 11px;
-      padding: 2px 6px;
-      border: 1px solid #30363d;
-      border-radius: 3px;
+    .card-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 2px;
     }
-    .status-indicator {
-      display: flex;
+    .card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    /* ================================================================
+       BUTTONS
+       ================================================================ */
+    button {
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      cursor: pointer;
+      transition: all var(--transition);
+      display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 12px;
-      color: #8b949e;
-      margin-left: auto;
+      white-space: nowrap;
     }
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #f85149;
-      box-shadow: 0 0 6px rgba(248, 81, 73, 0.6);
-      transition: all 0.2s;
+    button:hover {
+      background: var(--bg-glass-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
     }
-    .status-dot.online {
-      background: #7ee787;
-      box-shadow: 0 0 6px rgba(126, 231, 135, 0.7);
-      animation: pulse 2s infinite;
+    button:active { transform: translateY(0); }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
     }
-    .status-dot.connecting {
-      background: #d29922;
-      box-shadow: 0 0 6px rgba(210, 153, 34, 0.6);
-      animation: pulse 1s infinite;
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(10, 132, 255, 0.3);
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.55; }
+    button.primary:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 6px 24px rgba(10, 132, 255, 0.5);
+    }
+    button.success {
+      background: var(--success);
+      border-color: var(--success);
+      color: #04150a;
+      font-weight: 600;
+    }
+    button.danger {
+      background: var(--error);
+      border-color: var(--error);
+      color: #fff;
+    }
+    button.danger:hover { background: #ff5b50; }
+    button.warning {
+      background: var(--warning);
+      border-color: var(--warning);
+      color: #1a1003;
+      font-weight: 600;
+    }
+    button.ghost {
+      background: transparent;
+      border-color: var(--border-strong);
+    }
+    button.sm { padding: 5px 10px; font-size: 12px; }
+    button.icon-btn {
+      padding: 8px;
+      width: 34px; height: 34px;
+      justify-content: center;
     }
 
     /* ================================================================
-       LAYOUT — sidebar + main (desktop), stacked (mobile)
+       FORM CONTROLS
        ================================================================ */
-    .layout {
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 1px;
-      background: #30363d;
-      flex: 1;
-      min-height: 0;
-    }
-    .sidebar, .main {
-      background: #0d1117;
-      overflow-y: auto;
-      padding: 12px;
-      min-height: 0;
-    }
-    .main { padding: 0; display: flex; flex-direction: column; }
-
-    @media (max-width: 760px) {
-      .layout { grid-template-columns: 1fr; }
-      .sidebar { max-height: 50vh; }
-    }
-
-    /* ================================================================
-       PANEL — bloco genérico (sidebar)
-       ================================================================ */
-    .panel {
-      border: 1px solid #30363d;
-      border-radius: 4px;
-      margin-bottom: 12px;
-      background: #161b22;
-    }
-    .panel-header {
-      background: #21262d;
-      padding: 6px 10px;
-      font-size: 11px;
-      letter-spacing: 1px;
-      color: #8b949e;
-      border-bottom: 1px solid #30363d;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      text-transform: uppercase;
-    }
-    .panel-header .refresh-btn {
-      background: none;
-      border: 1px solid #30363d;
-      color: #8b949e;
-      cursor: pointer;
-      padding: 1px 6px;
-      font-size: 10px;
-      border-radius: 3px;
+    input[type="text"], input[type="password"], input[type="number"],
+    input[type="search"], input[type="url"], input[type="tel"], textarea, select {
       font-family: inherit;
+      font-size: 14px;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      transition: all var(--transition);
+      width: 100%;
     }
-    .panel-header .refresh-btn:hover { color: #7ee787; border-color: #7ee787; }
-    .panel-body { padding: 10px; }
+    textarea { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; resize: vertical; }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+      background: rgba(0, 0, 0, 0.4);
+    }
+    input::placeholder, textarea::placeholder { color: var(--text-tertiary); }
+    label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .form-row { margin-bottom: 16px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+    /* Range slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-pill);
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(10, 132, 255, 0.5);
+      transition: transform var(--transition);
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+    input[type="range"]::-moz-range-thumb {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: none;
+    }
 
     /* ================================================================
-       STATS — grid de KVs
+       STATS GRID
        ================================================================ */
     .stats-grid {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 4px 12px;
-      font-size: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
     }
-    .stats-grid .k { color: #8b949e; }
-    .stats-grid .v { color: #c9d1d9; font-weight: bold; text-align: right; }
-    .stats-grid .v.good { color: #7ee787; }
-    .stats-grid .v.bad { color: #f85149; }
-    .stats-grid .v.warn { color: #d29922; }
-    .stats-grid .v.cyan { color: #56d4dd; }
-
-    /* ================================================================
-       CHAT / MEMORY lists
-       ================================================================ */
-    .list { list-style: none; margin: 0; padding: 0; }
-    .list li {
-      padding: 6px 8px;
-      border-bottom: 1px solid #21262d;
-      cursor: pointer;
-      font-size: 12px;
-      display: flex;
-      justify-content: space-between;
-      gap: 6px;
-      transition: background 0.1s;
+    .stat-card {
+      background: var(--bg-glass-light);
+      backdrop-filter: var(--blur-light);
+      -webkit-backdrop-filter: var(--blur-light);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      transition: all var(--transition);
     }
-    .list li:last-child { border-bottom: none; }
-    .list li:hover { background: #1f2937; color: #7ee787; }
-    .list li .meta { color: #8b949e; font-size: 10px; }
-    .list li .badge {
-      background: #30363d;
-      color: #c9d1d9;
-      padding: 1px 6px;
-      border-radius: 8px;
-      font-size: 10px;
+    .stat-card:hover {
+      background: var(--bg-glass-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
     }
-    .list li .badge.off { background: #5d1f1f; color: #ffa198; }
-    .list li .badge.on { background: #1f3d1f; color: #7ee787; }
-
-    .memories-list { max-height: 240px; overflow-y: auto; }
-    .memories-list .facts {
-      display: none;
-      padding: 6px 8px 6px 16px;
-      background: #0d1117;
-      border-top: 1px dashed #30363d;
+    .stat-label {
       font-size: 11px;
-    }
-    .memories-list li.expanded .facts { display: block; }
-    .memories-list .fact {
-      padding: 3px 0;
-      color: #c9d1d9;
-      border-bottom: 1px dotted #21262d;
-    }
-    .memories-list .fact:last-child { border-bottom: none; }
-    .memories-list .fact .ts { color: #6e7681; font-size: 10px; margin-left: 6px; }
-
-    /* ================================================================
-       LIVE LOG — main panel, terminal scrollback
-       ================================================================ */
-    .log-panel {
-      flex: 1;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
       display: flex;
-      flex-direction: column;
-      min-height: 0;
+      align-items: center;
+      gap: 6px;
     }
-    .log-panel .panel-header {
-      position: sticky;
-      top: 0;
-      z-index: 2;
+    .stat-value {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
     }
-    .log-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px 12px;
-      font-family: inherit;
+    .stat-value.small { font-size: 18px; }
+    .stat-value.good { color: var(--success); }
+    .stat-value.warn { color: var(--warning); }
+    .stat-value.bad { color: var(--error); }
+    .stat-value.accent { color: var(--accent); }
+    .stat-meta {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    /* Status badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
       font-size: 12px;
-      line-height: 1.45;
-      background: #0d1117;
-      min-height: 200px;
+      font-weight: 500;
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border-strong);
     }
-    .log-line {
-      padding: 1px 0;
-      word-break: break-word;
-      white-space: pre-wrap;
-    }
-    .log-line .ts { color: #6e7681; }
-    .log-line .tag {
-      display: inline-block;
-      min-width: 70px;
-      color: #56d4dd;
-      font-weight: bold;
-    }
-    .log-line.error .tag { color: #f85149; }
-    .log-line.warn .tag { color: #d29922; }
-    .log-line.cmd { color: #7ee787; }
-    .log-line.cmd .tag { color: #7ee787; }
-    .log-line.result { color: #58a6ff; }
-    .log-line.result .tag { color: #58a6ff; }
-    .log-line.system { color: #d29922; }
-    .log-line.system .tag { color: #d29922; }
+    .badge.good { background: rgba(48, 209, 88, 0.18); color: var(--success); border-color: rgba(48, 209, 88, 0.3); }
+    .badge.warn { background: rgba(255, 159, 10, 0.18); color: var(--warning); border-color: rgba(255, 159, 10, 0.3); }
+    .badge.bad  { background: rgba(255, 69, 58, 0.18); color: var(--error); border-color: rgba(255, 69, 58, 0.3); }
+    .badge.accent { background: rgba(10, 132, 255, 0.18); color: var(--accent); border-color: rgba(10, 132, 255, 0.3); }
 
     /* ================================================================
-       CONSOLE — input + envio
+       LIVE LOG
        ================================================================ */
-    .console-panel {
-      border-top: 1px solid #30363d;
-      background: #161b22;
-      padding: 8px 12px;
+    .log-toolbar {
       display: flex;
       gap: 8px;
       align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-hairline);
+      flex-wrap: wrap;
     }
-    .console-prompt { color: #7ee787; font-weight: bold; }
-    .console-input {
-      flex: 1;
-      background: #0d1117;
-      border: 1px solid #30363d;
-      color: #c9d1d9;
-      padding: 8px 10px;
-      font-family: inherit;
+    .log-toolbar input, .log-toolbar select {
+      width: auto;
+      min-width: 140px;
+      padding: 6px 10px;
       font-size: 13px;
-      border-radius: 3px;
-      outline: none;
     }
-    .console-input:focus { border-color: #7ee787; box-shadow: 0 0 0 2px rgba(126, 231, 135, 0.15); }
-    .console-input::placeholder { color: #6e7681; }
-    .console-send {
-      background: #1f3d1f;
-      border: 1px solid #2ea043;
-      color: #7ee787;
-      padding: 8px 14px;
-      font-family: inherit;
+    .log-body {
+      font-family: var(--font-mono);
       font-size: 12px;
-      border-radius: 3px;
-      cursor: pointer;
-      transition: all 0.1s;
+      line-height: 1.55;
+      padding: 12px 16px;
+      height: 60vh;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.25);
     }
-    .console-send:hover { background: #2ea043; color: #fff; }
-    .console-send:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    /* ================================================================
-       BUTTON GROUPS — debug toggle
-       ================================================================ */
-    .btn-group { display: flex; gap: 4px; margin-top: 4px; }
-    .btn-group button {
-      flex: 1;
-      background: #21262d;
-      border: 1px solid #30363d;
-      color: #c9d1d9;
-      padding: 4px 8px;
-      font-family: inherit;
-      font-size: 11px;
-      cursor: pointer;
-      border-radius: 3px;
-      transition: all 0.1s;
-    }
-    .btn-group button:hover { border-color: #58a6ff; color: #58a6ff; }
-    .btn-group button.active {
-      background: #1f3d1f;
-      border-color: #2ea043;
-      color: #7ee787;
-    }
-    .btn-group button.active.warn {
-      background: #3d2f1f;
-      border-color: #d29922;
-      color: #d29922;
-    }
-    .btn-group button.active.bad {
-      background: #3d1f1f;
-      border-color: #f85149;
-      color: #f85149;
-    }
-
-    /* ================================================================
-       SYSTEM PROMPT EDITOR
-       ================================================================ */
-    .prompt-editor { display: none; }
-    .prompt-editor.open { display: block; }
-    .prompt-editor textarea {
-      width: 100%;
-      min-height: 200px;
-      background: #0d1117;
-      border: 1px solid #30363d;
-      color: #c9d1d9;
-      padding: 8px;
-      font-family: inherit;
-      font-size: 12px;
-      border-radius: 3px;
-      resize: vertical;
-      outline: none;
-    }
-    .prompt-editor textarea:focus { border-color: #7ee787; }
-    .prompt-actions {
+    .log-line {
       display: flex;
-      gap: 6px;
-      margin-top: 6px;
+      gap: 8px;
+      padding: 2px 0;
+      word-break: break-word;
+      animation: logIn 0.15s var(--ease);
+    }
+    @keyframes logIn { from { opacity: 0; } to { opacity: 1; } }
+    .log-line .ts { color: var(--text-tertiary); flex-shrink: 0; }
+    .log-line .tag {
+      color: var(--cyan);
+      font-weight: 600;
+      flex-shrink: 0;
+      min-width: 70px;
+    }
+    .log-line .msg { color: var(--text); flex: 1; }
+    .log-line.error .tag { color: var(--error); }
+    .log-line.error .msg { color: #ffb3ae; }
+    .log-line.warn .tag { color: var(--warning); }
+    .log-line.warn .msg { color: #ffd28a; }
+    .log-line.cmd .tag { color: var(--success); }
+    .log-line.result .tag { color: var(--accent); }
+    .log-line.system .tag { color: var(--text-secondary); }
+    .log-line.system .msg { color: var(--text-secondary); }
+    .log-line.memory .tag { color: var(--success); }
+    .log-line.ai .tag { color: var(--cyan); }
+    .log-line.debug .tag, .log-line.debug .msg { color: var(--text-tertiary); }
+
+    /* ================================================================
+       CONSOLE
+       ================================================================ */
+    .console-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .console-output {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      min-height: 200px;
+      max-height: 50vh;
+      overflow-y: auto;
+      line-height: 1.55;
+    }
+    .console-output .out-line { padding: 2px 0; word-break: break-word; }
+    .console-output .out-line.in { color: var(--success); }
+    .console-output .out-line.out { color: var(--text); }
+    .console-output .out-line.err { color: var(--error); }
+    .console-output .out-line .prefix { color: var(--text-tertiary); margin-right: 6px; }
+    .console-input-row {
+      display: flex;
+      gap: 10px;
       align-items: center;
     }
-    .prompt-actions .save-btn {
-      background: #1f3d1f;
-      border: 1px solid #2ea043;
-      color: #7ee787;
-      padding: 5px 12px;
-      font-family: inherit;
-      font-size: 12px;
-      cursor: pointer;
-      border-radius: 3px;
+    .console-input-row .prompt {
+      color: var(--success);
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 600;
     }
-    .prompt-actions .save-btn:hover { background: #2ea043; color: #fff; }
-    .prompt-actions .cancel-btn {
-      background: #21262d;
-      border: 1px solid #30363d;
-      color: #c9d1d9;
-      padding: 5px 12px;
-      font-family: inherit;
-      font-size: 12px;
-      cursor: pointer;
-      border-radius: 3px;
+    .console-input-row input {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      flex: 1;
     }
-    .prompt-actions .status { color: #8b949e; font-size: 11px; margin-left: auto; }
-    .prompt-actions .status.ok { color: #7ee787; }
-    .prompt-actions .status.err { color: #f85149; }
+    .quick-cmds {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .quick-cmds button {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 5px 10px;
+    }
 
     /* ================================================================
-       MODAL — chat context view
+       BOT MANAGEMENT
+       ================================================================ */
+    .bot-status-card {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .bot-status-row {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .bot-status-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .bot-status-item .lbl {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+    .bot-status-item .val {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .bot-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .qr-display {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 24px;
+      background: #fff;
+      border-radius: var(--radius-md);
+      color: #000;
+      margin-top: 16px;
+    }
+    .qr-display img { width: 240px; height: 240px; display: block; }
+    .qr-display .qr-label { font-size: 13px; color: #555; font-weight: 500; }
+    .qr-placeholder {
+      padding: 48px;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 14px;
+      border: 2px dashed var(--border-strong);
+      border-radius: var(--radius-md);
+    }
+
+    /* ================================================================
+       MEMORIES (split view)
+       ================================================================ */
+    .split-view {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 14px;
+      min-height: 50vh;
+    }
+    @media (max-width: 720px) {
+      .split-view { grid-template-columns: 1fr; }
+    }
+    .split-list {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: var(--radius-md);
+      padding: 8px;
+      overflow-y: auto;
+      max-height: 70vh;
+    }
+    .split-list-item {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 2px;
+      font-size: 13px;
+    }
+    .split-list-item:hover { background: var(--bg-glass-light); }
+    .split-list-item.active {
+      background: rgba(10, 132, 255, 0.2);
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.3);
+    }
+    .split-list-item .count {
+      font-size: 11px;
+      color: var(--text-secondary);
+      background: var(--bg-glass-light);
+      padding: 1px 8px;
+      border-radius: var(--radius-pill);
+    }
+    .split-detail {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      overflow-y: auto;
+      max-height: 70vh;
+    }
+    .fact-card {
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      transition: all var(--transition);
+    }
+    .fact-card:hover { background: var(--bg-glass-hover); }
+    .fact-text { font-size: 14px; color: var(--text); margin-bottom: 6px; }
+    .fact-meta {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .fact-actions { display: flex; gap: 6px; }
+
+    /* ================================================================
+       STICKER GALLERY
+       ================================================================ */
+    .sticker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+    }
+    .sticker-item {
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 8px;
+      cursor: pointer;
+      transition: all var(--transition);
+      position: relative;
+    }
+    .sticker-item:hover {
+      transform: translateY(-3px);
+      background: var(--bg-glass-hover);
+      box-shadow: var(--shadow-md);
+    }
+    .sticker-item img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: contain;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: var(--radius-sm);
+      display: block;
+    }
+    .sticker-name {
+      font-size: 11px;
+      color: var(--text);
+      margin-top: 6px;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sticker-fav {
+      position: absolute;
+      top: 6px; right: 6px;
+      font-size: 14px;
+      filter: drop-shadow(0 0 4px rgba(0,0,0,0.6));
+    }
+
+    /* ================================================================
+       CHAT LIST
+       ================================================================ */
+    .chat-list { display: flex; flex-direction: column; gap: 8px; }
+    .chat-item {
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .chat-item:hover {
+      background: var(--bg-glass-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+    .chat-id { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
+    .chat-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-secondary); }
+
+    /* ================================================================
+       MODAL
        ================================================================ */
     .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 24px;
+      animation: fadeIn 0.2s var(--ease);
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: var(--bg-glass-strong);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg);
+      width: 100%;
+      max-width: 720px;
+      max-height: 88vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      animation: modalIn 0.25s var(--ease);
+    }
+    @keyframes modalIn {
+      from { transform: scale(0.95) translateY(10px); opacity: 0; }
+      to { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border-hairline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .modal-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+    .modal-close {
+      width: 32px; height: 32px;
+      padding: 0;
+      border-radius: 50%;
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border-strong);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 16px;
+      display: grid; place-items: center;
+      transition: all var(--transition);
+    }
+    .modal-close:hover { background: var(--error); color: #fff; border-color: var(--error); }
+    .modal-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .modal-footer {
+      padding: 14px 24px;
+      border-top: 1px solid var(--border-hairline);
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+    }
+    .tab {
+      flex: 1;
+      padding: 8px 12px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: var(--radius-xs);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active {
+      background: var(--bg-glass-hover);
+      color: var(--text);
+      box-shadow: var(--shadow-sm);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ================================================================
+       MISC UI
+       ================================================================ */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-secondary);
+    }
+    .empty-state .icon { font-size: 40px; opacity: 0.5; margin-bottom: 12px; }
+    .empty-state .text { font-size: 14px; }
+
+    .toast-wrap {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--bg-glass-strong);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 12px 18px;
+      box-shadow: var(--shadow-lg);
+      font-size: 14px;
+      max-width: 360px;
+      pointer-events: auto;
+      animation: toastIn 0.25s var(--ease);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .toast.success { border-left: 4px solid var(--success); }
+    .toast.error { border-left: 4px solid var(--error); }
+    .toast.warn { border-left: 4px solid var(--warning); }
+    .toast.info { border-left: 4px solid var(--accent); }
+    @keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes toastOut { to { transform: translateX(100%); opacity: 0; } }
+    .toast.hide { animation: toastOut 0.25s var(--ease) forwards; }
+
+    .row-flex { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .row-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .gap-sm { gap: 6px; }
+    .gap-md { gap: 12px; }
+    .gap-lg { gap: 18px; }
+    .muted { color: var(--text-secondary); }
+    .small { font-size: 12px; }
+    .mono { font-family: var(--font-mono); }
+    .mt-0 { margin-top: 0; } .mt-1 { margin-top: 8px; } .mt-2 { margin-top: 16px; }
+    .mb-0 { margin-bottom: 0; } .mb-1 { margin-bottom: 8px; } .mb-2 { margin-bottom: 16px; }
+    .flex-1 { flex: 1; }
+
+    .pill-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      color: var(--text);
+    }
+    .pill .x {
+      cursor: pointer;
+      color: var(--text-tertiary);
+      transition: color var(--transition);
+    }
+    .pill .x:hover { color: var(--error); }
+
+    /* ================================================================
+       HAMBURGER (mobile)
+       ================================================================ */
+    .hamburger {
+      display: none;
+      position: fixed;
+      top: 16px; left: 16px;
+      z-index: 60;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      padding: 0;
+      justify-content: center;
+      font-size: 20px;
+      background: var(--bg-glass-strong);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+    }
+    .sidebar-backdrop {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.75);
-      z-index: 100;
-      padding: 20px;
-      align-items: center;
-      justify-content: center;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 40;
     }
-    .modal-overlay.open { display: flex; }
-    .modal {
-      background: #0d1117;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      max-width: 720px;
-      width: 100%;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .modal-header {
-      padding: 10px 14px;
-      background: #161b22;
-      border-bottom: 1px solid #30363d;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-    }
-    .modal-header h3 {
-      margin: 0;
-      font-size: 13px;
-      color: #7ee787;
-      word-break: break-all;
-    }
-    .modal-close {
-      background: none;
-      border: none;
-      color: #8b949e;
-      cursor: pointer;
-      font-size: 16px;
-      padding: 0 4px;
-    }
-    .modal-close:hover { color: #f85149; }
-    .modal-body { padding: 10px 14px; overflow-y: auto; flex: 1; }
-    .modal-body .ctx-msg {
-      padding: 4px 0;
-      border-bottom: 1px dashed #21262d;
-      font-size: 12px;
-    }
-    .modal-body .ctx-msg .role {
-      display: inline-block;
-      min-width: 70px;
-      font-weight: bold;
-    }
-    .modal-body .ctx-msg .role.user { color: #56d4dd; }
-    .modal-body .ctx-msg .role.assistant { color: #7ee787; }
-    .modal-body .ctx-msg .sender { color: #8b949e; font-size: 11px; margin-left: 6px; }
-    .modal-body .ctx-msg .content { color: #c9d1d9; }
-    .modal-tabs {
-      display: flex;
-      gap: 4px;
-      padding: 8px 14px 0;
-      background: #161b22;
-      border-bottom: 1px solid #30363d;
-    }
-    .modal-tabs button {
-      background: none;
-      border: none;
-      color: #8b949e;
-      cursor: pointer;
-      padding: 4px 10px;
-      font-family: inherit;
-      font-size: 11px;
-      border-bottom: 2px solid transparent;
-    }
-    .modal-tabs button.active {
-      color: #7ee787;
-      border-bottom-color: #7ee787;
-    }
-    .modal-tab-content { display: none; }
-    .modal-tab-content.active { display: block; }
+    .sidebar-backdrop.show { display: block; }
 
-    .ia-toggle-row {
-      padding: 8px 14px;
-      background: #161b22;
-      border-bottom: 1px solid #30363d;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
+    @media (max-width: 900px) {
+      .app {
+        grid-template-columns: 1fr;
+        padding: 12px;
+      }
+      .hamburger { display: inline-flex; }
+      .sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        width: 280px;
+        height: 100vh;
+        border-radius: 0;
+        z-index: 50;
+        transform: translateX(-100%);
+        transition: transform var(--transition);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .topbar { padding: 14px 18px; }
+      .topbar h1 { font-size: 20px; }
+      .glass-card { padding: 16px; }
     }
-    .ia-toggle-row .label { color: #8b949e; }
-    .ia-toggle-row button {
-      background: #21262d;
-      border: 1px solid #30363d;
-      color: #c9d1d9;
-      padding: 3px 10px;
-      font-family: inherit;
-      font-size: 11px;
-      cursor: pointer;
-      border-radius: 3px;
-    }
-    .ia-toggle-row button.on { background: #1f3d1f; border-color: #2ea043; color: #7ee787; }
-    .ia-toggle-row button.off { background: #3d1f1f; border-color: #f85149; color: #ffa198; }
-
-    .empty { color: #6e7681; font-style: italic; padding: 8px 0; }
 
     /* ================================================================
-       FOOTER
+       PROFILE METRICS
        ================================================================ */
-    footer.app-footer {
-      background: #0d1117;
-      border-top: 1px solid #30363d;
-      padding: 6px 16px;
-      font-size: 11px;
-      color: #6e7681;
-      text-align: center;
-      margin-top: auto;
+    .profile-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
     }
-    footer.app-footer a { color: #8b949e; }
+    .profile-metric {
+      background: var(--bg-glass-light);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+    }
+    .profile-metric .k { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; }
+    .profile-metric .v { font-size: 16px; font-weight: 600; color: var(--text); margin-top: 2px; }
+    .ctx-msg {
+      padding: 8px 12px;
+      background: var(--bg-glass-light);
+      border-radius: var(--radius-sm);
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .ctx-msg .role { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 8px; }
+    .ctx-msg.user .role { color: var(--cyan); }
+    .ctx-msg.assistant .role { color: var(--success); }
+    .ctx-msg .sender { font-size: 11px; color: var(--text-tertiary); margin-right: 6px; }
+    .ctx-msg .content { color: var(--text); }
 
-    /* Hide elements until first load */
-    .hidden { display: none !important; }
+    .slider-row { display: flex; align-items: center; gap: 12px; }
+    .slider-row input[type="range"] { flex: 1; }
+    .slider-row .val {
+      min-width: 40px; text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* About page */
+    .about-hero {
+      text-align: center;
+      padding: 32px 24px;
+    }
+    .about-logo {
+      width: 80px; height: 80px;
+      margin: 0 auto 16px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, var(--pt-red), #b8161c);
+      display: grid; place-items: center;
+      font-size: 44px;
+      box-shadow: 0 12px 32px rgba(230, 36, 42, 0.4);
+    }
+    .about-title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+    .about-version { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+    .tech-stack {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .tech-card {
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      text-align: center;
+    }
+    .tech-card .name { font-size: 14px; font-weight: 600; }
+    .tech-card .desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+    /* Sticker modal preview */
+    .sticker-modal-preview {
+      width: 100%;
+      max-width: 280px;
+      margin: 0 auto 16px;
+      display: block;
+      background: rgba(0,0,0,0.3);
+      border-radius: var(--radius-md);
+      aspect-ratio: 1;
+      object-fit: contain;
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
-  <!-- ============================================================
-       HEADER
-       ============================================================ -->
-  <header class="app-header">
-    <div class="brand">
-      🤖 Márcio Control Panel
-      <span class="tag">v1.0</span>
-    </div>
-    <div class="status-indicator">
-      <span class="status-dot connecting" id="statusDot"></span>
-      <span id="statusText">conectando…</span>
-    </div>
-  </header>
+  <!-- Hamburger (mobile) -->
+  <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 
-  <!-- ============================================================
-       LAYOUT: sidebar + main
-       ============================================================ -->
-  <div class="layout">
-
-    <!-- ========================================================
-         SIDEBAR — stats, chats, memories, prompt editor
-         ======================================================== -->
-    <aside class="sidebar">
-
-      <!-- STATS -->
-      <section class="panel">
-        <div class="panel-header">
-          <span>📊 Stats</span>
-          <button class="refresh-btn" onclick="loadStats()">↻</button>
-        </div>
-        <div class="panel-body">
-          <div class="stats-grid" id="statsGrid">
-            <span class="k">carregando…</span>
-          </div>
-          <div style="margin-top:10px; border-top:1px dashed #30363d; padding-top:8px;">
-            <div style="color:#8b949e; font-size:11px; margin-bottom:4px;">DEBUG</div>
-            <div class="btn-group" id="debugBtns">
-              <button data-mode="off">OFF</button>
-              <button data-mode="on">ON</button>
-              <button data-mode="full">FULL</button>
-            </div>
+  <div class="app">
+    <!-- ================================================================
+         SIDEBAR
+         ================================================================ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-icon">🤖</div>
+        <div class="brand-text">
+          <div class="brand-name">Márcio</div>
+          <div class="brand-sub">
+            <span class="status-dot offline" id="statusDot"></span>
+            <span id="statusText">offline</span>
           </div>
         </div>
-      </section>
+      </div>
 
-      <!-- CHATS -->
-      <section class="panel">
-        <div class="panel-header">
-          <span>💬 Chats</span>
-          <button class="refresh-btn" onclick="loadChats()">↻</button>
-        </div>
-        <div class="panel-body" style="padding:0;">
-          <ul class="list" id="chatsList">
-            <li class="empty">carregando…</li>
-          </ul>
-        </div>
-      </section>
+      <nav class="nav">
+        <div class="nav-group">Visão</div>
+        <button class="nav-item active" data-section="dashboard" onclick="showSection('dashboard')">
+          <span class="icon">📊</span><span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-section="log" onclick="showSection('log')">
+          <span class="icon">📋</span><span>Live Log</span>
+        </button>
+        <button class="nav-item" data-section="console" onclick="showSection('console')">
+          <span class="icon">⌨️</span><span>Console</span>
+        </button>
 
-      <!-- MEMORIES -->
-      <section class="panel">
-        <div class="panel-header">
-          <span>🧠 Memórias</span>
-          <button class="refresh-btn" onclick="loadMemories()">↻</button>
-        </div>
-        <div class="panel-body" style="padding:0;">
-          <ul class="list memories-list" id="memoriesList">
-            <li class="empty">carregando…</li>
-          </ul>
-        </div>
-      </section>
+        <div class="nav-group">Gerenciar</div>
+        <button class="nav-item" data-section="bot" onclick="showSection('bot')">
+          <span class="icon">🤖</span><span>Bot & WhatsApp</span>
+        </button>
+        <button class="nav-item" data-section="memories" onclick="showSection('memories')">
+          <span class="icon">🧠</span><span>Memórias</span>
+        </button>
+        <button class="nav-item" data-section="stickers" onclick="showSection('stickers')">
+          <span class="icon">🎭</span><span>Figurinhas</span>
+        </button>
+        <button class="nav-item" data-section="chats" onclick="showSection('chats')">
+          <span class="icon">👥</span><span>Chats</span>
+        </button>
+        <button class="nav-item" data-section="events" onclick="showSection('events')">
+          <span class="icon">📅</span><span>Eventos</span>
+        </button>
+        <button class="nav-item" data-section="twitter" onclick="showSection('twitter')">
+          <span class="icon">🐦</span><span>Twitter</span>
+        </button>
+        <button class="nav-item" data-section="ops" onclick="showSection('ops')">
+          <span class="icon">🔒</span><span>Ops & Banidos</span>
+        </button>
 
-      <!-- SYSTEM PROMPT EDITOR -->
-      <section class="panel">
-        <div class="panel-header">
-          <span>📝 System Prompt</span>
-          <button class="refresh-btn" id="promptToggleBtn" onclick="togglePromptEditor()">editar</button>
-        </div>
-        <div class="panel-body prompt-editor" id="promptEditor">
-          <textarea id="promptTextarea" placeholder="carregando prompt…"></textarea>
-          <div class="prompt-actions">
-            <button class="save-btn" onclick="savePrompt()">salvar</button>
-            <button class="cancel-btn" onclick="togglePromptEditor()">cancelar</button>
-            <span class="status" id="promptStatus"></span>
-          </div>
-          <div style="color:#6e7681; font-size:10px; margin-top:6px;">
-            ⚠️ hot-reload em até 5s após salvar.
-          </div>
-        </div>
-      </section>
+        <div class="nav-group">Config</div>
+        <button class="nav-item" data-section="prompt" onclick="showSection('prompt')">
+          <span class="icon">📝</span><span>Prompt</span>
+        </button>
+        <button class="nav-item" data-section="ai" onclick="showSection('ai')">
+          <span class="icon">🤖</span><span>IA</span>
+        </button>
+        <button class="nav-item" data-section="directives" onclick="showSection('directives')">
+          <span class="icon">📜</span><span>Diretivas</span>
+        </button>
+        <button class="nav-item" data-section="theme" onclick="showSection('theme')">
+          <span class="icon">🎨</span><span>Tema</span>
+        </button>
+        <button class="nav-item" data-section="backup" onclick="showSection('backup')">
+          <span class="icon">💾</span><span>Backup</span>
+        </button>
 
+        <div class="nav-group">Ajuda</div>
+        <button class="nav-item" data-section="about" onclick="showSection('about')">
+          <span class="icon">❓</span><span>Sobre</span>
+        </button>
+      </nav>
     </aside>
 
-    <!-- ========================================================
-         MAIN — live log + console
-         ======================================================== -->
-    <main class="main">
-      <section class="log-panel panel" style="margin:0; border:none; border-radius:0;">
-        <div class="panel-header">
-          <span>🖥️ Live Log</span>
-          <button class="refresh-btn" onclick="clearLog()">limpar</button>
+    <!-- ================================================================
+         CONTENT
+         ================================================================ -->
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Dashboard</h1>
+          <div class="topbar-sub" id="pageSub">Visão geral do bot</div>
         </div>
-        <div class="log-body" id="logBody">
-          <div class="log-line system"><span class="ts">[--:--:--]</span> <span class="tag">SYSTEM</span> aguardando conexão…</div>
-        </div>
-        <div class="console-panel">
-          <span class="console-prompt">&gt;</span>
-          <input
-            type="text"
-            class="console-input"
-            id="consoleInput"
-            placeholder="digite um comando (ex: /admin stats, !ajuda, //status) e tecle Enter"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button class="console-send" id="consoleSend" onclick="sendCommand()">enviar</button>
-        </div>
-      </section>
+        <div class="topbar-actions" id="topbarActions"></div>
+      </header>
+
+      <div class="sections">
+
+        <!-- ============================================================
+             1. DASHBOARD
+             ============================================================ -->
+        <section class="section active" id="section-dashboard">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🔋 Status do Sistema</div>
+                <div class="card-subtitle">Estado atual do bot e conexões</div>
+              </div>
+              <button class="ghost sm" onclick="loadStats()">↻ Atualizar</button>
+            </div>
+            <div class="stats-grid" id="statusGrid">
+              <div class="stat-card">
+                <div class="stat-label">🤖 Bot</div>
+                <div class="stat-value small" id="dashBotStatus">—</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">💬 WhatsApp</div>
+                <div class="stat-value small" id="dashWaStatus">—</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">🧠 IA</div>
+                <div class="stat-value small" id="dashIaStatus">—</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">⏱ Uptime</div>
+                <div class="stat-value small" id="dashUptime">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header">
+              <div class="card-title">📊 Estatísticas</div>
+            </div>
+            <div class="stats-grid" id="statsGrid"></div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header">
+              <div class="card-title">📈 Atividade (última hora)</div>
+              <button class="ghost sm" onclick="loadChartHistory()">↻</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <div class="muted small mb-1">Respostas da IA / min</div>
+                <canvas id="chartIa" height="120"></canvas>
+              </div>
+              <div>
+                <div class="muted small mb-1">Mensagens / min</div>
+                <canvas id="chartMsgs" height="120"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header">
+              <div class="card-title">⚡ Ações Rápidas</div>
+            </div>
+            <div class="row-flex">
+              <button class="primary" onclick="quickAction('restart')">🔄 Reiniciar Bot</button>
+              <button onclick="quickAction('debug-on')">🐛 Debug ON</button>
+              <button onclick="quickAction('debug-off')">🚫 Debug OFF</button>
+              <button onclick="quickAction('debug-full')">🔍 Debug FULL</button>
+              <button class="warning" onclick="quickAction('retro')">⏪ Forçar Retro Check</button>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header">
+              <div class="card-title">📋 Mini Log</div>
+              <button class="ghost sm" onclick="showSection('log')">ver tudo →</button>
+            </div>
+            <div class="log-body" id="miniLog" style="height: 280px;"></div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             2. LIVE LOG
+             ============================================================ -->
+        <section class="section" id="section-log">
+          <div class="glass-card flush">
+            <div class="log-toolbar">
+              <input type="text" id="logFilterText" placeholder="🔍 filtrar texto…" oninput="renderLogLines()">
+              <select id="logFilterTag" onchange="renderLogLines()">
+                <option value="">todas as tags</option>
+                <option value="error">error</option>
+                <option value="warn">warn</option>
+                <option value="cmd">cmd</option>
+                <option value="result">result</option>
+                <option value="system">system</option>
+                <option value="memory">memory</option>
+                <option value="ai">ai</option>
+                <option value="debug">debug</option>
+              </select>
+              <span class="muted small" id="logCount">0 linhas</span>
+              <span style="flex:1"></span>
+              <button class="ghost sm" onclick="toggleAutoScroll()" id="autoScrollBtn">⏷ auto-scroll: on</button>
+              <button class="ghost sm" onclick="clearLog()">🗑 limpar</button>
+            </div>
+            <div class="log-body" id="logBody"></div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             3. CONSOLE
+             ============================================================ -->
+        <section class="section" id="section-console">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">⌨️ Console</div>
+                <div class="card-subtitle">Envie comandos direto pro bot (via WebSocket). Use ↑/↓ para histórico.</div>
+              </div>
+            </div>
+            <div class="console-wrap">
+              <div class="console-output" id="consoleOutput">
+                <div class="out-line out"><span class="prefix">$</span>console pronto. digite um comando e tecle Enter.</div>
+              </div>
+              <div class="console-input-row">
+                <span class="prompt">›</span>
+                <input type="text" id="consoleInput" placeholder="/admin stats   |   //ajuda   |   !lembrete 1m teste"
+                       autocomplete="off" spellcheck="false"
+                       onkeydown="handleConsoleKey(event)">
+                <button class="primary" onclick="sendCommand()">Enviar ↵</button>
+              </div>
+              <div class="quick-cmds">
+                <button onclick="quickCmd('/admin stats')">/admin stats</button>
+                <button onclick="quickCmd('//ajuda')">//ajuda</button>
+                <button onclick="quickCmd('/admin ler aqui 200 memoria')">/admin ler aqui 200 memoria</button>
+                <button onclick="quickCmd('//retro agora')">//retro agora</button>
+                <button onclick="quickCmd('/admin status')">//status</button>
+                <button onclick="quickCmd('!ajuda')">!ajuda</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             4. BOT & WHATSAPP
+             ============================================================ -->
+        <section class="section" id="section-bot">
+          <div class="glass-card bot-status-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🤖 Bot & WhatsApp</div>
+                <div class="card-subtitle">Gerencie o ciclo de vida do bot e da conexão WhatsApp</div>
+              </div>
+              <button class="ghost sm" onclick="loadBotStatus()">↻ Atualizar</button>
+            </div>
+
+            <div class="bot-status-row">
+              <div class="bot-status-item">
+                <span class="lbl">Estado do Bot</span>
+                <span class="val" id="botRunning">—</span>
+              </div>
+              <div class="bot-status-item">
+                <span class="lbl">WhatsApp</span>
+                <span class="val" id="botWaConnected">—</span>
+              </div>
+              <div class="bot-status-item">
+                <span class="lbl">Uptime</span>
+                <span class="val" id="botUptime">—</span>
+              </div>
+              <div class="bot-status-item">
+                <span class="lbl">Número</span>
+                <span class="val" id="botNumber">—</span>
+              </div>
+              <div class="bot-status-item">
+                <span class="lbl">Última reconexão</span>
+                <span class="val" id="botLastReconnect">—</span>
+              </div>
+              <div class="bot-status-item">
+                <span class="lbl">Health Check</span>
+                <span class="val" id="botHealth">—</span>
+              </div>
+            </div>
+
+            <div class="bot-actions">
+              <button class="success" onclick="botAction('start')">▶ Iniciar</button>
+              <button class="danger" onclick="botAction('stop')">■ Parar</button>
+              <button class="warning" onclick="botAction('restart')">🔄 Reiniciar</button>
+              <button onclick="botAction('reconnect')">💬 Reconectar WhatsApp</button>
+              <button class="danger" onclick="botAction('logout')">🚪 Logout WhatsApp</button>
+              <button class="ghost" onclick="loadQr()">📐 Mostrar QR Code</button>
+            </div>
+
+            <div id="qrContainer"></div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             5. MEMÓRIAS
+             ============================================================ -->
+        <section class="section" id="section-memories">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🧠 Memórias</div>
+                <div class="card-subtitle">Fatos que o bot lembra sobre cada usuário</div>
+              </div>
+              <div class="card-actions">
+                <input type="search" id="memorySearch" placeholder="🔍 buscar fatos…" oninput="renderMemories()" style="width: 200px;">
+                <button class="primary" onclick="openAddFactModal()">+ Adicionar fato</button>
+                <button class="ghost sm" onclick="loadMemories()">↻</button>
+              </div>
+            </div>
+            <div class="split-view">
+              <div class="split-list" id="memoryUsers"></div>
+              <div class="split-detail" id="memoryFacts"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             6. FIGURINHAS
+             ============================================================ -->
+        <section class="section" id="section-stickers">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🎭 Figurinhas</div>
+                <div class="card-subtitle">Galeria de figurinhas do bot</div>
+              </div>
+              <div class="card-actions">
+                <button class="warning" onclick="dedupStickers()">🧹 Dedup</button>
+                <button class="ghost sm" onclick="loadStickers()">↻</button>
+              </div>
+            </div>
+            <div id="stickerGrid" class="sticker-grid">
+              <div class="empty-state"><div class="icon">🎭</div><div class="text">Carregando figurinhas…</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             7. CHATS
+             ============================================================ -->
+        <section class="section" id="section-chats">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">👥 Chats Ativos</div>
+                <div class="card-subtitle">Conversas com contexto carregado</div>
+              </div>
+              <button class="ghost sm" onclick="loadChats()">↻</button>
+            </div>
+            <div class="chat-list" id="chatList">
+              <div class="empty-state"><div class="icon">👥</div><div class="text">Carregando chats…</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             8. EVENTOS
+             ============================================================ -->
+        <section class="section" id="section-events">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">📅 Eventos Agendados</div>
+                <div class="card-subtitle">Próximos eventos a disparar</div>
+              </div>
+              <button class="ghost sm" onclick="loadEvents()">↻</button>
+            </div>
+            <div id="eventsList">
+              <div class="empty-state"><div class="icon">📅</div><div class="text">Carregando eventos…</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             9. TWITTER
+             ============================================================ -->
+        <section class="section" id="section-twitter">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🐦 Twitter</div>
+                <div class="card-subtitle">Status da integração com Twitter</div>
+              </div>
+              <button class="ghost sm" onclick="loadTwitter()">↻</button>
+            </div>
+            <div id="twitterStatus">
+              <div class="empty-state"><div class="icon">🐦</div><div class="text">Carregando status…</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             10. OPS & BANIDOS
+             ============================================================ -->
+        <section class="section" id="section-ops">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🔒 Ops & Banidos</div>
+                <div class="card-subtitle">Permissões e bloqueios</div>
+              </div>
+              <button class="ghost sm" onclick="loadOps()">↻</button>
+            </div>
+            <div class="tabs">
+              <button class="tab active" data-ops-tab="ops" onclick="switchOpsTab('ops')">👑 Ops</button>
+              <button class="tab" data-ops-tab="banned" onclick="switchOpsTab('banned')">🚫 Banidos</button>
+            </div>
+            <div id="opsTabContent"></div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             11. PROMPT
+             ============================================================ -->
+        <section class="section" id="section-prompt">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">📝 System Prompt</div>
+                <div class="card-subtitle">Instruções base da IA. Hot-reload em até 5s.</div>
+              </div>
+              <div class="card-actions">
+                <button class="ghost sm" onclick="loadPrompt()">↻ Recarregar</button>
+                <button class="danger sm" onclick="resetPrompt()">↺ Reset default</button>
+              </div>
+            </div>
+            <div class="form-row">
+              <textarea id="promptText" rows="20" placeholder="carregando prompt…"></textarea>
+            </div>
+            <div class="row-flex">
+              <button class="primary" onclick="savePrompt()">💾 Salvar</button>
+              <span class="muted small" id="promptStatus"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             12. IA CONFIG
+             ============================================================ -->
+        <section class="section" id="section-ai">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🤖 Configuração IA</div>
+                <div class="card-subtitle">Modelo, fallbacks e parâmetros de geração</div>
+              </div>
+              <div class="card-actions">
+                <button class="ghost sm" onclick="loadAiConfig()">↻</button>
+                <button class="success sm" onclick="testAi()">🧪 Testar conexão</button>
+              </div>
+            </div>
+            <div id="aiConfigForm">
+              <div class="form-row">
+                <label>Modelo principal</label>
+                <input type="text" id="aiModel" placeholder="gemini-2.0-flash">
+              </div>
+              <div class="form-row">
+                <label>Fallback models <span class="muted small">(tentados em sequência se o principal falhar)</span></label>
+                <div class="pill-list" id="aiFallbacks" style="margin-bottom: 8px;"></div>
+                <div class="row-flex">
+                  <input type="text" id="aiNewFallback" placeholder="ex: gemini-1.5-flash" onkeydown="if(event.key==='Enter'){addFallback();event.preventDefault();}">
+                  <button class="ghost sm" onclick="addFallback()">+ Add</button>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="form-row">
+                  <label>API URL</label>
+                  <input type="url" id="aiApiUrl" placeholder="https://generativelanguage.googleapis.com">
+                </div>
+                <div class="form-row">
+                  <label>API Key</label>
+                  <input type="password" id="aiApiKey" placeholder="••••••••••••">
+                </div>
+                <div class="form-row">
+                  <label>Max tokens</label>
+                  <input type="number" id="aiMaxTokens" placeholder="8192" min="1" max="1000000">
+                </div>
+                <div class="form-row">
+                  <label>Temperature <span class="muted small" id="aiTempVal">1.0</span></label>
+                  <div class="slider-row">
+                    <input type="range" id="aiTemperature" min="0" max="2" step="0.1" value="1"
+                           oninput="document.getElementById('aiTempVal').textContent=this.value">
+                    <span class="val" id="aiTempVal2">1.0</span>
+                  </div>
+                </div>
+              </div>
+              <div class="row-flex mt-2">
+                <button class="primary" onclick="saveAiConfig()">💾 Salvar configuração</button>
+                <span class="muted small" id="aiConfigStatus"></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             13. DIRETIVAS
+             ============================================================ -->
+        <section class="section" id="section-directives">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">📜 Diretivas</div>
+                <div class="card-subtitle">Regras e instruções adicionais injetadas no prompt</div>
+              </div>
+              <button class="ghost sm" onclick="loadDirectives()">↻</button>
+            </div>
+            <div class="form-row">
+              <div class="row-flex">
+                <input type="text" id="newDirective" placeholder="nova diretiva…" onkeydown="if(event.key==='Enter'){addDirective();event.preventDefault();}">
+                <button class="primary" onclick="addDirective()">+ Adicionar</button>
+              </div>
+            </div>
+            <div id="directivesList"></div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             14. TEMA
+             ============================================================ -->
+        <section class="section" id="section-theme">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🎨 Tema</div>
+                <div class="card-subtitle">Aparência da interface</div>
+              </div>
+            </div>
+            <div class="row-flex">
+              <button class="primary" disabled>🌙 Dark (ativo)</button>
+              <button class="ghost" disabled>☀️ Light (em breve)</button>
+              <button class="ghost" disabled>🌓 Auto (em breve)</button>
+            </div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title">🔧 Manutenção</div>
+              <div class="card-subtitle">Pausa o bot sem desligar</div>
+              <div class="row-flex mt-2">
+                <button class="warning" id="maintOnBtn" onclick="toggleMaintenance(true)">⏸ Pausar bot</button>
+                <button class="success" id="maintOffBtn" onclick="toggleMaintenance(false)" style="display:none">▶ Retomar bot</button>
+              </div>
+              <div class="muted small mt-2" id="maintStatus">Bot ativo</div>
+            </div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title">🚀 Auto-start</div>
+              <div class="card-subtitle">Abrir com o Windows</div>
+              <div class="row-flex mt-2">
+                <button class="ghost" onclick="toggleAutostart()">🔄 Alternar</button>
+              </div>
+              <div class="muted small mt-2" id="autostartStatus">Status: desconhecido</div>
+            </div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title">🔔 Notificações</div>
+              <div class="card-subtitle">Alertas do sistema</div>
+              <div class="muted small mt-2">O bot envia notificações nativas quando:
+                <br>• IA fica offline
+                <br>• WhatsApp desconecta
+                <br>• Erro crítico
+                <br>• Tweet aguardando aprovação
+              </div>
+              <button class="ghost sm mt-2" onclick="testNotification()">🔔 Testar notificação</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             15. BACKUP
+             ============================================================ -->
+        <section class="section" id="section-backup">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">💾 Backup & Restore</div>
+                <div class="card-subtitle">Exporte e importe dados do bot</div>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div class="row-between" style="background: var(--bg-glass-light); padding: 14px 16px; border-radius: var(--radius-md);">
+                <div>
+                  <div style="font-weight: 600;">📦 Backup completo</div>
+                  <div class="muted small">Baixa um .zip com tudo da pasta data/</div>
+                </div>
+                <button class="primary" onclick="downloadBackup()">⬇ Baixar</button>
+              </div>
+              <div class="row-between" style="background: var(--bg-glass-light); padding: 14px 16px; border-radius: var(--radius-md);">
+                <div>
+                  <div style="font-weight: 600;">📤 Restore</div>
+                  <div class="muted small">Restaura de um .zip anterior</div>
+                </div>
+                <input type="file" id="restoreFile" accept=".zip" style="display:none" onchange="uploadRestore(event)">
+                <button class="warning" onclick="document.getElementById('restoreFile').click()">↑ Enviar zip</button>
+              </div>
+              <div class="row-between" style="background: var(--bg-glass-light); padding: 14px 16px; border-radius: var(--radius-md);">
+                <div>
+                  <div style="font-weight: 600;">🧠 Export memórias</div>
+                  <div class="muted small">Baixa as memórias em JSON</div>
+                </div>
+                <button onclick="exportMemories()">⬇ Export JSON</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             16. SOBRE
+             ============================================================ -->
+        <section class="section" id="section-about">
+          <div class="glass-card">
+            <div class="about-hero">
+              <div class="about-logo">🤖</div>
+              <div class="about-title">Márcio App</div>
+              <div class="about-version">v1.0 · Painel de controle</div>
+            </div>
+            <div class="muted" style="text-align: center; margin-bottom: 24px;">
+              Bot de WhatsApp com IA generativa, memórias, figurinhas, eventos, Twitter e mais.
+            </div>
+            <div class="card-title" style="margin-bottom: 10px;">🛠 Tech Stack</div>
+            <div class="tech-stack">
+              <div class="tech-card"><div class="name">Node.js</div><div class="desc">Runtime JS</div></div>
+              <div class="tech-card"><div class="name">TypeScript</div><div class="desc">Tipagem estática</div></div>
+              <div class="tech-card"><div class="name">Tauri</div><div class="desc">Desktop wrapper</div></div>
+              <div class="tech-card"><div class="name">Rust</div><div class="desc">Backend nativo</div></div>
+              <div class="tech-card"><div class="name">whatsapp-web.js</div><div class="desc">Cliente WA</div></div>
+              <div class="tech-card"><div class="name">Gemini</div><div class="desc">IA generativa</div></div>
+              <div class="tech-card"><div class="name">ws</div><div class="desc">WebSocket</div></div>
+              <div class="tech-card"><div class="name">Vanilla JS</div><div class="desc">Painel sem build</div></div>
+            </div>
+            <div style="margin-top: 24px; text-align: center;" class="muted">
+              Feito com ❤️ por <strong style="color: var(--text);">Yann</strong>
+            </div>
+          </div>
+        </section>
+
+      </div>
     </main>
-
   </div>
 
-  <!-- ============================================================
-       MODAL — chat context / profile view
-       ============================================================ -->
-  <div class="modal-overlay" id="chatModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 id="modalTitle">chat</h3>
-        <button class="modal-close" onclick="closeModal()">✕</button>
-      </div>
-      <div class="ia-toggle-row" id="iaToggleRow">
-        <span class="label">IA neste chat:</span>
-        <button id="iaOnBtn" onclick="setIa(true)">ON</button>
-        <button id="iaOffBtn" onclick="setIa(false)">OFF</button>
-      </div>
-      <div class="modal-tabs">
-        <button class="active" data-tab="context" onclick="switchTab('context')">Contexto</button>
-        <button data-tab="profile" onclick="switchTab('profile')">Perfil</button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-tab-content active" id="tab-context">
-          <div class="empty">carregando contexto…</div>
-        </div>
-        <div class="modal-tab-content" id="tab-profile">
-          <div class="empty">carregando perfil…</div>
-        </div>
-      </div>
-    </div>
+  <!-- ================================================================
+       MODAL
+       ================================================================ -->
+  <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal" id="modalContent"></div>
   </div>
 
-  <footer class="app-footer">
-    Márcio Control Panel — porta 3001 · <a href="/api/stats" target="_blank">/api/stats</a> · <a href="/api/logs" target="_blank">/api/logs</a>
-  </footer>
+  <!-- TOASTS -->
+  <div class="toast-wrap" id="toastWrap"></div>
 
-  <!-- ============================================================
+  <!-- ================================================================
        JAVASCRIPT — vanilla, no deps, no build
-       ============================================================ -->
+       ================================================================ -->
   <script>
     'use strict';
 
     // ================================================================
-    // ESTADO GLOBAL
+    // STATE
     // ================================================================
     const state = {
       ws: null,
       wsConnected: false,
+      currentSection: 'dashboard',
       currentChatId: null,
-      logLineCount: 0,
+      logLines: [],          // all log lines for filtering
       maxLogLines: 500,
+      autoScroll: true,
       statsInterval: null,
+      botStatusInterval: null,
+      stats: null,
       chats: [],
       memories: {},
+      currentMemoryUser: null,
+      stickers: [],
+      opsTab: 'ops',
+      opsData: { ops: [], banned: [] },
+      consoleHistory: [],
+      consoleHistoryIdx: -1,
+      aiConfig: null,
+      aiFallbacks: [],
+      twitterEnabled: false,
+    };
+
+    const SECTION_TITLES = {
+      dashboard: ['Dashboard', 'Visão geral do bot'],
+      log:       ['Live Log', 'Logs em tempo real'],
+      console:   ['Console', 'Execute comandos no bot'],
+      bot:       ['Bot & WhatsApp', 'Gerencie o ciclo de vida'],
+      memories:  ['Memórias', 'Fatos que o bot lembra'],
+      stickers:  ['Figurinhas', 'Galeria de figurinhas'],
+      chats:     ['Chats', 'Conversas ativas'],
+      events:    ['Eventos', 'Eventos agendados'],
+      twitter:   ['Twitter', 'Integração com Twitter'],
+      ops:       ['Ops & Banidos', 'Permissões'],
+      prompt:    ['Prompt', 'System prompt editor'],
+      ai:        ['IA', 'Configuração do modelo'],
+      directives:['Diretivas', 'Regras adicionais'],
+      theme:     ['Tema', 'Aparência da interface'],
+      backup:    ['Backup', 'Exportar e importar'],
+      about:     ['Sobre', 'Informações do app'],
     };
 
     // ================================================================
     // UTILS
     // ================================================================
-    function $(sel) { return document.querySelector(sel); }
-    function $$(sel) { return Array.from(document.querySelectorAll(sel)); }
+    const $  = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
     function nowTime() {
       const d = new Date();
-      const pad = (n) => String(n).padStart(2, '0');
-      return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      const p = (n) => String(n).padStart(2, '0');
+      return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
     }
-
+    function nowDateTime() {
+      const d = new Date();
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    }
     function escapeHtml(s) {
       return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
-
     function humanizeUptime(ms) {
       if (!ms || ms < 0) return '—';
       const s = Math.floor(ms / 1000);
@@ -719,26 +1844,50 @@
       if (m > 0) return `${m}min ${sec}s`;
       return `${sec}s`;
     }
-
     function chatLabel(chatId) {
       if (!chatId) return '?';
-      if (chatId.endsWith('@g.us')) return `${chatId.split('@')[0]}… (grupo)`;
-      if (chatId.endsWith('@c.us')) return `${chatId.split('@')[0]}… (PV)`;
-      if (chatId.endsWith('@lid')) return `${chatId.split('@')[0]}… (lid)`;
+      const id = chatId.split('@')[0];
+      if (chatId.endsWith('@g.us')) return `${id}@grupo`;
+      if (chatId.endsWith('@c.us')) return `${id}@pv`;
+      if (chatId.endsWith('@lid'))  return `${id}@lid`;
       return chatId;
+    }
+    function timeAgo(date) {
+      if (!date) return '—';
+      const d = typeof date === 'number' ? new Date(date) : new Date(date);
+      if (isNaN(d.getTime())) return '—';
+      const diff = Date.now() - d.getTime();
+      const sec = Math.floor(diff / 1000);
+      if (sec < 60) return `${sec}s atrás`;
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `${min}min atrás`;
+      const h = Math.floor(min / 60);
+      if (h < 24) return `${h}h atrás`;
+      const days = Math.floor(h / 24);
+      return `${days}d atrás`;
+    }
+    function formatDate(date) {
+      if (!date) return '—';
+      const d = typeof date === 'number' ? new Date(date) : new Date(date);
+      if (isNaN(d.getTime())) return '—';
+      const p = (n) => String(n).padStart(2, '0');
+      return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
     }
 
     async function apiGet(path) {
       const r = await fetch(path);
-      if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
+      if (!r.ok) {
+        let msg = `GET ${path} → ${r.status}`;
+        try { const j = await r.json(); if (j.error) msg += `: ${j.error}`; } catch {}
+        throw new Error(msg);
+      }
       return r.json();
     }
-
     async function apiPost(path, body) {
       const r = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(body || {}),
       });
       if (!r.ok) {
         let msg = `POST ${path} → ${r.status}`;
@@ -747,32 +1896,74 @@
       }
       return r.json();
     }
-
-    // ================================================================
-    // LOG — append + auto-scroll + cap
-    // ================================================================
-    function appendLogLine(tag, message, opts = {}) {
-      const logBody = $('#logBody');
-      const line = document.createElement('div');
-      line.className = `log-line ${opts.cls || ''}`;
-      const ts = opts.time || nowTime();
-      line.innerHTML = `<span class="ts">[${ts}]</span> <span class="tag">${escapeHtml(tag)}</span> ${escapeHtml(message)}`;
-      logBody.appendChild(line);
-      state.logLineCount++;
-      // Cap — remove oldest
-      while (state.logLineCount > state.maxLogLines) {
-        if (logBody.firstChild) logBody.removeChild(logBody.firstChild);
-        state.logLineCount--;
+    async function apiDelete(path) {
+      const r = await fetch(path, { method: 'DELETE' });
+      if (!r.ok) {
+        let msg = `DELETE ${path} → ${r.status}`;
+        try { const j = await r.json(); if (j.error) msg += `: ${j.error}`; } catch {}
+        throw new Error(msg);
       }
-      // Auto-scroll se o usuário está no fim
-      const nearBottom = (logBody.scrollHeight - logBody.scrollTop - logBody.clientHeight) < 60;
-      if (nearBottom) logBody.scrollTop = logBody.scrollHeight;
+      return r.json();
     }
 
-    function clearLog() {
-      $('#logBody').innerHTML = '';
-      state.logLineCount = 0;
-      appendLogLine('SYSTEM', 'log limpo.', { cls: 'system' });
+    // ================================================================
+    // TOASTS
+    // ================================================================
+    function toast(msg, kind = 'info', ms = 3500) {
+      const wrap = $('#toastWrap');
+      const el = document.createElement('div');
+      el.className = `toast ${kind}`;
+      const icons = { success: '✅', error: '❌', warn: '⚠️', info: 'ℹ️' };
+      el.innerHTML = `<span>${icons[kind] || 'ℹ️'}</span><span>${escapeHtml(msg)}</span>`;
+      wrap.appendChild(el);
+      setTimeout(() => {
+        el.classList.add('hide');
+        setTimeout(() => el.remove(), 250);
+      }, ms);
+    }
+
+    // ================================================================
+    // SIDEBAR / NAVIGATION
+    // ================================================================
+    function showSection(name) {
+      state.currentSection = name;
+      $$('.section').forEach(s => s.classList.remove('active'));
+      const el = document.getElementById(`section-${name}`);
+      if (el) el.classList.add('active');
+      $$('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.section === name));
+      const [title, sub] = SECTION_TITLES[name] || [name, ''];
+      $('#pageTitle').textContent = title;
+      $('#pageSub').textContent = sub;
+      $('#topbarActions').innerHTML = '';
+      // Lazy-load section data
+      loadSectionData(name);
+      // Close sidebar on mobile
+      if (window.innerWidth <= 900) toggleSidebar(false);
+    }
+    function loadSectionData(name) {
+      switch (name) {
+        case 'dashboard': loadStats(); loadChartHistory(); break;
+        case 'log': renderLogLines(); break;
+        case 'console': $('#consoleInput').focus(); break;
+        case 'bot': loadBotStatus(); break;
+        case 'memories': loadMemories(); break;
+        case 'stickers': loadStickers(); break;
+        case 'chats': loadChats(); break;
+        case 'events': loadEvents(); break;
+        case 'twitter': loadTwitter(); break;
+        case 'ops': loadOps(); break;
+        case 'prompt': loadPrompt(); break;
+        case 'ai': loadAiConfig(); break;
+        case 'directives': loadDirectives(); break;
+        case 'theme': loadMaintenance(); loadAutostartStatus(); break;
+      }
+    }
+    function toggleSidebar(force) {
+      const sb = $('#sidebar');
+      const bd = $('#sidebarBackdrop');
+      const open = force === undefined ? !sb.classList.contains('open') : force;
+      sb.classList.toggle('open', open);
+      bd.classList.toggle('show', open);
     }
 
     // ================================================================
@@ -781,45 +1972,36 @@
     function connectWs() {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${proto}//${location.host}/`;
-      setStatus('connecting', 'conectando WS…');
-      try {
-        state.ws = new WebSocket(url);
-      } catch (e) {
-        setStatus('offline', 'WS erro: ' + e.message);
+      setStatus('connecting', 'conectando…');
+      try { state.ws = new WebSocket(url); }
+      catch (e) {
+        setStatus('offline', 'WS erro');
         setTimeout(connectWs, 3000);
         return;
       }
-
       state.ws.onopen = () => {
         state.wsConnected = true;
         setStatus('online', 'online');
         appendLogLine('SYSTEM', 'WebSocket conectado.', { cls: 'system' });
       };
-
       state.ws.onmessage = (ev) => {
-        let msg;
-        try { msg = JSON.parse(ev.data); } catch { return; }
+        let msg; try { msg = JSON.parse(ev.data); } catch { return; }
         handleWsMessage(msg);
       };
-
       state.ws.onclose = () => {
         state.wsConnected = false;
-        setStatus('offline', 'desconectado — re tentando em 3s');
-        appendLogLine('SYSTEM', 'WebSocket desconectado. Tentando reconectar…', { cls: 'system' });
+        setStatus('offline', 'reconectando em 3s…');
+        appendLogLine('SYSTEM', 'WebSocket desconectado. Reconectando…', { cls: 'system' });
         setTimeout(connectWs, 3000);
       };
-
-      state.ws.onerror = () => {
-        // onclose vai tratar
-      };
+      state.ws.onerror = () => { /* onclose handles */ };
     }
 
     function handleWsMessage(msg) {
       if (!msg || !msg.type) return;
       switch (msg.type) {
         case 'snapshot':
-          appendLogLine('SYSTEM', 'snapshot recebido.', { cls: 'system' });
-          if (msg.data) renderStats(msg.data);
+          if (msg.data) { state.stats = msg.data; renderStats(msg.data); renderDashboard(); }
           break;
         case 'log':
           if (msg.data) {
@@ -827,20 +2009,40 @@
             const cls = classifyLogTag(d.tag);
             const time = d.time ? String(d.time).split(' ')[1] || d.time : nowTime();
             appendLogLine(d.tag || 'LOG', d.message || '', { cls, time });
+            // Se é output de comando capturado, mostra também no console
+            if (d.tag === 'OUTPUT') {
+              appendConsole('out', d.message || '');
+            }
           }
           break;
         case 'command-result':
           if (msg.data) {
             const d = msg.data;
+            const out = $('#consoleOutput');
             if (d.ok) {
+              appendConsole('out', d.result || '✓ comando executado');
               appendLogLine('PANEL-OK', d.result || 'comando executado.', { cls: 'result' });
             } else {
-              appendLogLine('PANEL-ERR', d.error || 'erro desconhecido.', { cls: 'error' });
+              appendConsole('err', d.error || 'erro desconhecido');
+              appendLogLine('PANEL-ERR', d.error || 'erro.', { cls: 'error' });
             }
           }
           break;
-        case 'pong':
-          // ignore
+        case 'pong': break;
+        case 'notification':
+          // Notificação nativa — se tiver Tauri, usa invoke; senão, browser API
+          if (msg.data) {
+            if (window.__TAURI__) {
+              try {
+                const { invoke } = window.__TAURI__.core;
+                invoke('notify', { title: msg.data.title || 'Márcio', body: msg.data.body || '' });
+              } catch { /* ignora */ }
+            } else if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(msg.data.title || 'Márcio', { body: msg.data.body || '' });
+            }
+            // Também mostra no log
+            appendLogLine('NOTIFY', `${msg.data.title}: ${msg.data.body}`, { cls: 'system' });
+          }
           break;
         case 'error':
           appendLogLine('WS-ERR', msg.data?.error || 'erro', { cls: 'error' });
@@ -853,9 +2055,14 @@
     function classifyLogTag(tag) {
       if (!tag) return '';
       const t = String(tag).toUpperCase();
-      if (t.includes('ERR') || t === 'FATAL' || t === 'ERROR') return 'error';
+      if (t.includes('ERR') || t === 'FATAL') return 'error';
       if (t.includes('WARN')) return 'warn';
       if (t === 'CMD' || t === 'PANEL-OK') return 'cmd';
+      if (t === 'PANEL-ERR') return 'error';
+      if (t === 'PANEL-OK' || t.includes('RESULT')) return 'result';
+      if (t.includes('MEMOR')) return 'memory';
+      if (t === 'AI' || t.includes('GEMINI') || t.includes('IA')) return 'ai';
+      if (t === 'DEBUG' || t.includes('DEBUG')) return 'debug';
       if (t === 'PANEL' || t === 'SYSTEM' || t === 'BOOT' || t === 'WA') return 'system';
       return '';
     }
@@ -865,84 +2072,336 @@
       dot.className = 'status-dot';
       if (kind === 'online') dot.classList.add('online');
       else if (kind === 'connecting') dot.classList.add('connecting');
+      else dot.classList.add('offline');
       $('#statusText').textContent = text;
     }
 
     // ================================================================
-    // STATS
+    // LOG
+    // ================================================================
+    function appendLogLine(tag, message, opts = {}) {
+      const entry = { tag, message, cls: opts.cls || '', time: opts.time || nowTime() };
+      state.logLines.push(entry);
+      while (state.logLines.length > state.maxLogLines) state.logLines.shift();
+      renderLogLines();
+    }
+    function renderLogLines() {
+      const body = $('#logBody');
+      if (!body) return;
+      const filterText = ($('#logFilterText')?.value || '').toLowerCase();
+      const filterTag  = $('#logFilterTag')?.value || '';
+      const lines = state.logLines.filter(e => {
+        if (filterTag && e.cls !== filterTag) return false;
+        if (filterText && !(e.message.toLowerCase().includes(filterText) || e.tag.toLowerCase().includes(filterText))) return false;
+        return true;
+      });
+      body.innerHTML = lines.map(e =>
+        `<div class="log-line ${e.cls}"><span class="ts">[${e.time}]</span><span class="tag">${escapeHtml(e.tag)}</span><span class="msg">${escapeHtml(e.message)}</span></div>`
+      ).join('');
+      const counter = $('#logCount');
+      if (counter) counter.textContent = `${lines.length} / ${state.logLines.length} linhas`;
+      // mini-log on dashboard
+      const mini = $('#miniLog');
+      if (mini) {
+        const miniLines = state.logLines.slice(-30);
+        mini.innerHTML = miniLines.map(e =>
+          `<div class="log-line ${e.cls}"><span class="ts">[${e.time}]</span><span class="tag">${escapeHtml(e.tag)}</span><span class="msg">${escapeHtml(e.message)}</span></div>`
+        ).join('');
+        mini.scrollTop = mini.scrollHeight;
+      }
+      if (state.autoScroll) body.scrollTop = body.scrollHeight;
+    }
+    function clearLog() {
+      state.logLines = [];
+      renderLogLines();
+      appendLogLine('SYSTEM', 'log limpo.', { cls: 'system' });
+    }
+    function toggleAutoScroll() {
+      state.autoScroll = !state.autoScroll;
+      $('#autoScrollBtn').textContent = `⏷ auto-scroll: ${state.autoScroll ? 'on' : 'off'}`;
+    }
+
+    // ================================================================
+    // CONSOLE
+    // ================================================================
+    function appendConsole(cls, text) {
+      const out = $('#consoleOutput');
+      const line = document.createElement('div');
+      line.className = `out-line ${cls}`;
+      const prefix = cls === 'in' ? '$' : (cls === 'err' ? '!' : '›');
+      line.innerHTML = `<span class="prefix">${prefix}</span>${escapeHtml(text)}`;
+      out.appendChild(line);
+      out.scrollTop = out.scrollHeight;
+    }
+    function handleConsoleKey(ev) {
+      const input = $('#consoleInput');
+      if (ev.key === 'Enter') { sendCommand(); }
+      else if (ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        if (state.consoleHistory.length === 0) return;
+        if (state.consoleHistoryIdx === -1) state.consoleHistoryIdx = state.consoleHistory.length - 1;
+        else if (state.consoleHistoryIdx > 0) state.consoleHistoryIdx--;
+        input.value = state.consoleHistory[state.consoleHistoryIdx] || '';
+      } else if (ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        if (state.consoleHistoryIdx === -1) return;
+        if (state.consoleHistoryIdx < state.consoleHistory.length - 1) {
+          state.consoleHistoryIdx++;
+          input.value = state.consoleHistory[state.consoleHistoryIdx];
+        } else {
+          state.consoleHistoryIdx = -1;
+          input.value = '';
+        }
+      }
+    }
+    function sendCommand() {
+      const input = $('#consoleInput');
+      const text = input.value.trim();
+      if (!text) return;
+      state.consoleHistory.push(text);
+      if (state.consoleHistory.length > 100) state.consoleHistory.shift();
+      state.consoleHistoryIdx = -1;
+      input.value = '';
+      appendConsole('in', text);
+      // Send via WS or fallback to POST
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({ action: 'run-command', text }));
+      } else {
+        apiPost('/api/command', { text })
+          .then(r => {
+            if (r.ok) appendConsole('out', r.result || '✓ executado');
+            else appendConsole('err', r.error || 'erro');
+          })
+          .catch(e => appendConsole('err', e.message));
+      }
+    }
+    function quickCmd(text) {
+      $('#consoleInput').value = text;
+      sendCommand();
+    }
+
+    // ================================================================
+    // DASHBOARD + STATS
     // ================================================================
     async function loadStats() {
       try {
-        const stats = await apiGet('/api/stats');
-        renderStats(stats);
+        const s = await apiGet('/api/stats');
+        state.stats = s;
+        renderStats(s);
+        renderDashboard();
       } catch (e) {
         appendLogLine('STATS-ERR', e.message, { cls: 'error' });
       }
     }
-
     function renderStats(s) {
       if (!s) return;
+      const grid = $('#statsGrid');
+      if (!grid) return;
       const debugCls = s.debug === 'full' ? 'warn' : (s.debug === 'on' ? 'good' : 'bad');
       const iaCls = s.iaEnabled ? 'good' : 'bad';
-      const model = s.aiConfig?.model || '—';
-      const fallbacks = (s.aiConfig?.fallbackModels || []).join(', ') || '—';
-      const html = `
-        <span class="k">Uptime</span><span class="v cyan">${humanizeUptime(s.uptime)}</span>
-        <span class="k">Requests IA</span><span class="v">${s.aiRequestCount}</span>
-        <span class="k">Último modelo</span><span class="v">${escapeHtml(s.lastUsedModel || '—')}</span>
-        <span class="k">Chats ativos</span><span class="v">${s.chatsWithContext}</span>
-        <span class="k">Histórico carregado</span><span class="v">${s.historyLoaded}</span>
-        <span class="k">Memórias</span><span class="v">${s.memories}</span>
-        <span class="k">Figurinhas</span><span class="v">${s.stickers}</span>
-        <span class="k">Diretivas</span><span class="v">${s.directives}</span>
-        <span class="k">Debug</span><span class="v ${debugCls}">${s.debug}</span>
-        <span class="k">IA global</span><span class="v ${iaCls}">${s.iaEnabled ? 'on' : 'off'}</span>
-        <span class="k">Modelo</span><span class="v cyan">${escapeHtml(model)}</span>
-        <span class="k">Fallbacks</span><span class="v" style="text-align:right; font-size:11px;">${escapeHtml(fallbacks)}</span>
-      `;
-      $('#statsGrid').innerHTML = html;
-
-      // Marca botão debug ativo
-      $$('#debugBtns button').forEach((b) => {
-        b.classList.remove('active', 'warn', 'bad');
-        if (b.dataset.mode === s.debug) {
-          b.classList.add('active');
-          if (s.debug === 'full') b.classList.add('warn');
-          if (s.debug === 'off') b.classList.add('bad');
-        }
-      });
+      const cards = [
+        { lbl: '⏱ Uptime', val: humanizeUptime(s.uptime), cls: 'accent' },
+        { lbl: '🧠 Requests IA', val: s.aiRequestCount, cls: '' },
+        { lbl: '🤖 Último modelo', val: (s.lastUsedModel || '—'), cls: 'small' },
+        { lbl: '💬 Chats ativos', val: s.chatsWithContext, cls: '' },
+        { lbl: '📚 Histórico', val: s.historyLoaded, cls: '' },
+        { lbl: '🧠 Memórias', val: s.memories, cls: '' },
+        { lbl: '🎭 Figurinhas', val: s.stickers, cls: '' },
+        { lbl: '📜 Diretivas', val: s.directives, cls: '' },
+        { lbl: '🐛 Debug', val: s.debug, cls: debugCls },
+        { lbl: '🤖 IA global', val: s.iaEnabled ? 'on' : 'off', cls: iaCls },
+      ];
+      grid.innerHTML = cards.map(c =>
+        `<div class="stat-card"><div class="stat-label">${c.lbl}</div><div class="stat-value ${c.cls}">${escapeHtml(c.val)}</div></div>`
+      ).join('');
+    }
+    function renderDashboard() {
+      const s = state.stats;
+      if (!s) return;
+      const botOnline  = s.uptime > 0;
+      const waOnline   = botOnline; // proxy; real WA status from /api/bot/status
+      $('#dashBotStatus').innerHTML = botOnline
+        ? `<span class="badge good">● Online</span>`
+        : `<span class="badge bad">● Offline</span>`;
+      $('#dashWaStatus').innerHTML = waOnline
+        ? `<span class="badge good">● Conectado</span>`
+        : `<span class="badge bad">● Desconectado</span>`;
+      $('#dashIaStatus').innerHTML = s.iaEnabled
+        ? `<span class="badge good">● Ativa</span>`
+        : `<span class="badge bad">● Desligada</span>`;
+      $('#dashUptime').textContent = humanizeUptime(s.uptime);
     }
 
-    // ================================================================
-    // CHATS
-    // ================================================================
-    async function loadChats() {
+    // === Gráficos (Chart.js) ===
+    let chartIaInstance = null;
+    let chartMsgsInstance = null;
+
+    async function loadChartHistory() {
       try {
-        const chats = await apiGet('/api/chats');
-        state.chats = Array.isArray(chats) ? chats : [];
-        renderChats();
-      } catch (e) {
-        appendLogLine('CHATS-ERR', e.message, { cls: 'error' });
-      }
+        const r = await apiGet('/api/stats/history');
+        const history = r.history || [];
+        if (history.length < 2) return; // precisa de pelo menos 2 pontos
+
+        // Pega última 1h (60 pontos)
+        const recent = history.slice(-60);
+        const labels = recent.map(h => {
+          const d = new Date(h.time);
+          return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        });
+        const iaData = recent.map(h => h.iaResponses || 0);
+        const msgData = recent.map(h => h.messages || 0);
+
+        // Chart: IA responses
+        if (chartIaInstance) chartIaInstance.destroy();
+        const ctxIa = document.getElementById('chartIa');
+        if (ctxIa) {
+          chartIaInstance = new Chart(ctxIa, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [{
+                label: 'IA / min',
+                data: iaData,
+                borderColor: '#0a84ff',
+                backgroundColor: 'rgba(10, 132, 255, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { display: false },
+                y: { beginAtZero: true, ticks: { color: '#86868b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+              }
+            }
+          });
+        }
+
+        // Chart: Messages
+        if (chartMsgsInstance) chartMsgsInstance.destroy();
+        const ctxMsgs = document.getElementById('chartMsgs');
+        if (ctxMsgs) {
+          chartMsgsInstance = new Chart(ctxMsgs, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [{
+                label: 'Msgs / min',
+                data: msgData,
+                borderColor: '#30d158',
+                backgroundColor: 'rgba(48, 209, 88, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { display: false },
+                y: { beginAtZero: true, ticks: { color: '#86868b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+              }
+            }
+          });
+        }
+      } catch { /* ignora */ }
+    }
+    async function quickAction(kind) {
+      try {
+        if (kind === 'restart') {
+          toast('Reiniciando bot…', 'info');
+          await botAction('restart', /*silent*/true);
+        } else if (kind === 'debug-on')  { await apiPost('/api/debug', { mode: 'on' });  toast('Debug ON', 'success'); }
+        else if (kind === 'debug-off') { await apiPost('/api/debug', { mode: 'off' }); toast('Debug OFF', 'success'); }
+        else if (kind === 'debug-full'){ await apiPost('/api/debug', { mode: 'full' }); toast('Debug FULL', 'warn'); }
+        else if (kind === 'retro')     { quickCmd('//retro agora'); }
+        loadStats();
+      } catch (e) { toast(e.message, 'error'); }
     }
 
-    function renderChats() {
-      const ul = $('#chatsList');
-      if (state.chats.length === 0) {
-        ul.innerHTML = '<li class="empty">nenhum chat com contexto ainda.</li>';
-        return;
+    // ================================================================
+    // BOT & WHATSAPP
+    // ================================================================
+    async function loadBotStatus() {
+      try {
+        const s = await apiGet('/api/bot/status');
+        renderBotStatus(s);
+      } catch (e) {
+        // endpoint may not exist yet — show placeholder
+        $('#botRunning').innerHTML = `<span class="badge warn">indisponível</span>`;
+        $('#botWaConnected').innerHTML = `<span class="badge warn">indisponível</span>`;
+        $('#botUptime').textContent = '—';
+        $('#botNumber').textContent = '—';
+        $('#botLastReconnect').textContent = '—';
+        $('#botHealth').innerHTML = `<span class="badge bad">endpoint /api/bot/status não existe</span>`;
       }
-      ul.innerHTML = state.chats.map((c) => {
-        const iaBadge = c.iaEnabled
-          ? '<span class="badge on">IA on</span>'
-          : '<span class="badge off">IA off</span>';
-        return `
-          <li onclick="openChat('${escapeHtml(c.chatId)}')">
-            <span>${escapeHtml(chatLabel(c.chatId))}</span>
-            <span class="meta">${c.contextCount} msgs ${iaBadge}</span>
-          </li>
-        `;
-      }).join('');
+    }
+    function renderBotStatus(s) {
+      const running = !!s.running;
+      const wa = !!s.whatsappConnected;
+      $('#botRunning').innerHTML = running
+        ? `<span class="badge good">● Rodando</span>`
+        : `<span class="badge bad">● Parado</span>`;
+      $('#botWaConnected').innerHTML = wa
+        ? `<span class="badge good">● Conectado</span>`
+        : `<span class="badge warn">● Desconectado</span>`;
+      $('#botUptime').textContent = humanizeUptime(s.uptime);
+      $('#botNumber').textContent = s.number || '—';
+      $('#botLastReconnect').textContent = s.lastReconnect ? timeAgo(s.lastReconnect) : '—';
+      $('#botHealth').innerHTML = running
+        ? `<span class="badge good">✓ saudável</span>`
+        : `<span class="badge bad">✗ parado</span>`;
+    }
+    async function botAction(action, silent) {
+      const map = {
+        start:    { path: '/api/bot/start',    label: 'Iniciar bot' },
+        stop:     { path: '/api/bot/stop',     label: 'Parar bot' },
+        restart:  { path: '/api/bot/restart',  label: 'Reiniciar bot' },
+        reconnect:{ path: '/api/bot/reconnect',label: 'Reconectar WhatsApp' },
+        logout:   { path: '/api/bot/logout',   label: 'Logout WhatsApp' },
+      };
+      const m = map[action]; if (!m) return;
+      if (action === 'logout' && !confirm('Tem certeza que deseja deslogar do WhatsApp? Você precisará escanear o QR novamente.')) return;
+      try {
+        if (!silent) toast(`${m.label}…`, 'info');
+        await apiPost(m.path, {});
+        toast(`${m.label} ✓`, 'success');
+        setTimeout(loadBotStatus, 800);
+      } catch (e) {
+        toast(`${m.label} falhou: ${e.message}`, 'error', 5000);
+      }
+    }
+    async function loadQr() {
+      try {
+        toast('Carregando QR…', 'info');
+        const r = await apiGet('/api/qr');
+        const container = $('#qrContainer');
+        if (!r.qr) {
+          container.innerHTML = `<div class="qr-placeholder mt-2">📲 Sem QR disponível agora.<br><span class="small">O QR aparece quando o WhatsApp está desconectado e precisa re-autenticar.<br>Tente "Reconectar WhatsApp" primeiro.</span></div>`;
+          return;
+        }
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(r.qr)}&bgcolor=ffffff&color=000000`;
+        container.innerHTML = `
+          <div class="qr-display mt-2">
+            <img src="${qrUrl}" alt="QR Code">
+            <div class="qr-label">📱 Escaneie com o WhatsApp → Dispositivos conectados → Conectar dispositivo</div>
+            <details style="margin-top: 8px; font-size: 11px; color: #888; max-width: 320px; word-break: break-all;">
+              <summary>ver string QR</summary>
+              <pre style="white-space: pre-wrap; word-break: break-all;">${escapeHtml(r.qr)}</pre>
+            </details>
+          </div>`;
+        toast('QR carregado ✓', 'success');
+      } catch (e) {
+        toast('QR falhou: ' + e.message, 'error', 5000);
+      }
     }
 
     // ================================================================
@@ -950,286 +2409,981 @@
     // ================================================================
     async function loadMemories() {
       try {
-        const mem = await apiGet('/api/memories');
-        state.memories = mem || {};
+        state.memories = await apiGet('/api/memories');
+        const users = Object.keys(state.memories).sort();
+        if (users.length && !state.currentMemoryUser) state.currentMemoryUser = users[0];
         renderMemories();
       } catch (e) {
-        appendLogLine('MEM-ERR', e.message, { cls: 'error' });
+        $('#memoryUsers').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
       }
     }
-
     function renderMemories() {
-      const ul = $('#memoriesList');
-      const users = Object.keys(state.memories);
-      if (users.length === 0) {
-        ul.innerHTML = '<li class="empty">nenhuma memória registrada.</li>';
+      const users = Object.keys(state.memories).sort();
+      const search = ($('#memorySearch')?.value || '').toLowerCase();
+      const userList = $('#memoryUsers');
+      userList.innerHTML = users.length
+        ? users.map(u => {
+            const facts = state.memories[u] || [];
+            const active = u === state.currentMemoryUser ? 'active' : '';
+            return `<div class="split-list-item ${active}" onclick="selectMemoryUser('${escapeHtml(u)}')">
+                      <span>${escapeHtml(u)}</span>
+                      <span class="count">${facts.length}</span>
+                    </div>`;
+          }).join('')
+        : `<div class="empty-state"><div class="text">nenhum usuário</div></div>`;
+
+      const detail = $('#memoryFacts');
+      if (!state.currentMemoryUser || !state.memories[state.currentMemoryUser]) {
+        detail.innerHTML = `<div class="empty-state"><div class="icon">🧠</div><div class="text">selecione um usuário</div></div>`;
         return;
       }
-      ul.innerHTML = users.map((u) => {
-        const facts = state.memories[u] || [];
-        const factsHtml = facts.map((f) => {
-          const ts = f.timestamp ? new Date(f.timestamp).toLocaleString('pt-BR') : '';
-          return `<div class="fact">• ${escapeHtml(f.fact)} <span class="ts">${escapeHtml(ts)}</span></div>`;
+      let facts = state.memories[state.currentMemoryUser] || [];
+      if (search) {
+        facts = facts.filter(f => (typeof f === 'string' ? f : (f.text || f.fact || JSON.stringify(f))).toLowerCase().includes(search));
+      }
+      if (!facts.length) {
+        detail.innerHTML = `<div class="empty-state"><div class="icon">📭</div><div class="text">${search ? 'nenhum fato encontrado' : 'sem fatos'}</div></div>`;
+        return;
+      }
+      detail.innerHTML = `<div class="muted small mb-1">${facts.length} fato(s) para <strong style="color:var(--text)">${escapeHtml(state.currentMemoryUser)}</strong></div>` +
+        facts.map((f, i) => {
+          const text = typeof f === 'string' ? f : (f.text || f.fact || JSON.stringify(f));
+          const source = typeof f === 'object' ? (f.sourceChat || f.source || '') : '';
+          const ts = typeof f === 'object' ? (f.timestamp || f.ts || '') : '';
+          return `<div class="fact-card">
+            <div class="fact-text">${escapeHtml(text)}</div>
+            <div class="fact-meta">
+              ${source ? `<span>📍 ${escapeHtml(source)}</span>` : ''}
+              ${ts ? `<span>🕒 ${escapeHtml(formatDate(ts))}</span>` : ''}
+              <span>#${i}</span>
+            </div>
+            <div class="fact-actions">
+              <button class="ghost sm" onclick="editFact('${escapeHtml(state.currentMemoryUser)}', ${i})">✏️ Editar</button>
+              <button class="danger sm" onclick="deleteFact('${escapeHtml(state.currentMemoryUser)}', ${i})">🗑 Deletar</button>
+            </div>
+          </div>`;
         }).join('');
-        return `
-          <li onclick="this.classList.toggle('expanded')">
-            <span>${escapeHtml(u)}</span>
-            <span class="meta">${facts.length} fato(s) ▸</span>
-          </li>
-          <li class="facts" onclick="event.stopPropagation()">${factsHtml || '<div class="empty">sem fatos</div>'}</li>
-        `;
+    }
+    function selectMemoryUser(u) {
+      state.currentMemoryUser = u;
+      renderMemories();
+    }
+    function openAddFactModal() {
+      const users = Object.keys(state.memories).sort();
+      const opts = users.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+      openModal(`
+        <div class="modal-header">
+          <div class="modal-title">➕ Adicionar Fato</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <label>Usuário</label>
+            <input type="text" id="newFactUser" list="userList" placeholder="nome do usuário" value="${escapeHtml(state.currentMemoryUser || '')}">
+            <datalist id="userList">${opts}</datalist>
+          </div>
+          <div class="form-row">
+            <label>Fato</label>
+            <textarea id="newFactText" rows="4" placeholder="ex: gosta de futebol, trabalha com TI"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="ghost" onclick="closeModal()">Cancelar</button>
+          <button class="primary" onclick="submitAddFact()">Adicionar</button>
+        </div>
+      `);
+    }
+    async function submitAddFact() {
+      const user = $('#newFactUser').value.trim();
+      const text = $('#newFactText').value.trim();
+      if (!user || !text) { toast('preencha usuário e fato', 'warn'); return; }
+      try {
+        await apiPost(`/api/memories/${encodeURIComponent(user)}`, { text });
+        toast('Fato adicionado ✓', 'success');
+        closeModal();
+        await loadMemories();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+    function editFact(user, idx) {
+      const facts = state.memories[user] || [];
+      const f = facts[idx];
+      if (!f) return;
+      const text = typeof f === 'string' ? f : (f.text || f.fact || JSON.stringify(f));
+      openModal(`
+        <div class="modal-header">
+          <div class="modal-title">✏️ Editar Fato</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <label>Usuário</label>
+            <input type="text" value="${escapeHtml(user)}" disabled>
+          </div>
+          <div class="form-row">
+            <label>Fato (índice ${idx})</label>
+            <textarea id="editFactText" rows="4">${escapeHtml(text)}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="ghost" onclick="closeModal()">Cancelar</button>
+          <button class="primary" onclick="submitEditFact('${escapeHtml(user)}', ${idx})">Salvar</button>
+        </div>
+      `);
+    }
+    async function submitEditFact(user, idx) {
+      const text = $('#editFactText').value.trim();
+      if (!text) { toast('texto vazio', 'warn'); return; }
+      try {
+        // Delete old + add new (since edit endpoint may not exist)
+        await apiDelete(`/api/memories/${encodeURIComponent(user)}/${idx}`);
+        await apiPost(`/api/memories/${encodeURIComponent(user)}`, { text });
+        toast('Fato atualizado ✓', 'success');
+        closeModal();
+        await loadMemories();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+    async function deleteFact(user, idx) {
+      if (!confirm(`Deletar fato #${idx} de ${user}?`)) return;
+      try {
+        await apiDelete(`/api/memories/${encodeURIComponent(user)}/${idx}`);
+        toast('Fato deletado ✓', 'success');
+        await loadMemories();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+
+    // ================================================================
+    // STICKERS
+    // ================================================================
+    async function loadStickers() {
+      try {
+        const r = await apiGet('/api/stickers');
+        state.stickers = Array.isArray(r) ? r : (r.stickers || []);
+        renderStickers();
+      } catch (e) {
+        $('#stickerGrid').innerHTML = `<div class="empty-state"><div class="icon">🎭</div><div class="text">❌ ${escapeHtml(e.message)}<br><span class="muted">endpoint /api/stickers ainda não existe</span></div></div>`;
+      }
+    }
+    function renderStickers() {
+      const grid = $('#stickerGrid');
+      if (!state.stickers.length) {
+        grid.innerHTML = `<div class="empty-state"><div class="icon">🎭</div><div class="text">nenhuma figurinha</div></div>`;
+        return;
+      }
+      grid.innerHTML = state.stickers.map(s => {
+        const img = s.thumbnail || s.data || s.base64 || '';
+        const name = s.name || '';
+        const fav = s.favorite ? '⭐' : '';
+        return `<div class="sticker-item" onclick="openStickerModal('${escapeHtml(s.filename)}')">
+          ${img ? `<img src="${escapeHtml(img)}" alt="">` : '<div style="aspect-ratio:1;display:grid;place-items:center;background:rgba(0,0,0,0.3);border-radius:8px;">🎭</div>'}
+          ${fav ? `<div class="sticker-fav">${fav}</div>` : ''}
+          <div class="sticker-name">${escapeHtml(name || s.filename || '')}</div>
+        </div>`;
       }).join('');
     }
-
-    // ================================================================
-    // SYSTEM PROMPT EDITOR
-    // ================================================================
-    async function togglePromptEditor() {
-      const ed = $('#promptEditor');
-      const isOpen = ed.classList.toggle('open');
-      if (isOpen) {
-        $('#promptStatus').textContent = '';
-        $('#promptStatus').className = 'status';
-        $('#promptTextarea').value = 'carregando…';
-        try {
-          const r = await apiGet('/api/system-prompt');
-          $('#promptTextarea').value = r.content || '';
-        } catch (e) {
-          $('#promptTextarea').value = '';
-          $('#promptStatus').textContent = 'erro: ' + e.message;
-          $('#promptStatus').className = 'status err';
-        }
-      }
+    function openStickerModal(filename) {
+      const s = state.stickers.find(x => x.filename === filename);
+      if (!s) return;
+      const img = s.thumbnail || s.data || s.base64 || '';
+      openModal(`
+        <div class="modal-header">
+          <div class="modal-title">🎭 Figurinha</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          ${img ? `<img class="sticker-modal-preview" src="${escapeHtml(img)}" alt="">` : ''}
+          <div class="form-row">
+            <label>Nome</label>
+            <input type="text" id="stickerName" value="${escapeHtml(s.name || '')}" placeholder="sem nome">
+          </div>
+          <div class="form-row row-flex">
+            <button class="${s.favorite ? 'warning' : 'ghost'}" onclick="toggleStickerFav('${escapeHtml(filename)}')">
+              ${s.favorite ? '⭐ Remover favorito' : '☆ Favoritar'}
+            </button>
+            <button class="danger" onclick="deleteSticker('${escapeHtml(filename)}')">🗑 Deletar</button>
+          </div>
+          <div class="muted small mt-2">arquivo: ${escapeHtml(filename)}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="ghost" onclick="closeModal()">Fechar</button>
+          <button class="primary" onclick="saveStickerName('${escapeHtml(filename)}')">Salvar nome</button>
+        </div>
+      `);
     }
-
-    async function savePrompt() {
-      const content = $('#promptTextarea').value;
-      const st = $('#promptStatus');
-      st.textContent = 'salvando…';
-      st.className = 'status';
+    async function saveStickerName(filename) {
+      const name = $('#stickerName').value.trim();
       try {
-        await apiPost('/api/system-prompt', { content });
-        st.textContent = '✅ salvo — hot-reload em até 5s.';
-        st.className = 'status ok';
-        appendLogLine('PANEL', 'system-prompt.txt salvo via painel.', { cls: 'cmd' });
-      } catch (e) {
-        st.textContent = '❌ ' + e.message;
-        st.className = 'status err';
-      }
+        await apiPost(`/api/stickers/${encodeURIComponent(filename)}/name`, { name });
+        toast('Nome salvo ✓', 'success');
+        await loadStickers();
+        closeModal();
+      } catch (e) { toast(e.message, 'error', 5000); }
     }
-
-    // ================================================================
-    // DEBUG TOGGLE
-    // ================================================================
-    async function setDebug(mode) {
+    async function toggleStickerFav(filename) {
+      const s = state.stickers.find(x => x.filename === filename);
+      const fav = s ? !s.favorite : true;
       try {
-        await apiPost('/api/debug', { mode });
-        appendLogLine('PANEL', `debug → ${mode}`, { cls: 'cmd' });
-        await loadStats();
+        await apiPost(`/api/stickers/${encodeURIComponent(filename)}/favorite`, { favorite: fav });
+        toast(fav ? 'Favorito ✓' : 'Desfavoritado', 'success');
+        await loadStickers();
+        openStickerModal(filename);
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+    async function deleteSticker(filename) {
+      if (!confirm(`Deletar figurinha ${filename}?`)) return;
+      try {
+        await apiDelete(`/api/stickers/${encodeURIComponent(filename)}`);
+        toast('Deletada ✓', 'success');
+        closeModal();
+        await loadStickers();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+    async function dedupStickers() {
+      if (!confirm('Rodar dedup de figurinhas? (/fig dedup)')) return;
+      quickCmd('/fig dedup');
+      toast('Comando /fig dedup enviado — veja o log', 'info');
+    }
+
+    // ================================================================
+    // CHATS
+    // ================================================================
+    async function loadChats() {
+      try {
+        const r = await apiGet('/api/chats');
+        state.chats = Array.isArray(r) ? r : (r.chats || []);
+        renderChats();
       } catch (e) {
-        appendLogLine('DEBUG-ERR', e.message, { cls: 'error' });
+        $('#chatList').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
       }
     }
-
-    // ================================================================
-    // CONSOLE — envio de comando via WS (fallback pra POST)
-    // ================================================================
-    function sendCommand() {
-      const input = $('#consoleInput');
-      const text = input.value.trim();
-      if (!text) return;
-      appendLogLine('INPUT', text, { cls: 'cmd' });
-
-      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-        // Caminho preferido — WS (resposta síncrona via command-result)
-        state.ws.send(JSON.stringify({ action: 'run-command', text }));
-        appendLogLine('PANEL', 'comando enviado via WS — aguardando execução…', { cls: 'system' });
-      } else {
-        // Fallback — POST /api/command
-        apiPost('/api/command', { text })
-          .then((r) => {
-            if (r.ok) appendLogLine('PANEL-OK', r.result || 'executado.', { cls: 'result' });
-            else appendLogLine('PANEL-ERR', r.error || 'erro', { cls: 'error' });
-          })
-          .catch((e) => appendLogLine('PANEL-ERR', e.message, { cls: 'error' }));
+    function renderChats() {
+      const list = $('#chatList');
+      if (!state.chats.length) {
+        list.innerHTML = `<div class="empty-state"><div class="icon">👥</div><div class="text">nenhum chat ativo</div></div>`;
+        return;
       }
-      input.value = '';
+      list.innerHTML = state.chats.map(c => {
+        const displayName = c.name && c.name !== c.chatId ? c.name : chatLabel(c.chatId);
+        const groupIcon = c.isGroup ? '👥' : '💬';
+        const lastActive = c.lastActivity ? timeAgo(new Date(c.lastActivity)) : '';
+        return `<div class="chat-item" onclick="openChat('${escapeHtml(c.chatId)}')">
+          <div>
+            <div class="chat-id">${groupIcon} ${escapeHtml(displayName)}</div>
+            <div class="muted small">${escapeHtml(c.chatId)}</div>
+          </div>
+          <div class="chat-meta">
+            <span class="badge accent">${c.contextCount} msgs</span>
+            ${c.iaEnabled
+              ? '<span class="badge good">IA on</span>'
+              : '<span class="badge bad">IA off</span>'}
+            ${c.muted ? '<span class="badge bad">muted</span>' : ''}
+            ${c.entrosao && c.entrosao !== 1 ? `<span class="badge">entrosão ${c.entrosao}</span>` : ''}
+            ${lastActive ? `<span class="muted small">${lastActive}</span>` : ''}
+          </div>
+        </div>`;
+      }).join('');
     }
-
-    // ================================================================
-    // CHAT MODAL — context + profile + IA toggle
-    // ================================================================
     async function openChat(chatId) {
       state.currentChatId = chatId;
-      $('#modalTitle').textContent = chatLabel(chatId) + '  [' + chatId + ']';
-      $('#chatModal').classList.add('open');
-      switchTab('context');
-      await Promise.all([loadContext(chatId), loadProfile(chatId), refreshIaToggle(chatId)]);
-    }
-
-    function closeModal() {
-      $('#chatModal').classList.remove('open');
-      state.currentChatId = null;
-    }
-
-    function switchTab(tab) {
-      $$('.modal-tabs button').forEach((b) => {
-        b.classList.toggle('active', b.dataset.tab === tab);
-      });
-      $$('.modal-tab-content').forEach((c) => {
-        c.classList.toggle('active', c.id === 'tab-' + tab);
-      });
-    }
-
-    async function loadContext(chatId) {
-      const box = $('#tab-context');
-      box.innerHTML = '<div class="empty">carregando…</div>';
+      state.activeChatId = chatId;
+      // Busca dados do chat (inclui nome, entrosão, iaEnabled, muted)
+      let entrosao = 1;
+      let iaEnabled = true;
+      let muted = false;
+      let chatName = chatLabel(chatId);
+      let isGroup = chatId.endsWith('@g.us');
       try {
-        const ctx = await apiGet('/api/context/' + encodeURIComponent(chatId));
-        if (!Array.isArray(ctx) || ctx.length === 0) {
-          box.innerHTML = '<div class="empty">sem contexto neste chat.</div>';
+        const chats = await apiGet('/api/chats');
+        const chatData = (chats.items || chats.chats || chats).find(c => c.chatId === chatId);
+        if (chatData) {
+          entrosao = chatData.entrosao ?? 1;
+          iaEnabled = chatData.iaEnabled ?? true;
+          muted = chatData.muted ?? false;
+          if (chatData.name && chatData.name !== chatId) chatName = chatData.name;
+          isGroup = chatData.isGroup ?? isGroup;
+        }
+      } catch { /* usa defaults */ }
+      const groupIcon = isGroup ? '👥' : '💬';
+      openModal(`
+        <div class="modal-header">
+          <div class="modal-title">${groupIcon} ${escapeHtml(chatName)}</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="muted small mb-2">${escapeHtml(chatId)}</div>
+          <div class="row-flex mb-2">
+            <span class="muted small">IA neste chat: <strong>${iaEnabled ? '✅ ON' : '🛑 OFF'}</strong></span>
+            <button class="success sm" onclick="setIa(true)">ON</button>
+            <button class="danger sm" onclick="setIa(false)">OFF</button>
+          </div>
+          <div class="form-row">
+            <label>Entrosão <span class="muted small" id="entrosaoVal">${entrosao}</span> <span class="muted tiny">(0=quieto, 1=normal, 2=2x)</span></label>
+            <div class="slider-row">
+              <input type="range" id="entrosaoSlider" min="0" max="2" step="1" value="${entrosao}"
+                     oninput="document.getElementById('entrosaoVal').textContent=this.value">
+              <button class="ghost sm" onclick="saveEntrosao()">salvar</button>
+            </div>
+          </div>
+          <div class="tabs">
+            <button class="tab active" data-ctab="ctx" onclick="switchChatTab('ctx')">Contexto</button>
+            <button class="tab" data-ctab="profile" onclick="switchChatTab('profile')">Perfil</button>
+          </div>
+          <div id="ctab-ctx"><div class="muted">carregando…</div></div>
+          <div id="ctab-profile" style="display:none;"><div class="muted">carregando…</div></div>
+        </div>
+      `);
+      loadContext(chatId);
+      loadProfile(chatId);
+    }
+    function switchChatTab(tab) {
+      $$('.tab[data-ctab]').forEach(t => t.classList.toggle('active', t.dataset.ctab === tab));
+      $('#ctab-ctx').style.display = tab === 'ctx' ? '' : 'none';
+      $('#ctab-profile').style.display = tab === 'profile' ? '' : 'none';
+    }
+    async function loadContext(chatId) {
+      try {
+        const ctx = await apiGet(`/api/context/${encodeURIComponent(chatId)}`);
+        const el = $('#ctab-ctx');
+        if (!Array.isArray(ctx) || !ctx.length) {
+          el.innerHTML = `<div class="empty-state"><div class="text">sem contexto</div></div>`;
           return;
         }
-        box.innerHTML = ctx.map((m) => {
-          const role = m.role || 'user';
-          const sender = m.sender ? `<span class="sender">— ${escapeHtml(m.sender)}</span>` : '';
-          return `<div class="ctx-msg"><span class="role ${role}">${role}</span>${sender}<div class="content">${escapeHtml(m.content || '')}</div></div>`;
+        el.innerHTML = ctx.map(m => {
+          const role = m.role || (m.fromMe ? 'assistant' : 'user');
+          return `<div class="ctx-msg ${role}">
+            <span class="role">${escapeHtml(role)}</span>
+            ${m.sender ? `<span class="sender">${escapeHtml(m.sender)}</span>` : ''}
+            <span class="content">${escapeHtml(m.content || m.text || '')}</span>
+          </div>`;
         }).join('');
       } catch (e) {
-        box.innerHTML = `<div class="empty">erro: ${escapeHtml(e.message)}</div>`;
+        $('#ctab-ctx').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
       }
     }
-
     async function loadProfile(chatId) {
-      const box = $('#tab-profile');
-      box.innerHTML = '<div class="empty">carregando…</div>';
       try {
-        const p = await apiGet('/api/profile/' + encodeURIComponent(chatId));
-        box.innerHTML = renderProfile(p);
+        const p = await apiGet(`/api/profile/${encodeURIComponent(chatId)}`);
+        const el = $('#ctab-profile');
+        if (!p) { el.innerHTML = `<div class="empty-state"><div class="text">sem perfil</div></div>`; return; }
+        const style = p.style || {};
+        const sm = style.totalMessages || 0;
+        const metrics = [
+          { k: 'Total msgs',    v: sm },
+          { k: 'Tam. médio',    v: sm ? (style.totalLength / sm).toFixed(1) : '—' },
+          { k: '% minúsculas',  v: sm ? ((style.lowercaseMessages / sm) * 100).toFixed(0) + '%' : '—' },
+          { k: '% pontuação',   v: sm ? ((style.punctuatedMessages / sm) * 100).toFixed(0) + '%' : '—' },
+          { k: '% emoji',       v: sm ? ((style.emojiMessages / sm) * 100).toFixed(0) + '%' : '—' },
+          { k: '% caps',        v: sm ? ((style.capsMessages / sm) * 100).toFixed(0) + '%' : '—' },
+          { k: 'First seen',    v: p.firstSeen ? formatDate(p.firstSeen) : '—' },
+          { k: 'Last update',   v: p.lastUpdated ? formatDate(p.lastUpdated) : '—' },
+        ];
+        const vocabEntries = Object.entries(p.vocabulary || {}).sort((a,b) => b[1]-a[1]).slice(0, 10);
+        const activityEntries = Object.entries(p.userActivity || {}).sort((a,b) => b[1]-a[1]).slice(0, 5);
+        el.innerHTML = `
+          <div class="profile-metrics">
+            ${metrics.map(m => `<div class="profile-metric"><div class="k">${m.k}</div><div class="v">${escapeHtml(String(m.v))}</div></div>`).join('')}
+          </div>
+          ${vocabEntries.length ? `<div class="mb-2"><strong>Gírias:</strong> ${vocabEntries.map(([w,c]) => `<span class="pill">${escapeHtml(w)} <span class="muted">×${c}</span></span>`).join('')}</div>` : ''}
+          ${activityEntries.length ? `<div class="mb-2"><strong>Mais ativos:</strong> ${activityEntries.map(([n,c]) => `<span class="pill">${escapeHtml(n)} <span class="muted">×${c}</span></span>`).join('')}</div>` : ''}
+        `;
       } catch (e) {
-        box.innerHTML = `<div class="empty">erro: ${escapeHtml(e.message)}</div>`;
+        $('#ctab-profile').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
       }
     }
-
-    function renderProfile(p) {
-      if (!p) return '<div class="empty">sem perfil.</div>';
-      const style = p.style || {};
-      const total = style.totalMessages || 0;
-      const avgLen = total > 0 ? Math.round((style.totalLength || 0) / total) : 0;
-      const lowerPct = total > 0 ? Math.round(100 * (style.lowercaseMessages || 0) / total) : 0;
-      const punctPct = total > 0 ? Math.round(100 * (style.punctuatedMessages || 0) / total) : 0;
-      const emojiPct = total > 0 ? Math.round(100 * (style.emojiMessages || 0) / total) : 0;
-      const capsPct = total > 0 ? Math.round(100 * (style.capsMessages || 0) / total) : 0;
-
-      const vocab = Object.entries(p.vocabulary || {})
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([w, c]) => `${escapeHtml(w)} (${c})`)
-        .join(', ') || '<span class="empty">—</span>';
-
-      const activity = Object.entries(p.userActivity || {})
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([u, c]) => `${escapeHtml(u)} (${c})`)
-        .join(', ') || '<span class="empty">—</span>';
-
-      return `
-        <div class="stats-grid" style="margin-bottom:10px;">
-          <span class="k">Total msgs</span><span class="v">${total}</span>
-          <span class="k">Tam. médio</span><span class="v">${avgLen}</span>
-          <span class="k">% minúsculas</span><span class="v">${lowerPct}%</span>
-          <span class="k">% pontuadas</span><span class="v">${punctPct}%</span>
-          <span class="k">% com emoji</span><span class="v">${emojiPct}%</span>
-          <span class="k">% CAPS</span><span class="v">${capsPct}%</span>
-          <span class="k">Primeira msg</span><span class="v" style="font-size:11px;">${escapeHtml(p.firstSeen || '—')}</span>
-          <span class="k">Última atualização</span><span class="v" style="font-size:11px;">${escapeHtml(p.lastUpdated || '—')}</span>
-        </div>
-        <div style="margin-bottom:8px;"><strong style="color:#56d4dd;">Gírias (top 10):</strong> ${vocab}</div>
-        <div><strong style="color:#56d4dd;">Ativos (top 5):</strong> ${activity}</div>
-      `;
-    }
-
-    async function refreshIaToggle(chatId) {
-      const chat = state.chats.find((c) => c.chatId === chatId);
-      const enabled = chat ? chat.iaEnabled : true;
-      const onBtn = $('#iaOnBtn');
-      const offBtn = $('#iaOffBtn');
-      onBtn.classList.toggle('on', enabled);
-      offBtn.classList.toggle('off', !enabled);
-      onBtn.classList.toggle('off', false);
-      offBtn.classList.toggle('on', false);
-    }
-
     async function setIa(enabled) {
       if (!state.currentChatId) return;
       try {
-        await apiPost('/api/ia/' + encodeURIComponent(state.currentChatId), { enabled });
-        appendLogLine('PANEL', `IA ${enabled ? 'ON' : 'OFF'} → ${state.currentChatId}`, { cls: 'cmd' });
-        // Atualiza state local + UI
-        const chat = state.chats.find((c) => c.chatId === state.currentChatId);
-        if (chat) chat.iaEnabled = enabled;
-        refreshIaToggle(state.currentChatId);
+        await apiPost(`/api/ia/${encodeURIComponent(state.currentChatId)}`, { enabled });
+        toast(`IA ${enabled ? 'ligada' : 'desligada'} ✓`, 'success');
+        loadChats();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+    async function saveEntrosao() {
+      const lvl = parseInt($('#entrosaoSlider').value, 10);
+      const chatId = state.activeChatId;
+      if (!chatId) { toast('Nenhum chat selecionado', 'warn'); return; }
+      try {
+        await apiPost(`/api/chat-settings/${encodeURIComponent(chatId)}`, { entrosao: lvl });
+        toast(`Entrosão definida como ${lvl} ${lvl === 0 ? '(quieto)' : lvl === 1 ? '(normal)' : '(2x)'}`, 'success');
+      } catch (e) { toast('Erro ao salvar entrosão: ' + e.message, 'error', 5000); }
+    }
+
+    // ================================================================
+    // EVENTS
+    // ================================================================
+    async function loadEvents() {
+      try {
+        const r = await apiGet('/api/events');
+        const events = Array.isArray(r) ? r : (r.events || []);
+        const list = $('#eventsList');
+        if (!events.length) {
+          list.innerHTML = `<div class="empty-state"><div class="icon">📅</div><div class="text">nenhum evento agendado</div></div>`;
+          return;
+        }
+        // sort by fireAt
+        events.sort((a, b) => new Date(a.fireAt || a.fire_at) - new Date(b.fireAt || b.fire_at));
+        list.innerHTML = events.map((e) => `
+          <div class="fact-card">
+            <div class="fact-text">${escapeHtml(e.text || e.message || '(sem texto)')}</div>
+            <div class="fact-meta">
+              <span>🕒 ${escapeHtml(formatDate(e.fireAt || e.fire_at))}</span>
+              ${e.chatId ? `<span>📍 ${escapeHtml(chatLabel(e.chatId))}</span>` : ''}
+            </div>
+            <div class="fact-actions">
+              <button class="danger sm" onclick="cancelEvent('${escapeHtml(e.id)}')">✕ Cancelar</button>
+            </div>
+          </div>
+        `).join('');
       } catch (e) {
-        appendLogLine('IA-ERR', e.message, { cls: 'error' });
+        $('#eventsList').innerHTML = `<div class="empty-state"><div class="icon">📅</div><div class="text">❌ ${escapeHtml(e.message)}<br><span class="muted">endpoint /api/events ainda não existe</span></div></div>`;
       }
     }
+    async function cancelEvent(id) {
+      if (!confirm('Cancelar este evento?')) return;
+      try {
+        await apiDelete(`/api/events/${encodeURIComponent(id)}`);
+        toast('Evento cancelado ✓', 'success');
+        loadEvents();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+
+    // ================================================================
+    // TWITTER
+    // ================================================================
+    async function loadTwitter() {
+      try {
+        const r = await apiGet('/api/twitter/status');
+        const el = $('#twitterStatus');
+        const enabled = r.enabled;
+        state.twitterEnabled = !!enabled;
+        const pending = Array.isArray(r.pendingTweets) ? r.pendingTweets : [];
+        const pendingCount = r.pendingCount ?? (typeof r.pendingTweets === 'number' ? r.pendingTweets : pending.length);
+        el.innerHTML = `
+          <div class="stats-grid mb-2">
+            <div class="stat-card"><div class="stat-label">Ativo</div><div class="stat-value small">${enabled ? '<span class="badge good">on</span>' : '<span class="badge bad">off</span>'}</div></div>
+            <div class="stat-card"><div class="stat-label">Approval mode</div><div class="stat-value small">${escapeHtml(r.approvalMode || '—')}</div></div>
+            <div class="stat-card"><div class="stat-label">Pendentes</div><div class="stat-value small">${pendingCount}</div></div>
+          </div>
+          <div class="row-flex">
+            <button class="${enabled ? 'danger' : 'success'}" onclick="toggleTwitter()">${enabled ? '⏸ Desligar' : '▶ Ligar'}</button>
+            <button class="primary" onclick="generateTweetPanel()">📤 Gerar tweet</button>
+          </div>
+          ${pending.length ? `<div class="mt-2"><strong>Pendentes:</strong>${pending.map(t => `<div class="fact-card"><div class="fact-text">${escapeHtml(t.text || t.content || JSON.stringify(t))}</div></div>`).join('')}</div>` : ''}
+        `;
+      } catch (e) {
+        $('#twitterStatus').innerHTML = `<div class="empty-state"><div class="icon">🐦</div><div class="text">❌ ${escapeHtml(e.message)}<br><span class="muted">endpoint /api/twitter/status ainda não existe</span></div></div>`;
+      }
+    }
+    async function toggleTwitter() {
+      const nextEnabled = !state.twitterEnabled;
+      try { await apiPost('/api/twitter/toggle', { enabled: nextEnabled }); toast(`Twitter ${nextEnabled ? 'ativado' : 'desativado'} ✓`, 'success'); loadTwitter(); }
+      catch (e) { toast(e.message, 'error', 5000); }
+    }
+
+    async function generateTweetPanel() {
+      toast('Gerando tweet… ⏳', 'info', 10000);
+      try {
+        const r = await apiPost('/api/twitter/generate', {});
+        if (!r.ok) {
+          toast(r.error || 'Não consegui gerar tweet', 'error', 5000);
+          return;
+        }
+        // Mostra o tweet num modal pra confirmar
+        openModal(`
+          <div class="modal-header">
+            <div class="modal-title">🐦 Tweet gerado</div>
+            <button class="modal-close" onclick="closeModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="fact-card" style="padding:16px;font-size:15px;line-height:1.5;">
+              ${escapeHtml(r.tweet)}
+            </div>
+            ${r.hasImage ? '<div class="muted small mt-2">🖼️ Tweet inclui imagem</div>' : ''}
+            <div class="row-flex mt-3">
+              <button class="primary" onclick="confirmTweetPost(${JSON.stringify(r.tweet).replace(/"/g, '&quot;')})">📤 Postar</button>
+              <button class="ghost" onclick="generateTweetPanel()">🔄 Gerar outro</button>
+              <button class="danger" onclick="closeModal()">Cancelar</button>
+            </div>
+          </div>
+        `);
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+
+    async function confirmTweetPost(text) {
+      try {
+        const r = await apiPost('/api/twitter/post-direct', { text });
+        if (r.ok) {
+          toast('✅ Tweet postado!', 'success');
+          closeModal();
+          loadTwitter();
+        } else {
+          toast('❌ Erro ao postar: ' + (r.result || 'desconhecido'), 'error', 5000);
+        }
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+
+    // ================================================================
+    // OPS & BANNED
+    // ================================================================
+    function switchOpsTab(tab) {
+      state.opsTab = tab;
+      $$('.tab[data-ops-tab]').forEach(t => t.classList.toggle('active', t.dataset.opsTab === tab));
+      renderOps();
+    }
+    async function loadOps() {
+      try {
+        const [ops, banned] = await Promise.all([
+          apiGet('/api/ops').catch(() => []),
+          apiGet('/api/banned').catch(() => []),
+        ]);
+        state.opsData = {
+          ops: Array.isArray(ops) ? ops : (ops.items || []),
+          banned: Array.isArray(banned) ? banned : (banned.items || []),
+        };
+        renderOps();
+      } catch (e) {
+        $('#opsTabContent').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}<br><span class="muted">endpoints /api/ops e /api/banned ainda não existem</span></div></div>`;
+      }
+    }
+    function renderOps() {
+      const el = $('#opsTabContent');
+      const tab = state.opsTab;
+      const items = state.opsData[tab] || [];
+      const kind = tab === 'ops' ? 'Op' : 'Banido';
+      const icon = tab === 'ops' ? '👑' : '🚫';
+      el.innerHTML = `
+        <div class="form-row">
+          <div class="row-flex">
+            <input type="text" id="opsNewId" placeholder="número @c.us ou lid" onkeydown="if(event.key==='Enter'){addOpsItem();event.preventDefault();}">
+            <button class="primary" onclick="addOpsItem()">+ Adicionar ${kind}</button>
+          </div>
+        </div>
+        ${items.length === 0
+          ? `<div class="empty-state"><div class="icon">${icon}</div><div class="text">nenhum ${kind.toLowerCase()}</div></div>`
+          : items.map(it => {
+              const id = it.id || it.lid || it.phone || it.number || JSON.stringify(it);
+              const addedAt = it.addedAt || it.added_at || it.ts;
+              return `<div class="fact-card">
+                <div class="row-between">
+                  <div>
+                    <div class="fact-text mono">${escapeHtml(id)}</div>
+                    ${addedAt ? `<div class="fact-meta"><span>🕒 ${escapeHtml(formatDate(addedAt))}</span></div>` : ''}
+                  </div>
+                  <button class="danger sm" onclick="removeOpsItem('${escapeHtml(id)}')">🗑 Remover</button>
+                </div>
+              </div>`;
+            }).join('')}
+      `;
+    }
+    async function addOpsItem() {
+      const id = $('#opsNewId').value.trim();
+      if (!id) return;
+      const path = state.opsTab === 'ops' ? '/api/ops' : '/api/banned';
+      try {
+        await apiPost(path, { id });
+        toast('Adicionado ✓', 'success');
+        await loadOps();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+    async function removeOpsItem(id) {
+      const path = state.opsTab === 'ops' ? '/api/ops' : '/api/banned';
+      try {
+        await apiDelete(`${path}/${encodeURIComponent(id)}`);
+        toast('Removido ✓', 'success');
+        await loadOps();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+
+    // ================================================================
+    // PROMPT
+    // ================================================================
+    let originalPrompt = '';
+    async function loadPrompt() {
+      try {
+        const r = await apiGet('/api/system-prompt');
+        $('#promptText').value = r.content || '';
+        if (!originalPrompt) originalPrompt = r.content || '';
+        $('#promptStatus').textContent = 'carregado ✓';
+      } catch (e) {
+        $('#promptStatus').textContent = '❌ ' + e.message;
+      }
+    }
+    async function savePrompt() {
+      const content = $('#promptText').value;
+      try {
+        await apiPost('/api/system-prompt', { content });
+        $('#promptStatus').textContent = '✅ salvo — hot-reload em até 5s.';
+        toast('Prompt salvo ✓', 'success');
+      } catch (e) {
+        $('#promptStatus').textContent = '❌ ' + e.message;
+        toast(e.message, 'error', 5000);
+      }
+    }
+    function resetPrompt() {
+      if (!confirm('Resetar para o prompt padrão? (vai limpar o textarea — salve depois)')) return;
+      $('#promptText').value = '';
+      $('#promptStatus').textContent = 'textarea limpo — ajuste e salve.';
+    }
+
+    // ================================================================
+    // AI CONFIG
+    // ================================================================
+    async function loadAiConfig() {
+      try {
+        const r = await apiGet('/api/ai-config');
+        state.aiConfig = r;
+        state.aiFallbacks = r.fallbackModels || [];
+        $('#aiModel').value = r.model || '';
+        $('#aiApiUrl').value = r.apiUrl || r.apiURL || '';
+        $('#aiApiKey').value = r.apiKey || '';
+        $('#aiMaxTokens').value = r.maxTokens || r.max_tokens || '';
+        const temp = r.temperature != null ? r.temperature : 1;
+        $('#aiTemperature').value = temp;
+        $('#aiTempVal').textContent = temp;
+        $('#aiTempVal2').textContent = temp;
+        renderFallbacks();
+        $('#aiConfigStatus').textContent = 'config carregada ✓';
+      } catch (e) {
+        $('#aiConfigStatus').textContent = '❌ ' + e.message + ' — endpoint /api/ai-config ainda não existe';
+      }
+    }
+    function renderFallbacks() {
+      $('#aiFallbacks').innerHTML = state.aiFallbacks.map((m, i) =>
+        `<span class="pill">${escapeHtml(m)}<span class="x" onclick="removeFallback(${i})">✕</span></span>`
+      ).join('') || '<span class="muted small">nenhum fallback</span>';
+    }
+    function addFallback() {
+      const v = $('#aiNewFallback').value.trim();
+      if (!v) return;
+      if (state.aiFallbacks.includes(v)) { toast('já existe', 'warn'); return; }
+      state.aiFallbacks.push(v);
+      $('#aiNewFallback').value = '';
+      renderFallbacks();
+    }
+    function removeFallback(idx) {
+      state.aiFallbacks.splice(idx, 1);
+      renderFallbacks();
+    }
+    async function saveAiConfig() {
+      const cfg = {
+        model: $('#aiModel').value.trim(),
+        fallbackModels: state.aiFallbacks,
+        apiUrl: $('#aiApiUrl').value.trim(),
+        apiKey: $('#aiApiKey').value,
+        maxTokens: parseInt($('#aiMaxTokens').value, 10) || undefined,
+        temperature: parseFloat($('#aiTemperature').value),
+      };
+      try {
+        await apiPost('/api/ai-config', cfg);
+        $('#aiConfigStatus').textContent = '✅ salvo';
+        toast('Config IA salva ✓', 'success');
+      } catch (e) {
+        $('#aiConfigStatus').textContent = '❌ ' + e.message;
+        toast(e.message, 'error', 5000);
+      }
+    }
+    async function testAi() {
+      try {
+        toast('Testando conexão IA…', 'info');
+        const r = await apiPost('/api/ia/test', {});
+        if (r.ok || r.success) toast('IA respondeu ✓ — ' + (r.response || r.result || 'ok'), 'success', 5000);
+        else toast('IA falhou: ' + (r.error || 'sem resposta'), 'error', 5000);
+      } catch (e) {
+        toast('Teste falhou: ' + e.message, 'error', 5000);
+      }
+    }
+
+    // ================================================================
+    // DIRECTIVES
+    // ================================================================
+    async function loadDirectives() {
+      try {
+        const r = await apiGet('/api/directives');
+        const items = Array.isArray(r) ? r : (r.directives || []);
+        const list = $('#directivesList');
+        if (!items.length) {
+          list.innerHTML = `<div class="empty-state"><div class="icon">📜</div><div class="text">nenhuma diretiva</div></div>`;
+          return;
+        }
+        list.innerHTML = items.map(d => {
+          const id = d.id || d._id || d.text;
+          const text = d.text || d.content || String(d);
+          return `<div class="fact-card">
+            <div class="row-between">
+              <div class="fact-text">${escapeHtml(text)}</div>
+              <button class="danger sm" onclick="deleteDirective('${escapeHtml(id)}')">🗑</button>
+            </div>
+          </div>`;
+        }).join('');
+      } catch (e) {
+        $('#directivesList').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
+      }
+    }
+    async function addDirective() {
+      const text = $('#newDirective').value.trim();
+      if (!text) return;
+      try {
+        await apiPost('/api/directives', { text });
+        $('#newDirective').value = '';
+        toast('Diretiva adicionada ✓', 'success');
+        await loadDirectives();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+    async function deleteDirective(id) {
+      if (!confirm('Deletar diretiva?')) return;
+      try {
+        await apiDelete(`/api/directives/${encodeURIComponent(id)}`);
+        toast('Deletada ✓', 'success');
+        await loadDirectives();
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+
+    // ================================================================
+    // BACKUP
+    // ================================================================
+    async function downloadBackup() {
+      try {
+        toast('Gerando backup…', 'info');
+        const r = await fetch('/api/backup');
+        if (!r.ok) throw new Error(`backup falhou: ${r.status}`);
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `marcio-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('Backup ✓', 'success');
+      } catch (e) {
+        toast('Backup falhou: ' + e.message + ' — endpoint /api/backup ainda não existe', 'error', 6000);
+      }
+    }
+    async function uploadRestore(ev) {
+      const file = ev.target.files[0];
+      if (!file) return;
+      if (!confirm(`Restaurar de ${file.name}? Isso vai sobrescrever os dados atuais.`)) {
+        ev.target.value = '';
+        return;
+      }
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        const r = await fetch('/api/restore', { method: 'POST', body: form });
+        if (!r.ok) throw new Error(`restore falhou: ${r.status}`);
+        toast('Restore ✓ — reinicie o bot para aplicar', 'success', 6000);
+      } catch (e) {
+        toast('Restore falhou: ' + e.message + ' — endpoint /api/restore ainda não existe', 'error', 6000);
+      }
+      ev.target.value = '';
+    }
+    async function exportMemories() {
+      try {
+        const r = await fetch('/api/memories/export');
+        if (!r.ok) throw new Error(`export falhou: ${r.status}`);
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `marcio-memories-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('Memórias exportadas ✓', 'success');
+      } catch (e) {
+        toast('Export falhou: ' + e.message + ' — endpoint /api/memories/export ainda não existe', 'error', 6000);
+      }
+    }
+
+    // ================================================================
+    // MANUTENÇÃO + AUTOSTART + NOTIFICAÇÕES
+    // ================================================================
+    async function loadMaintenance() {
+      try {
+        const r = await apiGet('/api/maintenance');
+        updateMaintenanceUI(!!r.enabled);
+      } catch { /* ignora */ }
+    }
+    function updateMaintenanceUI(enabled) {
+      $('#maintOnBtn').style.display = enabled ? 'none' : '';
+      $('#maintOffBtn').style.display = enabled ? '' : 'none';
+      $('#maintStatus').textContent = enabled ? '⏸ Bot pausado (não responde msgs)' : 'Bot ativo';
+    }
+    async function toggleMaintenance(enabled) {
+      try {
+        await apiPost('/api/maintenance', { enabled });
+        updateMaintenanceUI(enabled);
+        toast(enabled ? 'Bot pausado ⏸' : 'Bot retomado ▶', 'success');
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
+
+    async function toggleAutostart() {
+      // Auto-start é gerenciado pelo Tauri. Se tiver __TAURI__, usa o invoke.
+      if (window.__TAURI__) {
+        try {
+          const { invoke } = window.__TAURI__.core;
+          const current = await invoke('is_autostart_enabled');
+          const next = !current;
+          const ok = await invoke('toggle_autostart', { enabled: next });
+          toast(`Auto-start ${next ? 'ativado' : 'desativado'} ${ok ? '✓' : '❌'}`, ok ? 'success' : 'error');
+          $('#autostartStatus').textContent = `Status: ${next ? 'ativado' : 'desativado'}`;
+        } catch (e) { toast('Erro: ' + e, 'error', 5000); }
+      } else {
+        toast('Auto-start só funciona no app desktop (Tauri)', 'warn');
+      }
+    }
+
+    async function loadAutostartStatus() {
+      if (window.__TAURI__) {
+        try {
+          const { invoke } = window.__TAURI__.core;
+          const enabled = await invoke('is_autostart_enabled');
+          $('#autostartStatus').textContent = `Status: ${enabled ? 'ativado' : 'desativado'}`;
+        } catch { /* ignora */ }
+      } else {
+        $('#autostartStatus').textContent = 'Status: só no app desktop';
+      }
+    }
+
+    async function testNotification() {
+      if (window.__TAURI__) {
+        try {
+          const { invoke } = window.__TAURI__.core;
+          await invoke('notify', { title: '🤖 Márcio App', body: 'Notificação funcionando! ✅' });
+          toast('Notificação enviada ✓', 'success');
+        } catch (e) { toast('Erro: ' + e, 'error', 5000); }
+      } else {
+        // No navegador, usa a Notification API do browser
+        if ('Notification' in window) {
+          Notification.requestPermission().then(p => {
+            if (p === 'granted') {
+              new Notification('🤖 Márcio App', { body: 'Notificação funcionando! ✅' });
+              toast('Notificação enviada ✓', 'success');
+            } else {
+              toast('Permissão negada', 'warn');
+            }
+          });
+        } else {
+          toast('Notificações não suportadas neste navegador', 'warn');
+        }
+      }
+    }
+
+    // ================================================================
+    // MODAL
+    // ================================================================
+    function openModal(html) {
+      $('#modalContent').innerHTML = html;
+      $('#modalOverlay').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      $('#modalOverlay').classList.remove('show');
+      document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
 
     // ================================================================
     // INIT
     // ================================================================
     function init() {
-      // Debug buttons
-      $$('#debugBtns button').forEach((b) => {
-        b.addEventListener('click', () => setDebug(b.dataset.mode));
-      });
-
-      // Console input
-      const input = $('#consoleInput');
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); sendCommand(); }
-      });
-
-      // Modal close on overlay click
-      $('#chatModal').addEventListener('click', (e) => {
-        if (e.target.id === 'chatModal') closeModal();
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeModal();
-      });
-
       // Initial loads
       loadStats();
-      loadChats();
-      loadMemories();
-
-      // Polling stats a cada 10s (backup pra WS snapshot — o dashboard
-      // precisa funcionar mesmo se o WS cair)
+      // Start polling stats every 10s (backup)
       state.statsInterval = setInterval(loadStats, 10000);
-
-      // Conecta WS
+      // Start bot status polling every 30s (when on bot section)
+      state.botStatusInterval = setInterval(() => {
+        if (state.currentSection === 'bot') loadBotStatus();
+      }, 30000);
+      // Connect WebSocket
       connectWs();
-
-      appendLogLine('SYSTEM', 'Painel inicializado — conectando…', { cls: 'system' });
+      // Load logs as fallback (in case WS takes a moment to connect)
+      loadLogsFallback();
+      // Keyboard shortcuts
+      document.addEventListener('keydown', handleKeyboard);
+      // Show dashboard
+      showSection('dashboard');
     }
 
-    // ================================================================
-    // EXPOSE — onclick handlers
-    // ================================================================
-    window.loadStats = loadStats;
-    window.loadChats = loadChats;
-    window.loadMemories = loadMemories;
-    window.togglePromptEditor = togglePromptEditor;
-    window.savePrompt = savePrompt;
-    window.setDebug = setDebug;
-    window.sendCommand = sendCommand;
-    window.clearLog = clearLog;
-    window.openChat = openChat;
-    window.closeModal = closeModal;
-    window.switchTab = switchTab;
-    window.setIa = setIa;
+    // === Logs fallback — busca as últimas 100 linhas via HTTP ===
+    async function loadLogsFallback() {
+      try {
+        const r = await apiGet('/api/logs');
+        if (r.lines && r.lines.length > 0 && state.logLines.length === 0) {
+          // Só carrega se o WS ainda não mandou nada (evita duplicar)
+          r.lines.forEach(line => {
+            // Parse: [time] [TAG] message
+            const match = line.match(/\[([^\]]+)\] \[([^\]]+)\] (.+)/);
+            if (match) {
+              const time = match[1].split(' ')[1] || match[1];
+              const tag = match[2];
+              const message = match[3];
+              state.logLines.push({ tag, message, time, cls: classifyLogTag(tag) });
+            }
+          });
+          renderLogLines();
+        }
+      } catch { /* ignora */ }
+    }
 
-    // Boot
-    document.addEventListener('DOMContentLoaded', init);
+    // === Keyboard shortcuts ===
+    function handleKeyboard(e) {
+      // Ctrl+Enter: envia comando do console
+      if (e.ctrlKey && e.key === 'Enter') {
+        const input = $('#consoleInput');
+        if (input && document.activeElement === input) {
+          e.preventDefault();
+          sendCommand();
+        }
+        return;
+      }
+      // Ctrl+L: limpa log
+      if (e.ctrlKey && e.key === 'l') {
+        e.preventDefault();
+        clearLog();
+        return;
+      }
+      // Ctrl+K: foca no console
+      if (e.ctrlKey && e.key === 'k') {
+        e.preventDefault();
+        showSection('console');
+        setTimeout(() => $('#consoleInput')?.focus(), 100);
+        return;
+      }
+      // Escape: fecha modal
+      if (e.key === 'Escape') {
+        const modal = $('#modal');
+        if (modal && modal.style.display !== 'none') {
+          closeModal();
+        }
+        return;
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+
+    // Expose to window for inline onclick handlers
+    Object.assign(window, {
+      showSection, toggleSidebar, loadStats, quickAction, loadChartHistory,
+      clearLog, toggleAutoScroll, renderLogLines,
+      sendCommand, quickCmd, handleConsoleKey,
+      loadBotStatus, botAction, loadQr,
+      loadMemories, selectMemoryUser, openAddFactModal, submitAddFact,
+      editFact, submitEditFact, deleteFact,
+      loadStickers, openStickerModal, saveStickerName, toggleStickerFav, deleteSticker, dedupStickers,
+      loadChats, openChat, switchChatTab, setIa, saveEntrosao,
+      loadEvents, cancelEvent,
+      loadTwitter, toggleTwitter, generateTweetPanel, confirmTweetPost,
+      switchOpsTab, loadOps, addOpsItem, removeOpsItem,
+      loadPrompt, savePrompt, resetPrompt,
+      loadAiConfig, addFallback, removeFallback, saveAiConfig, testAi,
+      loadDirectives, addDirective, deleteDirective,
+      downloadBackup, uploadRestore, exportMemories,
+      loadMaintenance, toggleMaintenance, toggleAutostart, loadAutostartStatus, testNotification,
+      closeModal,
+    });
   </script>
 </body>
 </html>

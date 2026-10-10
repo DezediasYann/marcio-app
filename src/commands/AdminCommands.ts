@@ -201,13 +201,13 @@ export class AdminCommands implements CommandModule {
     // 2. Local: SÓ no PV do bot (nunca em grupo). Checagem dupla: pelo chatId e
     //    pela propriedade isGroup do Chat, pra cobrir edge cases de chat misto.
     if (chatId.endsWith('@g.us')) {
-      await this.app.reportError(msg, chatId, 'use este comando no *PV do bot* (não em grupo). 🚫');
+      await this.app.reportError(msg, chatId, 'use no *PV do bot* 🚫');
       return;
     }
     try {
       const chat = await msg.getChat();
       if (chat && chat.isGroup) {
-        await this.app.reportError(msg, chatId, 'use este comando no *PV do bot* (não em grupo). 🚫');
+        await this.app.reportError(msg, chatId, 'use no *PV do bot* 🚫');
         return;
       }
     } catch (e) {
@@ -276,11 +276,11 @@ export class AdminCommands implements CommandModule {
           await this.adminDesligar(msg, chatId, args);
           break;
         default:
-          await this.app.reportError(msg, chatId, `subcomando desconhecido: *${sub}*. Use */admin ajuda* pra ver a lista.`);
+          await this.app.reportError(msg, chatId, `subcomando desconhecido: *${sub}*. Use */admin ajuda*.`);
       }
     } catch (e) {
       this.app.debug('ADMIN', `erro em subcomando "${sub}": ${(e as Error).message}`);
-      await this.app.reportError(msg, chatId, `erro ao executar /admin ${sub}: ${(e as Error).message}`, e as Error);
+      await this.app.reportError(msg, chatId, `erro /admin ${sub}: ${(e as Error).message}`, e as Error);
     }
   }
 
@@ -300,25 +300,17 @@ export class AdminCommands implements CommandModule {
       this.app.debug('ADMIN', `erro ao listar grupos pra status: ${(e as Error).message}`);
     }
 
-    const lines = [
-      '*🎛️ Painel Admin — Status*',
-      '',
-      `IA global: ${iaGlobal}`,
-      `Chats com IA desativada: ${this.app.brain.aiDisabledChats.size}`,
-      `Requests de IA hoje: ${this.app.brain.aiRequestCount}`,
-      `Debug: ${this.app.debugEnabled ? 'on' : 'off'}${this.app.debugFullEnabled ? ' (full)' : ''}`,
-      `Twitter: ${twitterOn ? 'on' : 'off'}`,
+    const lines: string[] = [
+      `IA: ${iaGlobal} | off: ${this.app.brain.aiDisabledChats.size} | reqs: ${this.app.brain.aiRequestCount}`,
+      `Debug: ${this.app.debugEnabled ? 'on' : 'off'}${this.app.debugFullEnabled ? ' (full)' : ''} | Twitter: ${twitterOn ? 'on' : 'off'}`,
     ];
 
     if (recentGroups.length > 0) {
-      lines.push('', '_Últimos 3 grupos ativos:_');
+      lines.push('');
       recentGroups.forEach((g, i) => {
-        lines.push(`${i + 1}. ${g.name}`);
-        lines.push(`   ${g.id} — IA: ${g.aiOn ? '✅' : '🛑'} | Entrosão: ${g.entrosao.toFixed(1)} | ${this.humanizeAge(g.lastMs)}`);
+        lines.push(`${i + 1}. ${g.name} — IA: ${g.aiOn ? '✅' : '🛑'} | entro: ${g.entrosao.toFixed(1)} | ${this.humanizeAge(g.lastMs)}`);
       });
     }
-
-    lines.push('', '_Use */admin ajuda* pra ver todos os subcomandos._');
 
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
@@ -331,20 +323,16 @@ export class AdminCommands implements CommandModule {
   private async adminGroups(msg: Message, chatId: string, limit: number): Promise<void> {
     const groups = await this.listBotGroups(limit);
     if (groups.length === 0) {
-      await this.app.notify(chatId, 'nenhum grupo encontrado. 📋');
+      await this.app.notify(chatId, 'nenhum grupo 📋');
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
-    const lines = [`*Grupos que estou (${groups.length}${groups.length >= limit ? '+' : ''}):*`, ''];
+    const lines: string[] = [`*${groups.length}${groups.length >= limit ? '+' : ''} grupos:*`, ''];
     groups.forEach((g, i) => {
-      lines.push(`${i + 1}. ${g.name}`);
-      lines.push(`   ID: ${g.id}`);
-      const membersStr = g.members > 0 ? ` | Membros: ${g.members}` : '';
-      lines.push(`   IA: ${g.aiOn ? '✅' : '🛑'} | Entrosão: ${g.entrosao.toFixed(1)}${membersStr} | Última msg: ${this.humanizeAge(g.lastMs)}`);
+      const membersStr = g.members > 0 ? ` | ${g.members} membros` : '';
+      lines.push(`${i + 1}. ${g.name} — IA: ${g.aiOn ? '✅' : '🛑'} | entro: ${g.entrosao.toFixed(1)}${membersStr} | ${this.humanizeAge(g.lastMs)}`);
+      lines.push(`   ${g.id}`);
     });
-    if (groups.length >= limit) {
-      lines.push('', `_(mostrando os ${limit} mais ativos — use /admin chats pra ver PVs também)_`);
-    }
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
   }
@@ -378,20 +366,17 @@ export class AdminCommands implements CommandModule {
     const top = items.slice(0, limit);
 
     if (top.length === 0) {
-      await this.app.notify(chatId, 'nenhum chat encontrado. 📋');
+      await this.app.notify(chatId, 'nenhum chat 📋');
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
 
-    const lines = [`*Chats com atividade recente (${top.length}${top.length >= limit ? '+' : ''}):*`, ''];
+    const lines = [`*${top.length}${top.length >= limit ? '+' : ''} chats:*`, ''];
     top.forEach((c, i) => {
-      const tag = c.isGroup ? '[Grupo]' : '[PV]';
-      lines.push(`${i + 1}. ${tag} ${c.name} (${c.id})`);
-      lines.push(`   IA: ${c.aiOn ? '✅' : '🛑'} | Entrosão: ${c.entrosao.toFixed(1)} | ${this.humanizeAge(c.lastMs)}`);
+      const tag = c.isGroup ? '[G]' : '[PV]';
+      lines.push(`${i + 1}. ${tag} ${c.name} — IA: ${c.aiOn ? '✅' : '🛑'} | entro: ${c.entrosao.toFixed(1)} | ${this.humanizeAge(c.lastMs)}`);
+      lines.push(`   ${c.id}`);
     });
-    if (top.length >= limit) {
-      lines.push('', `_(mostrando os ${limit} mais ativos)_`);
-    }
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
   }
@@ -405,21 +390,21 @@ export class AdminCommands implements CommandModule {
     const action = (args[1] || '').toLowerCase();
 
     if (!targetId || !this.isValidWhatsAppChatId(targetId)) {
-      await this.app.reportError(msg, chatId, 'use: */admin ia <chatId> <on|off>*.\nEx.: /admin ia 120363xxx@g.us off\n(O chatId precisa terminar em @g.us, @c.us ou @lid.)');
+      await this.app.reportError(msg, chatId, 'use: */admin ia <chatId> <on|off>*');
       return;
     }
 
     if (!action) {
       const global = this.app.aiConfig?.enabled ? '✅' : '🛑';
-      const local = this.app.brain.aiDisabledChats.has(targetId) ? '🛑 desativada' : '✅ ativada';
-      await this.app.notify(chatId, `*Status da IA em ${targetId}:*\n\nGlobal: ${global}\nNeste chat: ${local}`);
+      const local = this.app.brain.aiDisabledChats.has(targetId) ? '🛑' : '✅';
+      await this.app.notify(chatId, `${targetId} — global: ${global} | chat: ${local}`);
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
 
     if (action === 'off') {
       this.app.brain.aiDisabledChats.add(targetId);
-      await this.app.notify(chatId, `IA desativada em ${targetId} 🛑`);
+      await this.app.notify(chatId, `🛑 IA off: ${targetId}`);
       this.app.log('ADMIN', `IA desativada em ${targetId} por op (via /admin ia).`);
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
@@ -427,13 +412,13 @@ export class AdminCommands implements CommandModule {
 
     if (action === 'on') {
       this.app.brain.aiDisabledChats.delete(targetId);
-      await this.app.notify(chatId, `IA reativada em ${targetId} ✅`);
+      await this.app.notify(chatId, `✅ IA on: ${targetId}`);
       this.app.log('ADMIN', `IA reativada em ${targetId} por op (via /admin ia).`);
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
 
-    await this.app.reportError(msg, chatId, `ação inválida: "${action}". Use *on* ou *off* (ex.: /admin ia ${targetId} off).`);
+    await this.app.reportError(msg, chatId, `ação inválida: "${action}". Use *on* ou *off*.`);
   }
 
   // ===========================================================================
@@ -445,27 +430,27 @@ export class AdminCommands implements CommandModule {
     const levelStr = (args[1] || '').trim();
 
     if (!targetId || !this.isValidWhatsAppChatId(targetId)) {
-      await this.app.reportError(msg, chatId, 'use: */admin entrosao <chatId> <nivel>*.\nEx.: /admin entrosao 120363xxx@g.us 1.5\n(O chatId precisa terminar em @g.us, @c.us ou @lid.)');
+      await this.app.reportError(msg, chatId, 'use: */admin entrosao <chatId> <nivel>*');
       return;
     }
 
     if (!levelStr) {
       const level = this.app.brain.chatEntrosaoLevel.get(targetId) ?? 1.0;
       const pct = Math.round(level * 100);
-      await this.app.notify(chatId, `*Entrosão em ${targetId}:*\n\nAtual: *${level.toFixed(2)}* (${pct}%)\n\nUse */admin entrosao ${targetId} <0-2>* pra ajustar.`);
+      await this.app.notify(chatId, `${targetId} — entrosão: *${level.toFixed(2)}* (${pct}%)`);
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
 
     const num = parseFloat(levelStr.replace(',', '.'));
     if (isNaN(num) || num < 0 || num > 2) {
-      await this.app.reportError(msg, chatId, `valor inválido: "${levelStr}". Use um número entre *0* e *2* (ex.: 1.5).`);
+      await this.app.reportError(msg, chatId, `valor inválido: "${levelStr}". Use 0-2.`);
       return;
     }
 
     this.app.brain.chatEntrosaoLevel.set(targetId, num);
     const pct = Math.round(num * 100);
-    await this.app.notify(chatId, `🎚️ entrosão de ${targetId} ajustada pra *${num.toFixed(2)}* (${pct}%).`);
+    await this.app.notify(chatId, `🎚️ ${targetId} — entrosão: *${num.toFixed(2)}* (${pct}%)`);
     this.app.log('ADMIN', `Entrosão de ${targetId} setada pra ${num} por op (via /admin entrosao).`);
     await this.app.react(msg, EMOJI.SUCCESS);
   }
@@ -477,7 +462,7 @@ export class AdminCommands implements CommandModule {
   private async adminInfo(msg: Message, chatId: string, args: string[]): Promise<void> {
     const targetId = (args[0] || '').trim();
     if (!targetId || !this.isValidWhatsAppChatId(targetId)) {
-      await this.app.reportError(msg, chatId, 'use: */admin info <chatId>*.\nEx.: /admin info 120363xxx@g.us');
+      await this.app.reportError(msg, chatId, 'use: */admin info <chatId>*');
       return;
     }
 
@@ -509,12 +494,12 @@ export class AdminCommands implements CommandModule {
     const profile = this.app.profile.get(targetId);
     const s = profile.style;
     const profileLines: string[] = [];
-    profileLines.push(`Mensagens aprendidas: ${s.totalMessages || 0}`);
+    profileLines.push(`msgs: ${s.totalMessages || 0}`);
     if (s.totalMessages > 0) {
       const avgLen = Math.round((s.totalLength || 0) / s.totalMessages);
-      profileLines.push(`Tamanho médio: ${avgLen} chars`);
-      profileLines.push(`Gírias únicas: ${Object.keys(profile.vocabulary || {}).length}`);
-      profileLines.push(`Usuários ativos mapeados: ${Object.keys(profile.userActivity || {}).length}`);
+      profileLines.push(`tam médio: ${avgLen}`);
+      profileLines.push(`gírias: ${Object.keys(profile.vocabulary || {}).length}`);
+      profileLines.push(`ativos: ${Object.keys(profile.userActivity || {}).length}`);
     }
 
     // Banidos
@@ -524,38 +509,25 @@ export class AdminCommands implements CommandModule {
     const lastCtx = ctx.slice(-5);
 
     const lines = [
-      `*📋 Info: ${chatName}*`,
-      '',
-      `Tipo: ${isGroup ? 'Grupo' : 'PV'}`,
-      `ID: ${targetId}`,
+      `*${chatName}* (${isGroup ? 'Grupo' : 'PV'})`,
+      `${targetId}`,
     ];
     if (isGroup && memberCount > 0) lines.push(`Membros: ${memberCount}`);
-    lines.push(`IA global: ${this.app.aiConfig?.enabled ? '✅' : '🛑'}`);
-    lines.push(`IA neste chat: ${aiOn ? '✅' : '🛑'}`);
-    lines.push(`Entrosão: ${entrosao.toFixed(2)}`);
-    lines.push(`Mensagens no contexto: ${ctxCount}`);
-    lines.push(`Banidos (global): ${banned.length}`);
-    lines.push('');
-    lines.push('*Perfil de estilo:*');
-    lines.push(...profileLines.map(l => `  • ${l}`));
+    lines.push(`IA: ${aiOn ? '✅' : '🛑'} | Entro: ${entrosao.toFixed(2)} | Ctx: ${ctxCount} msgs`);
+    lines.push(`Perfil: ${profileLines.join(' | ')}`);
 
     if (lastCtx.length > 0) {
-      lines.push('', '*Últimas msgs no contexto:*');
+      lines.push('', '*Últimas msgs:*');
       lastCtx.forEach((m, i) => {
         const role = m.role === 'assistant' ? '🤖' : '👤';
         const senderTag = m.sender ? `${m.sender}: ` : '';
         const txt = (m.content || '').slice(0, 80);
-        lines.push(`  ${i + 1}. ${role} ${senderTag}${txt}`);
+        lines.push(`${i + 1}. ${role} ${senderTag}${txt}`);
       });
     }
 
     if (isGroup && banned.length > 0) {
-      lines.push('', '*Banidos (global):*');
-      banned.slice(0, 10).forEach((b, i) => {
-        const id = b.phone || b.lid;
-        lines.push(`  ${i + 1}. ${id}`);
-      });
-      if (banned.length > 10) lines.push(`  _...e mais ${banned.length - 10}_`);
+      lines.push('', `*Banidos:* ${banned.slice(0, 10).map((b) => b.phone || b.lid).join(', ')}${banned.length > 10 ? ` (+${banned.length - 10})` : ''}`);
     }
 
     await this.app.notify(chatId, lines.join('\n'));
@@ -571,7 +543,7 @@ export class AdminCommands implements CommandModule {
     if (mode === 'on') {
       this.app.debugEnabled = true;
       this.app.debugFullEnabled = false;
-      await this.app.notify(chatId, 'Debug *on* ✅ (logs normais, sem prompt completo).');
+      await this.app.notify(chatId, '🐛 debug on');
       this.app.log('ADMIN', 'Debug ligado (normal) por op.');
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
@@ -579,7 +551,7 @@ export class AdminCommands implements CommandModule {
     if (mode === 'off') {
       this.app.debugEnabled = false;
       this.app.debugFullEnabled = false;
-      await this.app.notify(chatId, 'Debug *off* 🔇 (sem logs de debug no terminal).');
+      await this.app.notify(chatId, '🔇 debug off');
       this.app.log('ADMIN', 'Debug desligado por op.');
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
@@ -587,12 +559,12 @@ export class AdminCommands implements CommandModule {
     if (mode === 'full') {
       this.app.debugEnabled = true;
       this.app.debugFullEnabled = true;
-      await this.app.notify(chatId, 'Debug *full* 🐛 (logs normais + prompt completo + resposta bruta da IA).');
+      await this.app.notify(chatId, '🐛 debug full (com prompt completo)');
       this.app.log('ADMIN', 'Debug FULL ligado por op.');
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
-    await this.app.reportError(msg, chatId, 'use: */admin debug <on|off|full>*.\n• *on* = logs normais\n• *off* = sem debug\n• *full* = logs + prompt completo da IA');
+    await this.app.reportError(msg, chatId, 'use: */admin debug <on|off|full>*');
   }
 
   // ===========================================================================
@@ -604,14 +576,13 @@ export class AdminCommands implements CommandModule {
     if (args[0]) {
       const parsed = parseInt(args[0], 10);
       if (isNaN(parsed) || parsed < 1) {
-        await this.app.reportError(msg, chatId, `valor inválido: "${args[0]}". Use um número inteiro positivo (ex.: /admin log 30).`);
+        await this.app.reportError(msg, chatId, `valor inválido: "${args[0]}". Use um número positivo.`);
         return;
       }
       n = parsed;
     }
     const text = this.readLastLogLines(n);
-    const header = `*Últimas ${Math.min(n, 50)} linhas do bot.log:*`;
-    await this.app.notify(chatId, `${header}\n\n\`\`\`\n${text}\n\`\`\``);
+    await this.app.notify(chatId, `*bot.log (últimas ${Math.min(n, 50)}):*\n\`\`\`\n${text}\n\`\`\``);
     await this.app.react(msg, EMOJI.SUCCESS);
   }
 
@@ -625,19 +596,11 @@ export class AdminCommands implements CommandModule {
 
     if (sub === 'status' || sub === '' || sub === 'ajuda') {
       const lines = [
-        '*⚙️ Features do bot:*',
+        `Retro: ${this.app.retroactive.enabled ? '✅' : '🛑'} (${this.app.retroactive.intervalMin}/${this.app.retroactive.windowMin}min)`,
+        `Memória: ${this.app.memory.enabled ? '✅' : '🛑'}`,
         '',
-        `• Retroativo: ${this.app.retroactive.enabled ? '✅ ativado' : '🛑 desativado'}`,
-        `  - Intervalo: ${this.app.retroactive.intervalMin}min`,
-        `  - Janela: ${this.app.retroactive.windowMin}min`,
-        '',
-        `• Memória permanente: ${this.app.memory.enabled ? '✅ ativada' : '🛑 desativada'}`,
-        '',
-        '_Comandos:_',
-        '• */admin features retro <on|off>* — liga/desliga retroativo',
-        '• */admin features retro interval <min>* — muda intervalo (ex: 5, 15)',
-        '• */admin features retro window <min>* — muda janela (ex: 30, 90)',
-        '• */admin features memoria <on|off>* — liga/desliga memória',
+        '*/admin features retro <on|off|interval N|window N>*',
+        '*/admin features memoria <on|off>*',
       ];
       await this.app.notify(chatId, lines.join('\n'));
       await this.app.react(msg, EMOJI.SUCCESS);
@@ -650,31 +613,31 @@ export class AdminCommands implements CommandModule {
       if (action === 'on') {
         this.app.retroactive.enabled = true;
         this.app.retroactive.setupTimer();
-        await this.app.notify(chatId, `✅ Retroativo ativado (intervalo: ${this.app.retroactive.intervalMin}min, janela: ${this.app.retroactive.windowMin}min)`);
+        await this.app.notify(chatId, `✅ retro on (${this.app.retroactive.intervalMin}/${this.app.retroactive.windowMin}min)`);
         this.app.log('ADMIN', 'Retroativo ativado via /admin features');
       } else if (action === 'off') {
         this.app.retroactive.enabled = false;
         this.app.retroactive.setupTimer();
-        await this.app.notify(chatId, '🛑 Retroativo desativado');
+        await this.app.notify(chatId, '🛑 retro off');
         this.app.log('ADMIN', 'Retroativo desativado via /admin features');
       } else if (action === 'interval') {
         const min = parseInt(args[2], 10);
         if (isNaN(min) || min < 1 || min > 120) {
-          await this.app.reportError(msg, chatId, 'intervalo inválido. Use um número entre 1 e 120 minutos. Ex: */admin features retro interval 5*');
+          await this.app.reportError(msg, chatId, 'intervalo inválido. Use 1-120 minutos.');
           return;
         }
         this.app.retroactive.intervalMin = min;
         this.app.retroactive.setupTimer();
-        await this.app.notify(chatId, `✅ Intervalo do retroativo mudado pra ${min}min`);
+        await this.app.notify(chatId, `✅ retro interval: ${min}min`);
         this.app.log('ADMIN', `Retroativo intervalo mudado para ${min}min`);
       } else if (action === 'window') {
         const min = parseInt(args[2], 10);
         if (isNaN(min) || min < 5 || min > 240) {
-          await this.app.reportError(msg, chatId, 'janela inválida. Use um número entre 5 e 240 minutos. Ex: */admin features retro window 30*');
+          await this.app.reportError(msg, chatId, 'janela inválida. Use 5-240 minutos.');
           return;
         }
         this.app.retroactive.windowMin = min;
-        await this.app.notify(chatId, `✅ Janela do retroativo mudada pra ${min}min`);
+        await this.app.notify(chatId, `✅ retro window: ${min}min`);
         this.app.log('ADMIN', `Retroativo janela mudada para ${min}min`);
       } else {
         await this.app.reportError(msg, chatId, 'uso: */admin features retro <on|off|interval N|window N>*');
@@ -689,11 +652,11 @@ export class AdminCommands implements CommandModule {
       const action = (val || '').toLowerCase();
       if (action === 'on') {
         this.app.memory.enabled = true;
-        await this.app.notify(chatId, '✅ Memória permanente ativada');
+        await this.app.notify(chatId, '✅ memória on');
         this.app.log('ADMIN', 'Memória ativada via /admin features');
       } else if (action === 'off') {
         this.app.memory.enabled = false;
-        await this.app.notify(chatId, '🛑 Memória permanente desativada (memórias existentes não são apagadas)');
+        await this.app.notify(chatId, '🛑 memória off (fatos existentes mantidos)');
         this.app.log('ADMIN', 'Memória desativada via /admin features');
       } else {
         await this.app.reportError(msg, chatId, 'uso: */admin features memoria <on|off>*');
@@ -703,7 +666,7 @@ export class AdminCommands implements CommandModule {
       return;
     }
 
-    await this.app.reportError(msg, chatId, `subcomando desconhecido: "${sub}". Use */admin features* pra ver as opções.`);
+    await this.app.reportError(msg, chatId, `subcomando desconhecido: "${sub}". Use */admin features*.`);
   }
 
   // ===========================================================================
@@ -717,22 +680,17 @@ export class AdminCommands implements CommandModule {
     const fallbacks = allModels.slice(1);
 
     const lines = [
-      '*🤖 Modelos de IA:*',
-      '',
       `Principal: *${primary}*`,
     ];
 
     if (fallbacks.length > 0) {
-      lines.push(`Fallbacks:`);
-      fallbacks.forEach((m, i) => lines.push(`  ${i + 1}. ${m}`));
+      lines.push(`Fallbacks: ${fallbacks.join(', ')}`);
     } else {
-      lines.push('Fallbacks: nenhum configurado');
+      lines.push('Fallbacks: nenhum');
     }
 
-    lines.push('');
     lines.push(`Último usado: ${this.app.brain.lastUsedModel || primary}`);
-    lines.push(`Provider: ${cfg.provider || (cfg.apiUrl.includes('googleapis') ? 'gemini' : 'openai')}`);
-    lines.push(`Max tokens: ${cfg.maxTokens} | Temp: ${cfg.temperature}`);
+    lines.push(`Provider: ${cfg.provider || (cfg.apiUrl.includes('googleapis') ? 'gemini' : 'openai')} | tokens: ${cfg.maxTokens} | temp: ${cfg.temperature}`);
 
     // Limites conhecidos do Gemini free tier (preservado do velho)
     const limits: Record<string, { rpm: number; rpd: number }> = {
@@ -740,14 +698,14 @@ export class AdminCommands implements CommandModule {
       'gemini-3.1-flash-lite': { rpm: 15, rpd: 500 },
       'gemini-3.8-flash': { rpm: 5, rpd: 20 },
     };
-    lines.push('');
-    lines.push('*Limites (free tier):*');
+    const limitParts: string[] = [];
     for (const m of allModels) {
       const lim = limits[m];
       if (lim) {
-        lines.push(`• ${m}: ${lim.rpm} RPM, ${lim.rpd} RPD`);
+        limitParts.push(`${m}: ${lim.rpm}rpm/${lim.rpd}rpd`);
       }
     }
+    if (limitParts.length > 0) lines.push(`Limites: ${limitParts.join(' | ')}`);
 
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
@@ -774,19 +732,9 @@ export class AdminCommands implements CommandModule {
     const twitterOn = !!(this.app.twitter);
 
     const lines = [
-      '*📊 Stats do bot:*',
-      '',
-      `Requests de IA hoje: ${this.app.brain.aiRequestCount}`,
-      `Figurinhas no vault: ${totalStickers}`,
-      `Figurinhas nomeadas/fav: ${namedStickers}`,
-      `Diretivas ativas: ${directives}`,
-      `Chats com histórico carregado: ${this.app.context.historyLoadedCount()}`,
-      `Chats com contexto em memória: ${chatsWithCtx}`,
-      `Chats com IA desativada: ${this.app.brain.aiDisabledChats.size}`,
-      `Uptime: ${this.formatUptime()}`,
-      `Debug: ${this.app.debugEnabled ? 'on' : 'off'}${this.app.debugFullEnabled ? ' (full)' : ''}`,
-      `Twitter: ${twitterOn ? 'on' : 'off'}`,
-      `IA global: ${this.app.aiConfig?.enabled ? 'on' : 'off'}`,
+      `IA: ${this.app.brain.aiRequestCount} reqs | ${chatsWithCtx} chats | ${this.app.brain.aiDisabledChats.size} off`,
+      `${totalStickers} figurinhas | ${namedStickers} marcadas | ${directives} diretivas | ${this.formatUptime()}`,
+      `Debug: ${this.app.debugEnabled ? 'on' : 'off'}${this.app.debugFullEnabled ? ' (full)' : ''} | Twitter: ${twitterOn ? 'on' : 'off'} | IA: ${this.app.aiConfig?.enabled ? 'on' : 'off'}`,
     ];
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
@@ -798,26 +746,14 @@ export class AdminCommands implements CommandModule {
 
   private async adminAjuda(msg: Message, chatId: string): Promise<void> {
     const lines = [
-      '*🎛️ /admin — subcomandos:*',
+      '*/admin:*',
+      'status / grupos / chats / ia <id> <on|off>',
+      'entrosao <id> <0-2> / info <id> / debug <on|off|full>',
+      'log [n] / stats / modelo / features / retro',
+      'ler <id|aqui|todos> [qtd] [memoria]',
+      'reiniciar / desligar',
       '',
-      '• */admin* ou */admin status* — overview (IA, contador, debug, twitter, últimos grupos).',
-      '• */admin grupos* — lista todos os grupos que o bot está (até 20).',
-      '• */admin chats* — lista todos os chats (grupos + PVs) com atividade recente.',
-      '• */admin ia <chatId> <on|off>* — controla IA de qualquer chat (sem arg = status).',
-      '• */admin entrosao <chatId> <nivel>* — ajusta entrosão de qualquer chat (0-2).',
-      '• */admin info <chatId>* — info detalhada de um chat (perfil, contexto, banidos).',
-      '• */admin debug <on|off|full>* — liga/desliga debug em runtime.',
-      '• */admin log [n]* — últimas N linhas do bot.log (default 20, máx 50).',
-      '• */admin stats* — estatísticas de uso (requests, figurinhas, uptime, etc).',
-      '• */admin modelo* — mostra qual modelo de IA está sendo usado e os fallbacks.',
-      '• */admin features* — controla retroativo e memória (/admin features retro off, /admin features memoria off).',
-      '• */admin retro* — controla retroativo manualmente (//retro agora, //retro limpar).',
-      '• */admin ler* — FORÇA leitura de msgs antigas: */admin ler <chatId> [qtd] [memoria]*, */admin ler aqui*, */admin ler todos*, */admin ler status*.',
-      '• */admin reiniciar* — reinicia o bot (pede confirmação).',
-      '• */admin desligar* — desliga o bot completamente (pede confirmação).',
-      '• */admin ajuda* — esta lista.',
-      '',
-      '_⚠️ SÓ funciona no PV do bot (não em grupo). Só ops._',
+      '_Só no PV. Só ops._',
     ];
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
@@ -832,7 +768,7 @@ export class AdminCommands implements CommandModule {
 
     if (action === 'agora' || action === 'force') {
       await this.app.react(msg, EMOJI.LOADING);
-      await this.app.notify(chatId, '🔄 Forçando verificação retroativa agora...');
+      await this.app.notify(chatId, '🔄 forçando verificação...');
       this.app.debug('RETRO', 'verificação forçada via //retro agora');
 
       // Roda o check em background
@@ -843,7 +779,7 @@ export class AdminCommands implements CommandModule {
       });
 
       await this.app.react(msg, EMOJI.SUCCESS);
-      await this.app.notify(chatId, '✅ Verificação retroativa disparada! Checa o terminal pra ver o resultado.');
+      await this.app.notify(chatId, '✅ verificação retroativa disparada');
       return;
     }
 
@@ -854,13 +790,13 @@ export class AdminCommands implements CommandModule {
         // Limpa só um chat específico
         this.app.retroactive.clear(targetChatId);
         await this.app.react(msg, EMOJI.SUCCESS);
-        await this.app.notify(chatId, `🧹 Decision log limpa para o chat: ${targetChatId}`);
+        await this.app.notify(chatId, `🧹 decision log limpa: ${targetChatId}`);
         this.app.debug('RETRO', `decision log limpa para ${targetChatId} por comando`);
       } else {
         // Limpa TUDO
         this.app.retroactive.clear();
         await this.app.react(msg, EMOJI.SUCCESS);
-        await this.app.notify(chatId, '🧹 Decision log limpa completamente! Todas as decisões foram resetadas.');
+        await this.app.notify(chatId, '🧹 decision log limpa');
         this.app.debug('RETRO', 'decision log completamente limpa por comando');
       }
       return;
@@ -879,15 +815,8 @@ export class AdminCommands implements CommandModule {
     }
 
     await this.app.notify(chatId,
-      `*🔄 Sistema Retroativo:*\n\n` +
-      `Status: ${this.app.retroactive.enabled ? '✅ ativado' : '🛑 desativado'}\n` +
-      `Intervalo: ${this.app.retroactive.intervalMin}min\n` +
-      `Janela: ${this.app.retroactive.windowMin}min\n` +
-      `Mensagens pending: ${totalPending} em ${totalChats} chat(s)\n\n` +
-      `Comandos:\n` +
-      `• *//retro agora* — força verificação imediata\n` +
-      `• *//retro limpar* — limpa toda a decision log\n` +
-      `• *//retro limpar <chatId>* — limpa um chat específico`
+      `Retro: ${this.app.retroactive.enabled ? '✅' : '🛑'} | ${this.app.retroactive.intervalMin}/${this.app.retroactive.windowMin}min | ${totalPending} pending em ${totalChats} chats\n` +
+      `*//retro agora* | *//retro limpar* | *//retro limpar <chatId>*`
     );
     await this.app.react(msg, EMOJI.SUCCESS);
   }
@@ -902,18 +831,17 @@ export class AdminCommands implements CommandModule {
     // --- /admin ler status ---
     if (sub === 'status' || sub === 'lista') {
       const loaded = this.app.context.activeChatIds();
-      const lines = ['*📚 Histórico carregado:*', ''];
+      const lines: string[] = [];
       if (loaded.length === 0) {
-        lines.push('_Nenhum chat com histórico carregado ainda._');
+        lines.push('nenhum chat lido ainda.');
       } else {
-        lines.push(`${loaded.length} chat(s) já lidos (não vão recarregar sozinhos):`);
+        lines.push(`${loaded.length} chats lidos:`);
         for (const id of loaded.slice(0, 25)) {
           const ctxCount = this.app.context.count(id);
-          lines.push(`• ${id} (${ctxCount} msgs no contexto)`);
+          lines.push(`• ${id} (${ctxCount} msgs)`);
         }
-        if (loaded.length > 25) lines.push(`_...e mais ${loaded.length - 25}_`);
+        if (loaded.length > 25) lines.push(`...+${loaded.length - 25}`);
       }
-      lines.push('', '_Use */admin ler <chatId> [qtd] [memoria]* pra forçar releitura._');
       await this.app.notify(chatId, lines.join('\n'));
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
@@ -938,7 +866,7 @@ export class AdminCommands implements CommandModule {
     if (sub === 'aqui' || sub === 'pv' || sub === 'this') {
       const { limit, withMemory } = parseLimitAndMemory(args.slice(1));
       await this.app.react(msg, EMOJI.LOADING);
-      await this.app.notify(chatId, `📖 Lendo ${limit} mensagens deste PV... ${withMemory ? '(com extração de memória — pode levar alguns minutos)' : ''}`);
+      await this.app.notify(chatId, `📖 lendo ${limit} msgs...${withMemory ? ' (com memória)' : ''}`);
 
       const stats = await this.app.context.forceReadChatHistory(chatId, limit, withMemory, {
         onProgress: (m) => this.app.debug('ADMIN', m),
@@ -948,7 +876,7 @@ export class AdminCommands implements CommandModule {
       });
 
       if (!stats.ok) {
-        await this.app.reportError(msg, chatId, `❌ Erro ao ler histórico: ${stats.error}`);
+        await this.app.reportError(msg, chatId, `❌ erro: ${stats.error}`);
         return;
       }
       await this.app.notify(chatId, this.formatLerStats(stats, withMemory));
@@ -975,8 +903,7 @@ export class AdminCommands implements CommandModule {
 
       await this.app.react(msg, EMOJI.LOADING);
       await this.app.notify(chatId,
-        `📚 *Leitura em lote:* ${groups.length} grupos, ${limit} msgs cada${withMemory ? ' (com memória)' : ''}.\n` +
-        `_Isso vai demorar. Vou mandando o progresso aqui. Não interrompa o bot._`
+        `📚 lote: ${groups.length} grupos × ${limit} msgs${withMemory ? ' (com memória)' : ''} — pode demorar`
       );
 
       // Roda em background — não bloqueia o handler
@@ -1018,28 +945,24 @@ export class AdminCommands implements CommandModule {
           }
           // Avisa progresso a cada 5 grupos
           if ((i + 1) % 5 === 0 || i === groups.length - 1) {
-            await this.app.notify(chatId, `⏳ Progresso: ${i + 1}/${groups.length} grupos lidos...`);
+            await this.app.notify(chatId, `⏳ ${i + 1}/${groups.length}`);
           }
         }
 
         // Relatório intermediário (contexto + perfil já pronto; memória ainda roda)
         const summary: string[] = [
-          `✅ *Leitura em lote concluída!*`,
-          ``,
-          `Grupos lidos: ${okCount}/${groups.length}`,
-          `Falhas: ${failCount}`,
-          `Mensagens adicionadas ao contexto: ${totalAdded}`,
+          `✅ lote: ${okCount}/${groups.length} ok | ${failCount} falha | ${totalAdded} msgs`,
         ];
         if (withMemory) {
-          summary.push(`Memórias em processamento (IA): ${totalMemoryQueued}`);
+          summary.push(`memória em processamento: ${totalMemoryQueued}`);
         }
         if (failures.length > 0) {
-          summary.push('', '_Falhas:_');
+          summary.push('', '*Falhas:*');
           summary.push(...failures.slice(0, 8).map(f => `• ${f}`));
-          if (failures.length > 8) summary.push(`_...e mais ${failures.length - 8}_`);
+          if (failures.length > 8) summary.push(`...+${failures.length - 8}`);
         }
         if (withMemory && totalMemoryQueued > 0) {
-          summary.push('', `_⏳ ${totalMemoryQueued} extrações de memória ainda rodam em background. Vou mandar o resultado real aqui quando terminarem._`);
+          summary.push('', `_⏳ ${totalMemoryQueued} extrações rodam em background._`);
         }
         await this.app.notify(chatId, summary.join('\n'));
 
@@ -1048,22 +971,18 @@ export class AdminCommands implements CommandModule {
           await Promise.all(memorySettledPromises);
           const discarded = totalMemoryQueued - totalMemorySaved;
           const memSummary: string[] = [
-            `🧠 *Memória em lote — resultado final:*`,
-            ``,
-            `Extrações processadas: ${totalMemoryQueued}`,
-            `✅ Fatos salvos em memories.json: ${totalMemorySaved}`,
-            `⏭️ Descartados pela IA (NENHUM/opinião): ${discarded}`,
+            `🧠 memória final: ${totalMemorySaved} salvos | ${discarded} descartados`,
           ];
           if (totalMemorySaved === 0 && totalMemoryQueued > 0) {
-            memSummary.push('', '_ℹ️ Nenhuma memória salva. As mensagens do período provavelmente eram opiniões/conversa casual._');
+            memSummary.push('_Provavelmente só opiniões/conversa casual — a IA só extrai fatos permanentes._');
           } else if (totalMemorySaved > 0) {
-            memSummary.push('', '_Use /memoria pra ver os fatos salvos._');
+            memSummary.push('_Use /memoria pra ver._');
           }
           await this.app.notify(chatId, memSummary.join('\n'));
         }
       })().catch(e => {
         this.app.debug('ADMIN', `erro no batch /admin ler todos: ${(e as Error).message}`);
-        this.app.notify(chatId, `❌ Erro no batch de leitura: ${(e as Error).message}`).catch(() => { /* ignora */ });
+        this.app.notify(chatId, `❌ erro no lote: ${(e as Error).message}`).catch(() => { /* ignora */ });
       });
 
       await this.app.react(msg, EMOJI.SUCCESS);
@@ -1074,11 +993,7 @@ export class AdminCommands implements CommandModule {
     if (!sub || !this.isValidWhatsAppChatId(sub)) {
       await this.app.reportError(msg, chatId,
         'use: */admin ler <chatId> [qtd] [memoria]*\n' +
-        'ou: */admin ler aqui [qtd] [memoria]*\n' +
-        'ou: */admin ler todos [qtd] [memoria]*\n' +
-        'ou: */admin ler status*\n\n' +
-        '• qtd = nº de mensagens (default 200, máx 1000)\n' +
-        '• memoria = também extrai fatos permanentes (cap 30/chamada)'
+        'ou: */admin ler aqui|todos|status*'
       );
       return;
     }
@@ -1087,7 +1002,7 @@ export class AdminCommands implements CommandModule {
     const { limit, withMemory } = parseLimitAndMemory(args.slice(1));
 
     await this.app.react(msg, EMOJI.LOADING);
-    await this.app.notify(chatId, `📖 Lendo ${limit} mensagens de ${targetId}... ${withMemory ? '(com memória)' : ''}`);
+    await this.app.notify(chatId, `📖 lendo ${limit} msgs de ${targetId}...${withMemory ? ' (com memória)' : ''}`);
 
     const stats = await this.app.context.forceReadChatHistory(targetId, limit, withMemory, {
       onProgress: (m) => this.app.debug('ADMIN', m),
@@ -1097,7 +1012,7 @@ export class AdminCommands implements CommandModule {
     });
 
     if (!stats.ok) {
-      await this.app.reportError(msg, chatId, `❌ Erro ao ler histórico: ${stats.error}`);
+      await this.app.reportError(msg, chatId, `❌ erro: ${stats.error}`);
       return;
     }
     await this.app.notify(chatId, this.formatLerStats(stats, withMemory));
@@ -1113,16 +1028,14 @@ export class AdminCommands implements CommandModule {
 
     if (confirm !== 'confirmar' && confirm !== 'confirm') {
       await this.app.notify(chatId,
-        '⚠️ *Reiniciar o bot?*\n\n' +
-        'Isso vai desconectar e reconectar o WhatsApp. O bot fica offline por ~30 segundos.\n\n' +
-        'Para confirmar, envie: */admin reiniciar confirmar*'
+        '⚠️ reiniciar o bot?\nVai desconectar e reconectar (~30s offline).\n\nConfirme: */admin reiniciar confirmar*'
       );
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
 
     await this.app.react(msg, EMOJI.SUCCESS);
-    await this.app.notify(chatId, '🔄 *Reiniciando o bot...*\n\nVolto já! 🤖');
+    await this.app.notify(chatId, '🔄 reiniciando... volto já');
     this.app.log('ADMIN', `Bot reiniciado por comando /admin reiniciar (chat ${chatId})`);
     this.app.debug('ADMIN', 'reiniciando bot em 3 segundos...');
 
@@ -1155,16 +1068,14 @@ export class AdminCommands implements CommandModule {
 
     if (confirm !== 'confirmar' && confirm !== 'confirm') {
       await this.app.notify(chatId,
-        '🛑 *DESLIGAR o bot?*\n\n' +
-        '⚠️ O bot vai ficar COMPLETAMENTE OFFLINE até você reiniciar manualmente no terminal.\n\n' +
-        'Para confirmar, envie: */admin desligar confirmar*'
+        '🛑 *DESLIGAR o bot?*\nFica offline até reiniciar manualmente.\n\nConfirme: */admin desligar confirmar*'
       );
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
 
     await this.app.react(msg, EMOJI.SUCCESS);
-    await this.app.notify(chatId, '🛑 *Desligando o bot...*\n\nTchau! Reinicie manualmente com `node dist/bot.js` 🤖');
+    await this.app.notify(chatId, '🛑 desligando... reinicie com `node dist/bot.js`');
     this.app.log('ADMIN', `Bot desligado por comando /admin desligar`);
     this.app.debug('ADMIN', 'desligando bot em 5 segundos...');
 
@@ -1199,7 +1110,7 @@ export class AdminCommands implements CommandModule {
     this.app.debug('OP', `iniciando /op | sender ids=`, sender.all, `| isOp=${senderIsOp}`);
 
     if (!senderIsOp) {
-      await this.app.reportError(msg, chatId, 'você não tem permissão para usar este comando. Apenas *ops* podem conceder op.');
+      await this.app.reportError(msg, chatId, 'só *ops* podem conceder op.');
       this.app.log('OP', `Tentativa não autorizada de /op por ${sender.all.join(' / ')} em ${chatId}.`);
       return;
     }
@@ -1210,7 +1121,7 @@ export class AdminCommands implements CommandModule {
     if (!target || (!target.lid && !target.phone)) {
       await this.app.reportError(
         msg, chatId,
-        'para usar o comando corretamente, se atente à sintaxe:\n\n• Responda à mensagem do usuário com */op*; ou\n• Envie */op <número>* (ex.: /op 5511999999999).'
+        'responda à mensagem do usuário com */op* ou use */op <número>*.'
       );
       return;
     }
@@ -1220,7 +1131,7 @@ export class AdminCommands implements CommandModule {
     // Não faz sentido dar op pro próprio bot (já é op sempre)
     if (this.app.permissions.isOp(false, targetIds)) {
       this.app.debug('OP', `alvo já é op (bot ou op existente)`);
-      await this.app.reportError(msg, chatId, 'este usuário já é um *op*. ⭐');
+      await this.app.reportError(msg, chatId, 'já é op. ⭐');
       return;
     }
 
@@ -1233,13 +1144,13 @@ export class AdminCommands implements CommandModule {
       return entryDigits.some(d => targetDigits.includes(d));
     });
     if (alreadyOp) {
-      await this.app.reportError(msg, chatId, 'este usuário já é um *op*. ⭐');
+      await this.app.reportError(msg, chatId, 'já é op. ⭐');
       return;
     }
 
     const added = this.app.permissions.addOp(target.lid, target.phone);
     if (!added) {
-      await this.app.reportError(msg, chatId, 'este usuário já é um *op*. ⭐');
+      await this.app.reportError(msg, chatId, 'já é op. ⭐');
       return;
     }
     this.app.debug('OP', `op adicionado: lid=${target.lid} phone=${target.phone}`);
@@ -1249,7 +1160,7 @@ export class AdminCommands implements CommandModule {
 
     await this.app.react(msg, EMOJI.SUCCESS);
     const display = target.phone || target.lid;
-    await this.app.notify(chatId, `op concedido com sucesso. ⭐\nID: ${display}`);
+    await this.app.notify(chatId, `⭐ op: ${display}`);
     this.app.log('OP', `Op concedido: ${display} (LID: ${target.lid || 'n/a'}) (por ${sender.all.join(' / ')}).`);
   }
 
@@ -1264,7 +1175,7 @@ export class AdminCommands implements CommandModule {
     const senderIsOp = this.app.permissions.isOp(msg.fromMe, sender.all);
 
     if (!senderIsOp) {
-      await this.app.reportError(msg, chatId, 'você não tem permissão para usar este comando. Apenas *ops* podem remover op.');
+      await this.app.reportError(msg, chatId, 'só *ops* podem remover op.');
       this.app.log('DEOP', `Tentativa não autorizada de /deop por ${sender.all.join(' / ')} em ${chatId}.`);
       return;
     }
@@ -1275,7 +1186,7 @@ export class AdminCommands implements CommandModule {
     if (!target || (!target.lid && !target.phone)) {
       await this.app.reportError(
         msg, chatId,
-        'para usar o comando corretamente, se atente à sintaxe:\n\n• Responda à mensagem do usuário com */deop*; ou\n• Envie */deop <número>* (ex.: /deop 5511999999999).'
+        'responda à mensagem do usuário com */deop* ou use */deop <número>*.'
       );
       return;
     }
@@ -1287,7 +1198,7 @@ export class AdminCommands implements CommandModule {
     const isInitialOp = this.app.permissions.initialOps.some(o => targetDigits.includes(this.app.permissions.digitsOnly(o)));
     if (isInitialOp) {
       this.app.debug('DEOP', `tentativa de deop de INITIAL_OP bloqueada`);
-      await this.app.reportError(msg, chatId, 'este é um *op inicial* (configurado no código) e não pode ser removido pelo comando. Para removê-lo, edite initialOps no PermissionSystem e reinicie o bot.');
+      await this.app.reportError(msg, chatId, 'op inicial (fixo no código) — não pode ser removido.');
       return;
     }
 
@@ -1299,20 +1210,20 @@ export class AdminCommands implements CommandModule {
       return entryDigits.some(d => targetDigits.includes(d));
     });
     if (!exists) {
-      await this.app.reportError(msg, chatId, 'este usuário não é um *op* (ou é o próprio bot, que é op permanente).');
+      await this.app.reportError(msg, chatId, 'não é op (ou é o próprio bot).');
       return;
     }
 
     const removed = this.app.permissions.removeOp(target.lid, target.phone);
     if (!removed) {
-      await this.app.reportError(msg, chatId, 'este usuário não é um *op* (ou é o próprio bot, que é op permanente).');
+      await this.app.reportError(msg, chatId, 'não é op (ou é o próprio bot).');
       return;
     }
     this.app.debug('DEOP', `op removido: lid=${target.lid} phone=${target.phone}`);
 
     await this.app.react(msg, EMOJI.SUCCESS);
     const display = target.phone || target.lid;
-    await this.app.notify(chatId, `op removido com sucesso. 📉\nID: ${display}`);
+    await this.app.notify(chatId, `📉 deop: ${display}`);
     this.app.log('DEOP', `Op removido: ${display} (por ${sender.all.join(' / ')}).`);
   }
 
@@ -1327,28 +1238,24 @@ export class AdminCommands implements CommandModule {
     const senderIsOp = this.app.permissions.isOp(msg.fromMe, sender.all);
 
     if (!senderIsOp) {
-      await this.app.reportError(msg, chatId, 'você não tem permissão para usar este comando. Apenas *ops* podem ver a lista de operadores.');
+      await this.app.reportError(msg, chatId, 'só *ops* podem ver a lista.');
       return;
     }
 
     const ops = this.app.permissions.loadOps();
     this.app.debug('OPS', `lista atual (${ops.length}):`, ops);
 
-    const lines = ['*Operadores (ops) atuais:*', ''];
-
-    // O bot é sempre op
-    lines.push('1. 🤖 *O próprio bot* (op permanente)');
+    const lines: string[] = ['*Ops:*', '🤖 bot (permanente)'];
 
     // INITIAL_OPS
-    this.app.permissions.initialOps.forEach((o, i) => {
-      lines.push(`${i + 2}. ${o} *(op inicial — fixo no código)*`);
+    this.app.permissions.initialOps.forEach((o) => {
+      lines.push(`${o} (inicial)`);
     });
 
     // Ops persistidos
-    ops.forEach((entry, i) => {
+    ops.forEach((entry) => {
       const id = entry.phone || entry.lid;
-      const extra = entry.lid && entry.phone ? ` (LID: ${entry.lid})` : '';
-      lines.push(`${i + 2 + this.app.permissions.initialOps.length}. ${id}${extra}`);
+      lines.push(id);
     });
 
     await this.app.notify(chatId, lines.join('\n'));
@@ -1367,7 +1274,7 @@ export class AdminCommands implements CommandModule {
     this.app.debug('BAN', `iniciando !ban | sender ids=`, owner.all, `| isOp=${senderIsOp}`);
 
     if (!senderIsOp) {
-      await this.app.reportError(msg, chatId, 'você não tem permissão para usar este comando. Apenas *ops* podem banir usuários.');
+      await this.app.reportError(msg, chatId, 'só *ops* podem banir.');
       this.app.log('BAN', `Tentativa não autorizada de !ban por ${owner.all.join(' / ')} em ${chatId}.`);
       return;
     }
@@ -1378,7 +1285,7 @@ export class AdminCommands implements CommandModule {
     if (!target || (!target.lid && !target.phone)) {
       await this.app.reportError(
         msg, chatId,
-        'para usar o comando corretamente, se atente à sintaxe:\n\n• Responda à mensagem do usuário com *!ban*; ou\n• Envie *!ban <número>* (ex.: !ban 5511999999999).'
+        'responda à mensagem do usuário com *!ban* ou use *!ban <número>*.'
       );
       return;
     }
@@ -1390,7 +1297,7 @@ export class AdminCommands implements CommandModule {
     const targetIsOp = this.app.permissions.isOp(false, targetIds);
     if (targetIsOp) {
       this.app.debug('BAN', `tentativa de banir op bloqueada`);
-      await this.app.reportError(msg, chatId, 'você não pode banir um *op* (nem o bot, nem outro operador). 🚫');
+      await this.app.reportError(msg, chatId, 'não pode banir op (nem o bot). 🚫');
       return;
     }
 
@@ -1403,13 +1310,13 @@ export class AdminCommands implements CommandModule {
       return entryDigits.some(d => targetDigits.includes(d));
     });
     if (alreadyBanned) {
-      await this.app.reportError(msg, chatId, 'este usuário já está banido.');
+      await this.app.reportError(msg, chatId, 'já está banido.');
       return;
     }
 
     const added = this.app.permissions.addBanned(target.lid, target.phone);
     if (!added) {
-      await this.app.reportError(msg, chatId, 'este usuário já está banido.');
+      await this.app.reportError(msg, chatId, 'já está banido.');
       return;
     }
     this.app.debug('BAN', `banido adicionado: lid=${target.lid} phone=${target.phone}`);
@@ -1420,7 +1327,7 @@ export class AdminCommands implements CommandModule {
 
     await this.app.react(msg, EMOJI.SUCCESS);
     const display = target.phone || target.lid;
-    await this.app.notify(chatId, `usuário banido com sucesso. 🚫\nID: ${display}`);
+    await this.app.notify(chatId, `🚫 banido: ${display}`);
     this.app.log('BAN', `Usuário banido: ${display} (LID: ${target.lid || 'n/a'}) (por ${owner.all.join(' / ')}).`);
   }
 
@@ -1435,7 +1342,7 @@ export class AdminCommands implements CommandModule {
     const senderIsOp = this.app.permissions.isOp(msg.fromMe, owner.all);
 
     if (!senderIsOp) {
-      await this.app.reportError(msg, chatId, 'você não tem permissão para usar este comando. Apenas *ops* podem desbanir usuários.');
+      await this.app.reportError(msg, chatId, 'só *ops* podem desbanir.');
       this.app.log('UNBAN', `Tentativa não autorizada de !unban por ${owner.all.join(' / ')} em ${chatId}.`);
       return;
     }
@@ -1446,7 +1353,7 @@ export class AdminCommands implements CommandModule {
     if (!target || (!target.lid && !target.phone)) {
       await this.app.reportError(
         msg, chatId,
-        'para usar o comando corretamente, se atente à sintaxe:\n\n• Responda à mensagem do usuário com *!unban*; ou\n• Envie *!unban <número>* (ex.: !unban 5511999999999).'
+        'responda à mensagem do usuário com *!unban* ou use *!unban <número>*.'
       );
       return;
     }
@@ -1461,20 +1368,20 @@ export class AdminCommands implements CommandModule {
       return entryDigits.some(d => targetDigits.includes(d));
     });
     if (!exists) {
-      await this.app.reportError(msg, chatId, 'este usuário não está banido.');
+      await this.app.reportError(msg, chatId, 'não está banido.');
       return;
     }
 
     const removed = this.app.permissions.removeBanned(target.lid, target.phone);
     if (!removed) {
-      await this.app.reportError(msg, chatId, 'este usuário não está banido.');
+      await this.app.reportError(msg, chatId, 'não está banido.');
       return;
     }
     this.app.debug('UNBAN', `removido: lid=${target.lid} phone=${target.phone}`);
 
     await this.app.react(msg, EMOJI.SUCCESS);
     const display = target.phone || target.lid;
-    await this.app.notify(chatId, `usuário desbanido com sucesso. ✅\nID: ${display}`);
+    await this.app.notify(chatId, `✅ desbanido: ${display}`);
     this.app.log('UNBAN', `Usuário desbanido: ${display} (por ${owner.all.join(' / ')}).`);
   }
 
@@ -1489,7 +1396,7 @@ export class AdminCommands implements CommandModule {
     const senderIsOp = this.app.permissions.isOp(msg.fromMe, owner.all);
 
     if (!senderIsOp) {
-      await this.app.reportError(msg, chatId, 'você não tem permissão para usar este comando. Apenas *ops* podem ver a lista de banidos.');
+      await this.app.reportError(msg, chatId, 'só *ops* podem ver banidos.');
       return;
     }
 
@@ -1497,14 +1404,13 @@ export class AdminCommands implements CommandModule {
     this.app.debug('BANIDOS', `lista atual (${banned.length}):`, banned);
 
     if (banned.length === 0) {
-      await this.app.notify(chatId, 'nenhum usuário banido no momento. 📋');
+      await this.app.notify(chatId, 'nenhum banido 📋');
     } else {
-      const list = banned.map((entry, i) => {
+      const list = banned.map((entry) => {
         const id = entry.phone || entry.lid;
-        const extra = entry.lid && entry.phone ? ` (LID: ${entry.lid})` : '';
-        return `${i + 1}. ${id}${extra}`;
+        return id;
       }).join('\n');
-      await this.app.notify(chatId, `*Usuários banidos (${banned.length}):*\n\n${list}`);
+      await this.app.notify(chatId, `*Banidos (${banned.length}):*\n${list}`);
     }
 
     await this.app.react(msg, EMOJI.SUCCESS);

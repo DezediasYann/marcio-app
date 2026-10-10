@@ -160,7 +160,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'use */enquete <pergunta> | <op1> | <op2> | ...* (mín 2 opções, máx 12).',
+        'use */enquete <pergunta> | <op1> | <op2> | ...*',
       );
       return;
     }
@@ -175,7 +175,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'faltam opções. Mínimo: 1 pergunta + 2 opções. Use *|* pra separar.',
+        'faltam opções. Mín: 1 pergunta + 2 opções (separe com *|*).',
       );
       return;
     }
@@ -183,7 +183,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'muitas opções. Máximo: 1 pergunta + 12 opções.',
+        'muitas opções. Máx: 1 pergunta + 12 opções.',
       );
       return;
     }
@@ -240,7 +240,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'use */evento <descrição> @ dd/mm hh:mm* (ex: */evento aniversário @ 25/12 18:00*). Ou */evento lista*, */evento cancelar <id>*.',
+        'use */evento <desc> @ dd/mm hh:mm* (ex: */evento festa @ 25/12 18:00*)',
       );
       return;
     }
@@ -251,7 +251,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'formato inválido. Use */evento <descrição> @ dd/mm hh:mm* (ex: */evento festa @ 25/12 18:00*).',
+        'formato inválido. Use */evento <desc> @ dd/mm hh:mm*',
       );
       return;
     }
@@ -261,7 +261,7 @@ export class AssistiveCommands implements CommandModule {
     description = description.replace(/@\s*$/, '').trim();
 
     if (!description) {
-      await this.app.reportError(msg, chatId, 'descrição do evento não pode ser vazia.');
+      await this.app.reportError(msg, chatId, 'descrição não pode ser vazia.');
       return;
     }
 
@@ -271,7 +271,7 @@ export class AssistiveCommands implements CommandModule {
     const minute = parseInt(dateMatch[4], 10);
 
     if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) {
-      await this.app.reportError(msg, chatId, 'data inválida. Verifique dia (1-31), mês (1-12), hora (0-23) e minuto (0-59).');
+      await this.app.reportError(msg, chatId, 'data inválida (dia 1-31, mês 1-12, hora 0-23, min 0-59).');
       return;
     }
 
@@ -289,14 +289,14 @@ export class AssistiveCommands implements CommandModule {
       const formatted = this.formatDateBr(fireAt);
       await this.app.notify(
         chatId,
-        `📅 Evento agendado: ${description} — ${formatted}\n\nID: \`${id}\`\n\nUse */evento cancelar ${id}* pra cancelar.`,
+        `📅 ${description} — ${formatted}\nID: \`${id}\``,
       );
       await this.app.react(msg, EMOJI.SUCCESS);
     } catch (e) {
       await this.app.reportError(
         msg,
         chatId,
-        `erro ao agendar evento: ${(e as Error).message}`,
+        `erro: ${(e as Error).message}`,
         e as Error,
       );
     }
@@ -313,25 +313,22 @@ export class AssistiveCommands implements CommandModule {
         .sort((a, b) => a.fireAt - b.fireAt);
 
       if (events.length === 0) {
-        await this.app.notify(chatId, 'nenhum evento pendente neste chat.');
+        await this.app.notify(chatId, 'nenhum evento pendente.');
         await this.app.react(msg, EMOJI.SUCCESS);
         return;
       }
 
-      const lines = ['*Eventos pendentes neste chat:*', ''];
-      for (const e of events) {
+      const lines = events.map(e => {
         const formatted = this.formatDateBr(e.fireAt);
-        lines.push(`• ${e.text} — ${formatted} (ID: \`${e.id}\`)`);
-      }
-      lines.push('');
-      lines.push('_Use */evento cancelar <id>* pra cancelar._');
+        return `• ${e.text} — ${formatted} (ID: \`${e.id}\`)`;
+      });
       await this.app.notify(chatId, lines.join('\n'));
       await this.app.react(msg, EMOJI.SUCCESS);
     } catch (e) {
       await this.app.reportError(
         msg,
         chatId,
-        `erro ao listar eventos: ${(e as Error).message}`,
+        `erro: ${(e as Error).message}`,
         e as Error,
       );
     }
@@ -348,16 +345,16 @@ export class AssistiveCommands implements CommandModule {
     try {
       const ok = this.scheduler.cancel(id);
       if (ok) {
-        await this.app.notify(chatId, `✅ evento cancelado: \`${id}\``);
+        await this.app.notify(chatId, `✅ cancelado: \`${id}\``);
         await this.app.react(msg, EMOJI.SUCCESS);
       } else {
-        await this.app.reportError(msg, chatId, `evento não encontrado: \`${id}\``);
+        await this.app.reportError(msg, chatId, `não encontrado: \`${id}\``);
       }
     } catch (e) {
       await this.app.reportError(
         msg,
         chatId,
-        `erro ao cancelar evento: ${(e as Error).message}`,
+        `erro: ${(e as Error).message}`,
         e as Error,
       );
     }
@@ -381,7 +378,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'use */lembrete <Xm|Xh|Xd> <descrição>* (ex: */lembrete 30m tomar remédio*).',
+        'use */lembrete <Xm|Xh|Xd> <desc>*',
       );
       return;
     }
@@ -396,13 +393,13 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'duração inválida. Use *Xm* (minutos), *Xh* (horas) ou *Xd* (dias). Ex: */lembrete 30m algo*.',
+        'duração inválida. Use *Xm* (min), *Xh* (h) ou *Xd* (dias).',
       );
       return;
     }
 
     if (!description) {
-      await this.app.reportError(msg, chatId, 'descrição do lembrete não pode ser vazia.');
+      await this.app.reportError(msg, chatId, 'descrição não pode ser vazia.');
       return;
     }
 
@@ -426,14 +423,14 @@ export class AssistiveCommands implements CommandModule {
       const humanized = this.humanizeDuration(ms);
       await this.app.notify(
         chatId,
-        `⏰ Lembrete definido: daqui ${humanized} — ${description}\n\nID: \`${id}\``,
+        `⏰ daqui ${humanized}: ${description}\nID: \`${id}\``,
       );
       await this.app.react(msg, EMOJI.SUCCESS);
     } catch (e) {
       await this.app.reportError(
         msg,
         chatId,
-        `erro ao agendar lembrete: ${(e as Error).message}`,
+        `erro: ${(e as Error).message}`,
         e as Error,
       );
     }
@@ -455,7 +452,7 @@ export class AssistiveCommands implements CommandModule {
 
     const city = this.stripCommandToken(msg.body || '').trim();
     if (!city) {
-      await this.app.reportError(msg, chatId, 'use */clima <cidade>* (ex: */clima São Paulo*).');
+      await this.app.reportError(msg, chatId, 'use */clima <cidade>*');
       return;
     }
 
@@ -464,7 +461,7 @@ export class AssistiveCommands implements CommandModule {
       const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=pt&format=json`;
       const geoRes = await fetch(geoUrl);
       if (!geoRes.ok) {
-        await this.app.reportError(msg, chatId, `erro ao buscar cidade (geocoding API ${geoRes.status}).`);
+        await this.app.reportError(msg, chatId, `erro geocoding (${geoRes.status}).`);
         return;
       }
       const geoData = (await geoRes.json()) as any;
@@ -484,13 +481,13 @@ export class AssistiveCommands implements CommandModule {
         `&timezone=auto&forecast_days=1`;
       const weatherRes = await fetch(weatherUrl);
       if (!weatherRes.ok) {
-        await this.app.reportError(msg, chatId, `erro ao buscar clima (weather API ${weatherRes.status}).`);
+        await this.app.reportError(msg, chatId, `erro weather (${weatherRes.status}).`);
         return;
       }
       const w = (await weatherRes.json()) as any;
       const cur = w?.current;
       if (!cur) {
-        await this.app.reportError(msg, chatId, 'não consegui ler os dados de clima.');
+        await this.app.reportError(msg, chatId, 'não consegui ler os dados.');
         return;
       }
 
@@ -502,17 +499,14 @@ export class AssistiveCommands implements CommandModule {
       const tMax = w?.daily?.temperature_2m_max?.[0];
       const tMin = w?.daily?.temperature_2m_min?.[0];
 
-      const locationStr = admin1 ? `${name}, ${admin1} — ${country}` : `${name} — ${country}`;
+      const locationStr = admin1 ? `${name}/${admin1} (${country})` : `${name} (${country})`;
       const lines = [
-        `*Clima em ${locationStr}*`,
-        '',
-        `🌡️ Temp: ${temp}°C (sensação ${feels}°C)`,
-        `💧 Umidade: ${hum}%`,
-        `💨 Vento: ${wind} km/h`,
-        `☁️ Condição: ${desc}`,
+        `*${locationStr}*`,
+        `🌡️ ${temp}°C (sensa ${feels}°C) | 💧 ${hum}% | 💨 ${wind}km/h`,
+        `☁️ ${desc}`,
       ];
       if (tMax !== undefined && tMin !== undefined) {
-        lines.push(`📈 Máx: ${tMax}°C | 📉 Mín: ${tMin}°C`);
+        lines.push(`📈 ${tMax}°C | 📉 ${tMin}°C`);
       }
       await this.app.notify(chatId, lines.join('\n'));
       await this.app.react(msg, EMOJI.SUCCESS);
@@ -521,7 +515,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        `erro ao buscar clima: ${(e as Error).message}`,
+        `erro: ${(e as Error).message}`,
         e as Error,
       );
     }
@@ -560,7 +554,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'use */calcula <expressão>* (ex: */calcula 2+2*3*, */calcula sqrt(16)*).',
+        'use */calcula <expressão>* (ex: */calcula 2+2*3*)',
       );
       return;
     }
@@ -630,7 +624,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'use */busca <termo>* (ex: */busca quem ganhou a copa de 2002*).',
+        'use */busca <termo>*',
       );
       return;
     }
@@ -639,7 +633,7 @@ export class AssistiveCommands implements CommandModule {
       await this.app.reportError(
         msg,
         chatId,
-        'a IA precisa estar ativada pra usar /busca. Use */ia on*.',
+        'IA precisa estar on. Use */ia on*.',
       );
       return;
     }
@@ -688,7 +682,7 @@ export class AssistiveCommands implements CommandModule {
           .join('\n\n');
         await this.app.notify(
           chatId,
-          `🔍 Resultados pra "${query}" (IA indisponível):\n\n${resultsBlock}\n\n_Fonte: DuckDuckGo_`,
+          `🔍 "${query}" (IA off):\n\n${resultsBlock}\n\n_DuckDuckGo_`,
         );
         await this.app.react(msg, EMOJI.SUCCESS);
         return;
@@ -699,7 +693,7 @@ export class AssistiveCommands implements CommandModule {
     }
 
     // Step 5: resposta + nota de fonte.
-    const sourceNote = ddgResults.length > 0 ? '\n\n_Fonte: DuckDuckGo + IA_' : '\n\n_Fonte: IA_';
+    const sourceNote = ddgResults.length > 0 ? ' _DDG+IA_' : ' _IA_';
     await this.app.notify(chatId, `🔍 ${answer}${sourceNote}`);
     await this.app.react(msg, EMOJI.SUCCESS);
   }

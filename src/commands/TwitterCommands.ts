@@ -88,7 +88,7 @@ export class TwitterCommands implements CommandModule {
     const sender = await this.app.permissions.resolveSenderIds(msg);
     const senderIsOp = this.app.permissions.isOp(msg.fromMe, sender.all);
     if (!senderIsOp) {
-      await this.app.reportError(msg, chatId, 'você não tem permissão para usar este comando. Apenas *ops* podem controlar o Twitter.');
+      await this.app.reportError(msg, chatId, 'só *ops* controlam o Twitter.');
       this.app.log('TWITTER', `Tentativa não autorizada de /twitter por ${sender.all.join(' / ')} em ${chatId}.`);
       return;
     }
@@ -111,7 +111,7 @@ export class TwitterCommands implements CommandModule {
     // /twitter on | off — ativa/desativa a integração
     if (subcommand === 'on' || subcommand === 'off') {
       await this.twitterToggle(msg, chatId, 'enabled', subcommand === 'on',
-        `Twitter ${subcommand === 'on' ? 'ativado ✅' : 'desativado 🛑'}.`,
+        `🐦 Twitter ${subcommand === 'on' ? 'on ✅' : 'off 🛑'}`,
         `Twitter ${subcommand === 'on' ? 'ativado' : 'desativado'} por ${sender.all.join(' / ')} em ${chatId}.`);
       return;
     }
@@ -120,12 +120,12 @@ export class TwitterCommands implements CommandModule {
     if (subcommand === 'aprovar') {
       const subArg = (args[1] || '').toLowerCase();
       if (subArg !== 'on' && subArg !== 'off') {
-        await this.app.reportError(msg, chatId, 'use */twitter aprovar on* ou */twitter aprovar off*.');
+        await this.app.reportError(msg, chatId, 'use */twitter aprovar on|off*.');
         return;
       }
       await this.twitterToggle(msg, chatId, 'approvalMode', subArg === 'on',
-        `modo aprovação do Twitter ${subArg === 'on' ? 'ligado ✅ (tweets pedem aprovação de um op)' : 'desligado 🛑 (tweets postam direto)'}.`,
-        `Modo aprovação do Twitter ${subArg === 'on' ? 'ligado' : 'desligado'} por ${sender.all.join(' / ')} em ${chatId}.`);
+        `${subArg === 'on' ? '✅ aprovação on' : '🛑 aprovação off'}`,
+        `Modo aprovação ${subArg === 'on' ? 'ligado' : 'desligado'} por ${sender.all.join(' / ')} em ${chatId}.`);
       return;
     }
 
@@ -133,16 +133,16 @@ export class TwitterCommands implements CommandModule {
     if (subcommand === 'mentions') {
       const subArg = (args[1] || '').toLowerCase();
       if (subArg !== 'on' && subArg !== 'off') {
-        await this.app.reportError(msg, chatId, 'use */twitter mentions on* ou */twitter mentions off*.');
+        await this.app.reportError(msg, chatId, 'use */twitter mentions on|off*.');
         return;
       }
       await this.twitterToggle(msg, chatId, 'replyToMentions', subArg === 'on',
-        `resposta a menções ${subArg === 'on' ? 'ligada ✅ (bot responde menções no Twitter)' : 'desligada 🛑'}.`,
-        `Resposta a menções ${subArg === 'on' ? 'ligada' : 'desligada'} por ${sender.all.join(' / ')} em ${chatId}.`);
+        `${subArg === 'on' ? '✅ mentions on' : '🛑 mentions off'}`,
+        `Menções ${subArg === 'on' ? 'ligadas' : 'desligadas'} por ${sender.all.join(' / ')} em ${chatId}.`);
       return;
     }
 
-    await this.app.reportError(msg, chatId, 'subcomando desconhecido. Use */twitter* pra ver as opções.');
+    await this.app.reportError(msg, chatId, 'subcomando desconhecido. Use */twitter*.');
   }
 
   // ===========================================================================
@@ -156,9 +156,9 @@ export class TwitterCommands implements CommandModule {
    */
   private async twitterStatus(msg: Message, chatId: string): Promise<void> {
     const config = this.app.twitter.getConfig();
-    const enabledStatus = config.enabled ? '✅ ativado' : '🛑 desativado';
-    const approvalStatus = config.approvalMode ? '✅ ligado (pede op antes de postar)' : '🛑 desligado (posta direto)';
-    const mentionsStatus = config.replyToMentions ? '✅ ligado (responde menções)' : '🛑 desligado';
+    const enabledStatus = config.enabled ? '✅' : '🛑';
+    const approvalStatus = config.approvalMode ? '✅' : '🛑';
+    const mentionsStatus = config.replyToMentions ? '✅' : '🛑';
     // twitter-api-v2 é opcional — checa se carregou. Como TwitterBot importa
     // dinamicamente, não temos acesso direto à flag aqui. Usamos um try/catch
     // no require pra detectar.
@@ -169,26 +169,17 @@ export class TwitterCommands implements CommandModule {
     } catch {
       libInstalled = false;
     }
-    const libStatus = libInstalled ? '✅ instalado' : '🛑 não instalado (rode: npm i twitter-api-v2)';
+    const libStatus = libInstalled ? '✅' : '🛑 npm i twitter-api-v2';
     const pendingCount = this.app.twitter.pendingTweets.size;
     const interval = config.postIntervalHours || 4;
     const mentionInterval = config.mentionCheckIntervalMinutes || 15;
 
     const lines = [
-      '*Status do Twitter:*',
+      `Integração: ${enabledStatus} | Aprovação: ${approvalStatus} | Menções: ${mentionsStatus} (${mentionInterval}min)`,
+      `Lib: ${libStatus} | Auto-post: ${interval}h | Pendentes: ${pendingCount}`,
       '',
-      `Integração: ${enabledStatus}`,
-      `Modo aprovação: ${approvalStatus}`,
-      `Resposta a menções: ${mentionsStatus} (a cada ${mentionInterval}min)`,
-      `Biblioteca twitter-api-v2: ${libStatus}`,
-      `Auto-post: a cada ${interval}h`,
-      `Tweets pendentes (aguardando aprovação): ${pendingCount}`,
-      '',
-      '_Comandos:_',
-      '• */twitter postar* — gera um tweet do contexto deste chat',
-      '• */twitter on* / */twitter off* — liga/desliga a integração',
-      '• */twitter aprovar on* / */twitter aprovar off* — controla o modo aprovação',
-      '• */twitter mentions on* / */twitter mentions off* — controla resposta a menções',
+      '*/twitter postar | on | off*',
+      '*/twitter aprovar on|off | mentions on|off*',
     ];
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
@@ -209,35 +200,35 @@ export class TwitterCommands implements CommandModule {
       libInstalled = false;
     }
     if (!libInstalled) {
-      await this.app.reportError(msg, chatId, 'a biblioteca *twitter-api-v2* não está instalada. Rode `npm i twitter-api-v2` no terminal.');
+      await this.app.reportError(msg, chatId, 'biblioteca *twitter-api-v2* não instalada. Rode `npm i twitter-api-v2`.');
       return;
     }
     if (!this.app.aiConfig?.enabled) {
-      await this.app.reportError(msg, chatId, 'a IA precisa estar ativada pra gerar tweets. Use */ia on*.');
+      await this.app.reportError(msg, chatId, 'IA precisa estar on. Use */ia on*.');
       return;
     }
     try {
-      await this.app.notify(chatId, '🐦 gerando tweet do contexto deste chat...');
+      await this.app.notify(chatId, '🐦 gerando tweet...');
       const tweetData = await this.app.twitter.generateTweet(chatId);
       if (!tweetData) {
-        await this.app.reportError(msg, chatId, 'não tem contexto suficiente neste chat pra gerar um tweet ainda.');
+        await this.app.reportError(msg, chatId, 'sem contexto suficiente neste chat.');
         return;
       }
       const result = await this.app.twitter.postTweetWithApproval(chatId, tweetData);
       if (result === 'pending') {
         const config = this.app.twitter.getConfig();
         const target = config.approvalChatId || 'o PV do bot';
-        const imgNote = tweetData.imageData ? '\n\n🖼️ Inclui imagem anexada.' : '';
-        await this.app.notify(chatId, `🐦 tweet gerado e mandando pra aprovação em ${target}:\n\n"${tweetData.text}"${imgNote}\n\nResponda *"postar"* pra publicar ou *"descartar"* pra cancelar.`);
+        const imgNote = tweetData.imageData ? ' \u200d🖼️' : '';
+        await this.app.notify(chatId, `🐦 tweet em aprovação em ${target}${imgNote}:\n\n"${tweetData.text}"\n\nResponda *postar* ou *descartar*.`);
       } else if (result === 'posted') {
         const imgNote = tweetData.imageData ? ' (com imagem)' : '';
-        await this.app.notify(chatId, `✅ tweet postado${imgNote}!\n\n"${tweetData.text}"`);
+        await this.app.notify(chatId, `✅ tweet postado${imgNote}:\n\n"${tweetData.text}"`);
       } else {
-        await this.app.reportError(msg, chatId, 'não consegui postar o tweet. Verifique se as credenciais do Twitter estão configuradas em *twitter-config.json*.');
+        await this.app.reportError(msg, chatId, 'não consegui postar. Verifique *twitter-config.json*.');
       }
       await this.app.react(msg, EMOJI.SUCCESS);
     } catch (e) {
-      await this.app.reportError(msg, chatId, `erro ao gerar/postar tweet: ${(e as Error).message}`, e as Error);
+      await this.app.reportError(msg, chatId, `erro: ${(e as Error).message}`, e as Error);
     }
   }
 
@@ -267,7 +258,7 @@ export class TwitterCommands implements CommandModule {
       await this.app.notify(chatId, notifyMsg);
       this.app.log('TWITTER', logMsg);
     } catch (e) {
-      await this.app.reportError(msg, chatId, `erro ao salvar config do Twitter: ${(e as Error).message}`, e as Error);
+      await this.app.reportError(msg, chatId, `erro ao salvar config: ${(e as Error).message}`, e as Error);
     }
   }
 }

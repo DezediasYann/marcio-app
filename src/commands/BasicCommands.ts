@@ -174,38 +174,19 @@ export class BasicCommands implements CommandModule {
     await this.app.react(msg, EMOJI.LOADING);
 
     const helpText = [
-      '*Comandos disponíveis:*',
+      '*Comandos:*',
+      '!figurinha — cria figurinha',
+      '!pergunta <texto> — fala comigo',
+      '/resumo — resumo da conversa',
+      '/entrosao [0-2] — ajusta participação',
+      '!mute / !unmute — vota silenciar/desmutar',
+      '!ajuda — esta lista',
       '',
-      '🖼️ *!figurinha* — cria uma figurinha.',
-      '   • Responda a uma imagem/vídeo com *!figurinha*; ou',
-      '   • Envie *!figurinha <link do Twitter/X>*.',
-      '',
-      '🤖 *!pergunta <texto>* — fala diretamente comigo (IA). Posso também responder sozinho no grupo!',
-      '',
-      '📋 */resumo* — faz um resumo da conversa recente do grupo.',
-      '🎚️ */entrosao [0-2]* — ajusta o quão participativo o bot é (0 = quieto, 1 = normal, 2 = entrosão).',
-      '🤐 *!mute* — inicia/vota enquete pra silenciar o bot (1/3 do grupo).',
-      '🔊 *!unmute* — inicia/vota enquete pra desmutar o bot.',
-      '',
-      '❓ *!ajuda* — exibe esta lista de comandos.',
-      '',
-      '_Comandos restritos a *ops* (operadores):_',
-      '🔨 */ban* (ou !ban) — bane um usuário (responda à mensagem dele ou use */ban <número>*).',
-      '🔓 */unban* (ou !unban) — remove o banimento de um usuário.',
-      '📋 */banidos* (ou !banidos) — lista os usuários banidos.',
-      '⭐ */op* — dá permissão de op a um usuário (responda à mensagem dele ou use */op <número>*).',
-      '📉 */deop* — remove a permissão de op de um usuário.',
-      '📝 */ops* — lista os operadores atuais.',
-      '⭐ */fig* — gerencia figurinhas favoritas/nomeadas (/fig fav, /fig nome <nome>, /fig lista).',
-      '🎓 */educa <texto>* — adiciona uma regra permanente de comportamento da IA.',
-      '🗑️ */deseduca <id>* — remove uma regra pelo ID.',
-      '📋 */educacao* — lista as regras ativas.',
-      '🧠 */estilo* — mostra o que o bot aprendeu do estilo do grupo (gírias, métricas, etc).',
-      '🧠 */memoria* — gerencia memórias do bot (/memoria, /memoria <nome>, /memoria reset).',
-      '🤖 */ia* — liga/desliga a IA (/ia off, /ia on, /ia off global).',
-      '🐦 */twitter* — controla o Twitter do bot (/twitter postar, /twitter on/off).',
-      '🖼️ */perfil* — troca a foto de perfil do bot (responda a uma imagem com /perfil).',
-      '🎛️ */admin* — painel de controle remoto (use no PV do bot): /admin grupos, /admin ia <id> <on/off>, /admin entrosao <id> <nivel>, /admin log, /admin stats.'
+      '_OP:_',
+      '/ia on|off / /fig / /educa / /deseduca / /educacao',
+      '/memoria / /perfil / /estilo / /twitter',
+      '/ban / /unban / /banidos / /op / /deop / /ops',
+      '/admin (PV do bot)',
     ].join('\n');
 
     try {
@@ -239,17 +220,17 @@ export class BasicCommands implements CommandModule {
 
     const question = msg.body.replace(/^!pergunta\s*/i, '').trim();
     if (!question) {
-      await this.app.reportError(msg, chatId, 'para usar o comando: *!pergunta <sua mensagem ou pergunta>*');
+      await this.app.reportError(msg, chatId, 'use *!pergunta <texto>*');
       return;
     }
 
     if (!this.app.aiConfig?.enabled) {
-      await this.app.reportError(msg, chatId, 'a IA está desativada globalmente. Peça para um op ativar com */ia on*.');
+      await this.app.reportError(msg, chatId, 'IA desativada globalmente. Use */ia on global*.');
       return;
     }
 
     if (this.app.brain.aiDisabledChats.has(chatId)) {
-      await this.app.reportError(msg, chatId, 'a IA está desativada neste chat. Peça para um op ativar com */ia on*.');
+      await this.app.reportError(msg, chatId, 'IA desativada neste chat. Use */ia on*.');
       return;
     }
 
@@ -296,7 +277,7 @@ export class BasicCommands implements CommandModule {
         this.app.brain.lastAutoResponse.set(chatId, Date.now());  // atualiza cooldown
         await this.app.react(msg, EMOJI.SUCCESS);
       } else {
-        await this.app.reportError(msg, chatId, 'a IA retornou uma resposta vazia. Tente novamente.');
+        await this.app.reportError(msg, chatId, 'IA retornou resposta vazia. Tenta de novo.');
       }
     } catch (error) {
       stopTyping();
@@ -306,9 +287,9 @@ export class BasicCommands implements CommandModule {
                        e.message.includes('fetch failed') ||
                        e.message.includes('Serviço de IA');
       if (isOffline) {
-        await this.app.reportError(msg, chatId, 'o serviço de IA tá offline. Peça pro op iniciar com `node ai-service.js` no terminal.');
+        await this.app.reportError(msg, chatId, 'IA offline. Pede pra um op rodar `node ai-service.js`.');
       } else {
-        await this.app.reportError(msg, chatId, `erro ao falar com a IA: ${e.message}`, e);
+        await this.app.reportError(msg, chatId, `erro IA: ${e.message}`, e);
       }
     }
   }
@@ -328,12 +309,12 @@ export class BasicCommands implements CommandModule {
     await this.app.react(msg, EMOJI.LOADING);
 
     if (!this.app.aiConfig?.enabled) {
-      await this.app.reportError(msg, chatId, 'a IA está desativada globalmente. Peça para um op ativar com */ia on*.');
+      await this.app.reportError(msg, chatId, 'IA desativada globalmente. Use */ia on global*.');
       return;
     }
 
     if (this.app.brain.aiDisabledChats.has(chatId)) {
-      await this.app.reportError(msg, chatId, 'a IA está desativada neste chat. Peça para um op ativar com */ia on*.');
+      await this.app.reportError(msg, chatId, 'IA desativada neste chat. Use */ia on*.');
       return;
     }
 
@@ -370,7 +351,7 @@ export class BasicCommands implements CommandModule {
       }
 
       if (lines.length === 0) {
-        await this.app.reportError(msg, chatId, 'não tem mensagens suficientes pra resumir ainda.');
+        await this.app.reportError(msg, chatId, 'não tem msgs suficientes pra resumir.');
         return;
       }
 
@@ -500,11 +481,11 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
 
       const cleaned = this.app.brain.cleanResponse(content || '');
       if (!cleaned || !cleaned.trim() || cleaned.trim() === '...') {
-        await this.app.reportError(msg, chatId, 'não consegui gerar o resumo. Tente novamente.');
+        await this.app.reportError(msg, chatId, 'não consegui gerar o resumo.');
         return;
       }
 
-      await this.app.notify(chatId, `📋 *Resumo da conversa:*\n\n${cleaned}`);
+      await this.app.notify(chatId, `📋 ${cleaned}`);
       await this.app.react(msg, EMOJI.SUCCESS);
       this.app.debug('RESUMO', `resumo enviado em ${chatId}`);
     } catch (error) {
@@ -514,9 +495,9 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
                        e.message.includes('fetch failed') ||
                        e.message.includes('Serviço de IA');
       if (isOffline) {
-        await this.app.reportError(msg, chatId, 'o serviço de IA tá offline. Peça pro op iniciar com `node ai-service.js` no terminal.');
+        await this.app.reportError(msg, chatId, 'IA offline. Pede pra um op rodar `node ai-service.js`.');
       } else {
-        await this.app.reportError(msg, chatId, `erro ao gerar resumo: ${e.message}`, e);
+        await this.app.reportError(msg, chatId, `erro resumo: ${e.message}`, e);
       }
     }
   }
@@ -542,19 +523,7 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     if (!arg) {
       const level = this.app.brain.chatEntrosaoLevel.get(chatId) ?? 1.0;
       const pct = Math.round(level * 100);
-      const lines = [
-        '*Nível de entrosão deste chat:*',
-        '',
-        `Atual: *${level.toFixed(2)}* (${pct}%)`,
-        '',
-        '_O que isso significa:_',
-        '• *0* = bot quieto (não responde sozinho)',
-        '• *1* = normal',
-        '• *2* = entrosão (2x mais participativo)',
-        '',
-        '_Use */entrosao <0-2>* pra ajustar. Ex.: /entrosao 1.5_'
-      ];
-      await this.app.notify(chatId, lines.join('\n'));
+      await this.app.notify(chatId, `🎚️ entrosão: *${level.toFixed(2)}* (${pct}%) — 0 quieto | 1 normal | 2 entrosão`);
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
@@ -562,18 +531,18 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     // /entrosao <número> — aceita vírgula decimal brasileira também
     const num = parseFloat(arg.replace(',', '.'));
     if (isNaN(num)) {
-      await this.app.reportError(msg, chatId, `valor inválido. Use um número entre *0* e *2* (ex.: */entrosao 1.5*).`);
+      await this.app.reportError(msg, chatId, `valor inválido. Use 0-2 (ex.: */entrosao 1.5*).`);
       return;
     }
 
     if (num < 0 || num > 2) {
-      await this.app.reportError(msg, chatId, `o valor tem que estar entre *0* e *2*. (Você digitou ${num}.)`);
+      await this.app.reportError(msg, chatId, `valor tem que ser 0-2 (você digitou ${num}).`);
       return;
     }
 
     this.app.brain.chatEntrosaoLevel.set(chatId, num);
     const pct = Math.round(num * 100);
-    await this.app.notify(chatId, `🎚️ entrosão ajustada pra *${num.toFixed(2)}* (${pct}%) neste chat.`);
+    await this.app.notify(chatId, `🎚️ entrosão: *${num.toFixed(2)}* (${pct}%)`);
     await this.app.react(msg, EMOJI.SUCCESS);
     this.app.debug('ENTROSAO', `chat ${chatId} nível setado pra ${num}`);
   }
@@ -605,12 +574,12 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
       if (isGlobal) {
         if (this.app.aiConfig) this.app.aiConfig.enabled = false;
         await this.app.react(msg, EMOJI.SUCCESS);
-        await this.app.notify(chatId, 'IA desativada *globalmente* 🛑\n\nTodos os chats não vão mais receber respostas da IA. Outros comandos continuam funcionando.');
+        await this.app.notify(chatId, '🛑 IA off (global)');
         this.app.log('IA', `IA desativada globalmente.`);
       } else {
         this.app.brain.aiDisabledChats.add(chatId);
         await this.app.react(msg, EMOJI.SUCCESS);
-        await this.app.notify(chatId, `IA desativada neste chat 🛑\n\nEste chat não vai mais receber respostas da IA. Use */ia on* pra reativar.`);
+        await this.app.notify(chatId, '🛑 IA off');
         this.app.log('IA', `IA desativada no chat ${chatId}.`);
       }
       return;
@@ -622,34 +591,24 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
         if (this.app.aiConfig) this.app.aiConfig.enabled = true;
         this.app.brain.aiDisabledChats.clear();  // limpa também as desativações por chat
         await this.app.react(msg, EMOJI.SUCCESS);
-        await this.app.notify(chatId, 'IA reativada *globalmente* ✅\n\nTodos os chats voltam a receber respostas da IA.');
+        await this.app.notify(chatId, '✅ IA on (global)');
         this.app.log('IA', `IA reativada globalmente.`);
       } else {
         this.app.brain.aiDisabledChats.delete(chatId);
         await this.app.react(msg, EMOJI.SUCCESS);
-        await this.app.notify(chatId, `IA reativada neste chat ✅`);
+        await this.app.notify(chatId, '✅ IA on');
         this.app.log('IA', `IA reativada no chat ${chatId}.`);
       }
       return;
     }
 
     // /ia (sem subcomando) → mostra status
-    const globalStatus = this.app.aiConfig?.enabled ? '✅ ativada' : '🛑 desativada';
-    const chatStatus = this.app.brain.aiDisabledChats.has(chatId) ? '🛑 desativada' : '✅ ativada';
+    const globalStatus = this.app.aiConfig?.enabled ? '✅' : '🛑';
+    const chatStatus = this.app.brain.aiDisabledChats.has(chatId) ? '🛑' : '✅';
     const disabledCount = this.app.brain.aiDisabledChats.size;
 
-    const lines = [
-      '*Status da IA:*',
-      '',
-      `Global: ${globalStatus}`,
-      `Este chat: ${chatStatus}`,
-    ];
-    if (disabledCount > 0) {
-      lines.push(`Chats com IA desativada: ${disabledCount}`);
-    }
-    lines.push('', '_Comandos:_', '• */ia off* — desativa neste chat', '• */ia on* — reativa neste chat', '• */ia off global* — desativa em tudo', '• */ia on global* — reativa em tudo');
-
-    await this.app.notify(chatId, lines.join('\n'));
+    const line = `IA global: ${globalStatus} | chat: ${chatStatus}${disabledCount > 0 ? ` | ${disabledCount} chats off` : ''}`;
+    await this.app.notify(chatId, line);
     await this.app.react(msg, EMOJI.SUCCESS);
   }
 
@@ -694,10 +653,10 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
       }
       if (totalCleared > 0) {
         await this.app.react(msg, EMOJI.SUCCESS);
-        await this.app.notify(chatId, `apagadas *${totalCleared}* memória(s) que vieram deste chat ✅\n\n_Memórias são globais por usuário; apenas as que vieram deste chat foram removidas._`);
+        await this.app.notify(chatId, `✅ ${totalCleared} memória(s) removidas deste chat`);
         this.app.log('MEMORY', `Memórias resetadas em ${chatId}: ${totalCleared} fato(s) removidos.`);
       } else {
-        await this.app.reportError(msg, chatId, 'não há memórias que vieram deste chat ainda.');
+        await this.app.reportError(msg, chatId, 'não há memórias deste chat.');
       }
       return;
     }
@@ -707,12 +666,12 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
       const userName = parts[1];
       const fact = parts.slice(2).join(' ').trim();
       if (!userName || !fact) {
-        await this.app.reportError(msg, chatId, 'use */memoria add <nome> <fato>*. Ex.: /memoria add João pesa 50kg');
+        await this.app.reportError(msg, chatId, 'use */memoria add <nome> <fato>*');
         return;
       }
       this.app.memory.add(chatId, userName, fact);
       await this.app.react(msg, EMOJI.SUCCESS);
-      await this.app.notify(chatId, `fato adicionado ✅\n\n_${userName}: ${fact}_`);
+      await this.app.notify(chatId, `✅ ${userName}: ${fact}`);
       this.app.log('MEMORY', `Memória manual em ${chatId}: ${userName} — "${fact}".`);
       return;
     }
@@ -721,14 +680,10 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     if (subcommand && subcommand !== '') {
       const userMems = this.app.memory.forUser(subcommand);
       if (userMems.length === 0) {
-        await this.app.notify(chatId, `nenhuma memória sobre *${subcommand}* ainda.`);
+        await this.app.notify(chatId, `sem memórias sobre *${subcommand}*.`);
       } else {
-        const lines = [`*Memórias sobre ${subcommand} (${userMems.length}):*`, ''];
-        userMems.forEach((m, i) => {
-          const date = new Date(m.timestamp).toLocaleDateString('pt-BR');
-          lines.push(`${i + 1}. _${m.fact}_ (${date})`);
-        });
-        await this.app.notify(chatId, lines.join('\n'));
+        const facts = userMems.map(m => m.fact).join('; ');
+        await this.app.notify(chatId, `*${subcommand}* (${userMems.length}): ${facts}`);
       }
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
@@ -738,19 +693,19 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     const userNames = this.app.memory.allUsers();
 
     if (userNames.length === 0) {
-      await this.app.notify(chatId, 'nenhuma memória ainda. O bot aprende fatos automaticamente conforme a galera conversa.');
+      await this.app.notify(chatId, 'nenhuma memória ainda.');
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
 
-    const lines = [`*Memórias (${userNames.length} pessoa(s)):*`, ''];
+    const lines: string[] = [];
     let totalFacts = 0;
     for (const name of userNames) {
       const facts = this.app.memory.forUser(name);
       totalFacts += facts.length;
-      lines.push(`• *${name}* (${facts.length}): ${facts.map(m => m.fact).join('; ')}`);
+      lines.push(`*${name}* (${facts.length}): ${facts.map(m => m.fact).join('; ')}`);
     }
-    lines.push('', `_Total: ${totalFacts} fato(s). Use /memoria reset pra apagar os que vieram deste chat._`);
+    lines.push(`Total: ${totalFacts} fatos`);
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
   }
@@ -794,7 +749,7 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     }
 
     if (!mediaSource) {
-      await this.app.reportError(msg, chatId, 'mande uma imagem com a legenda */perfil* ou responda a uma imagem com */perfil*.');
+      await this.app.reportError(msg, chatId, 'mande uma imagem com */perfil* ou responda a uma imagem com */perfil*.');
       return;
     }
 
@@ -811,13 +766,13 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
       await (this.app.whatsapp.client as any).setProfilePicture(media);
 
       await this.app.react(msg, EMOJI.SUCCESS);
-      await this.app.notify(chatId, 'foto de perfil atualizada com sucesso ✅');
+      await this.app.notify(chatId, '✅ perfil atualizado');
       this.app.log('PERFIL', 'Foto de perfil do bot alterada.');
       this.app.debug('PERFIL', 'foto de perfil do bot alterada');
     } catch (error) {
       const e = error as Error;
       this.app.debug('PERFIL', `erro ao mudar foto: ${e.message}`);
-      await this.app.reportError(msg, chatId, `erro ao mudar a foto: ${e.message}`, e);
+      await this.app.reportError(msg, chatId, `erro: ${e.message}`, e);
     }
   }
 
@@ -842,12 +797,12 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     if (subcommand === 'reset') {
       const sender = await this.app.permissions.resolveSenderIds(msg);
       if (!this.app.permissions.isOp(msg.fromMe, sender.all)) {
-        await this.app.reportError(msg, chatId, 'você não tem permissão para resetar o perfil. Apenas *ops*.');
+        await this.app.reportError(msg, chatId, 'só *ops* podem resetar.');
         return;
       }
       const profile = this.app.profile.get(chatId);
       if (profile.style.totalMessages === 0) {
-        await this.app.reportError(msg, chatId, 'não há perfil aprendido neste chat ainda.');
+        await this.app.reportError(msg, chatId, 'não há perfil aprendido neste chat.');
         return;
       }
       // Reseta todos os campos pra vazio (Profile não tem delete, mas mutar + save
@@ -865,14 +820,14 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
       profile.lastUpdated = new Date().toISOString();
       this.app.profile.save();
       await this.app.react(msg, EMOJI.SUCCESS);
-      await this.app.notify(chatId, 'perfil de estilo resetado ✅ o bot vai aprender de novo do zero.');
+      await this.app.notify(chatId, '✅ perfil resetado');
       return;
     }
 
     // /estilo — mostra o perfil
     const profile = this.app.profile.get(chatId);
     if (profile.style.totalMessages === 0) {
-      await this.app.notify(chatId, 'ainda não aprendi nada neste chat. Manda umas mensagens pra eu começar a aprender o estilo da galera.');
+      await this.app.notify(chatId, 'ainda não aprendi nada neste chat.');
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }
@@ -882,39 +837,25 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     const lowercaseRatio = Math.round(s.lowercaseMessages / s.totalMessages * 100);
     const punctuationRatio = Math.round(s.punctuatedMessages / s.totalMessages * 100);
     const emojiRatio = Math.round(s.emojiMessages / s.totalMessages * 100);
-    const avgEmojis = (s.totalEmojis / s.totalMessages).toFixed(1);
 
     const topVocab = Object.entries(profile.vocabulary)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([word, count]) => `${word} (${count}x)`)
+      .slice(0, 5)
+      .map(([word, count]) => `"${word}" (${count}x)`)
       .join(', ');
 
     const topUsers = Object.entries(profile.userActivity)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([name, count]) => `${name} (${count}x)`)
-      .join('\n');
+      .map(([name, count]) => `${name} (${count})`)
+      .join(', ');
 
     const lines = [
-      `*Perfil aprendido (${s.totalMessages} mensagens):*`,
-      '',
-      `*Estilo:*`,
-      `• Tamanho médio: ${avgLength} chars`,
-      `• ${lowercaseRatio}% em minúsculas`,
-      `• ${punctuationRatio}% com pontuação formal`,
-      `• ${emojiRatio}% com emoji (média ${avgEmojis}/msg)`,
-      `• ${s.capsMessages} mensagens com CAPS`,
+      `${s.totalMessages} msgs | tam médio: ${avgLength} chars`,
+      `${lowercaseRatio}% minúsculas | ${punctuationRatio}% pontuação | ${emojiRatio}% emoji`,
     ];
-
-    if (topVocab) {
-      lines.push('', `*Gírias mais usadas:*`, topVocab);
-    }
-    if (topUsers) {
-      lines.push('', `*Mais ativos:*`, topUsers);
-    }
-
-    lines.push('', `_Use /estilo reset pra apagar (só ops)._`);
+    if (topVocab) lines.push(`Gírias: ${topVocab}`);
+    if (topUsers) lines.push(`Ativos: ${topUsers}`);
 
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
@@ -934,18 +875,18 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
 
     const text = msg.body.replace(/^\/educa\s*/i, '').trim();
     if (!text) {
-      await this.app.reportError(msg, chatId, 'forneça a regra. Ex.: */educa quando alguém falar de futebol, torce pro Corinthians*');
+      await this.app.reportError(msg, chatId, 'use */educa <regra>* (ex: /educa torce pro Corinthians)');
       return;
     }
 
     const result = this.app.directives.add(text, sender.all.join(' / '));
     if (!result.ok) {
-      await this.app.reportError(msg, chatId, result.error || 'erro ao adicionar diretiva.');
+      await this.app.reportError(msg, chatId, result.error || 'erro ao adicionar.');
       return;
     }
 
     await this.app.react(msg, EMOJI.SUCCESS);
-    await this.app.notify(chatId, `regra adicionada (ID #${result.directive!.id}) ✅\n\n_${result.directive!.text}_\n\nA IA vai seguir essa regra em todas as conversas a partir de agora.`);
+    await this.app.notify(chatId, `✅ regra #${result.directive!.id} adicionada: ${result.directive!.text}`);
     this.app.log('DIRECTIVE', `Diretiva #${result.directive!.id} adicionada por ${sender.all.join(' / ')}: ${text}`);
   }
 
@@ -958,7 +899,7 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     const arg = msg.body.replace(/^\/deseduca\s*/i, '').trim();
     const id = parseInt(arg, 10);
     if (!arg || isNaN(id)) {
-      await this.app.reportError(msg, chatId, 'forneça o ID da regra. Ex.: */deseduca 3* (use /educacao pra ver os IDs).');
+      await this.app.reportError(msg, chatId, 'use */deseduca <id>* (ex: /deseduca 3)');
       return;
     }
 
@@ -966,13 +907,13 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     const list = this.app.directives.all();
     const directive = list.find(d => d.id === id);
     if (!directive) {
-      await this.app.reportError(msg, chatId, `não existe regra com ID #${id}. Use */educacao* pra ver as regras.`);
+      await this.app.reportError(msg, chatId, `regra #${id} não existe. Use */educacao* pra ver.`);
       return;
     }
 
     this.app.directives.remove(id);
     await this.app.react(msg, EMOJI.SUCCESS);
-    await this.app.notify(chatId, `regra #${id} removida ✅\n\n_${directive.text}_`);
+    await this.app.notify(chatId, `✅ regra #${id} removida: ${directive.text}`);
     this.app.log('DIRECTIVE', `Diretiva #${id} removida.`);
   }
 
@@ -984,13 +925,9 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
 
     const list = this.app.directives.all();
     if (list.length === 0) {
-      await this.app.notify(chatId, 'nenhuma regra de educação ativa. Use */educa <texto>* pra adicionar.');
+      await this.app.notify(chatId, 'nenhuma regra ativa. Use */educa <texto>* pra adicionar.');
     } else {
-      const lines = [`*Regras de educação (${list.length}/${DIRECTIVE_MAX_COUNT}):*`, ''];
-      list.forEach(d => {
-        lines.push(`*#${d.id}* — ${d.text}`);
-      });
-      lines.push('', `_Use /deseduca <id> pra remover._`);
+      const lines = list.map(d => `#${d.id} ${d.text}`);
       await this.app.notify(chatId, lines.join('\n'));
     }
 

@@ -251,7 +251,13 @@ export class MarcioBrain {
 
   // === Hot-reload caches (5s TTL) ===
   private aiConfigCache: RuntimeAIConfig | null = null;
-  private aiConfigCacheTime = 0;
+  /**
+   * Timestamp (ms) da última leitura do cache de AI config.
+   * Público pra o ControlPanel invalidar (setar = 0) quando o usuário
+   * edita a config via painel — força reload na próxima chamada de
+   * getAIConfig().
+   */
+  aiConfigCacheTime = 0;
   private systemPromptCache: string | null = null;
   private systemPromptCacheTime = 0;
   private readonly CACHE_TTL_MS = 5000;

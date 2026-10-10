@@ -163,6 +163,33 @@ export class Retroactive {
   }
 
   /**
+   * Extrai as últimas N mensagens de TODOS os chats pra uso externo
+   * (ex: gerar tweet). Tem senderName + text + timestamp — muito melhor
+   * que ler bot.log (que não tem nome).
+   *
+   * @param maxMsgs Qtde máxima de mensagens.
+   * @returns Array de { senderName, text, timestamp, chatId } ordenadas por timestamp (mais recentes primeiro).
+   */
+  getRecentMessages(maxMsgs: number): Array<{ senderName: string; text: string; timestamp: number; chatId: string }> {
+    const all: Array<{ senderName: string; text: string; timestamp: number; chatId: string }> = [];
+    for (const [chatId, entries] of this.decisionLog) {
+      for (const e of entries) {
+        if (e.text && e.text.trim().length >= 3) {
+          all.push({
+            senderName: e.senderName || 'Alguém',
+            text: e.text,
+            timestamp: e.timestamp,
+            chatId,
+          });
+        }
+      }
+    }
+    // Ordena por timestamp (mais recente primeiro)
+    all.sort((a, b) => b.timestamp - a.timestamp);
+    return all.slice(0, maxMsgs);
+  }
+
+  /**
    * Limpa a decision log de um chat (ou tudo). Pra //retro limpar.
    */
   clear(chatId?: string): void {

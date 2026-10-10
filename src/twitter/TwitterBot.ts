@@ -240,6 +240,44 @@ export class TwitterBot {
   // ===========================================================================
 
   /**
+   * Extrai mensagens de usuário do bot.log quando o contexto em memória tá vazio.
+   * O log tem linhas tipo:
+   *   [time] [DEBUG MSG] recebida: 120363xxx@g.us: texto da mensagem
+   *   [time] [DEBUG MSG] recebida: 55219xxx@c.us [sticker]:
+   * A gente parseia essas linhas, extrai o texto, filtra comandos, e retorna
+   * formatado como "[Alguém]: texto" (sem nome real — o log não tem).
+   *
+   * @param maxLines Qtde máxima de mensagens pra extrair.
+   * @returns Array de strings formatadas "[Alguém]: texto".
+   */
+  private extractMessagesFromLog(maxLines: number): string[] {
+    try {
+      const logPath = this.app.config.logDir + '/bot.log';
+      const logContent = fs.readFileSync(logPath, 'utf8');
+      const allLines = logContent.split('\n').filter(l => l.length > 0);
+      // Pega as últimas N*3 linhas (nem toda é MSG)
+      const recent = allLines.slice(-maxLines * 3);
+
+      const messages: string[] = [];
+      for (const line of recent) {
+        // Match: [time] [DEBUG MSG] recebida: chatId: texto
+        const match = line.match(/\[DEBUG MSG\] recebida: \S+: (.+)$/);
+        if (!match) continue;
+        const text = match[1].trim();
+        if (!text || text === '(sem texto)') continue;
+        if (text.startsWith('!') || text.startsWith('/')) continue;
+        if (text.startsWith('[mandou') || text.startsWith('[respondendo') || text.startsWith('[CONTEÚDO')) continue;
+        messages.push(`[Alguém]: ${text}`);
+      }
+
+      return messages;
+    } catch (e) {
+      this.app.debug('TWITTER', `erro ao ler bot.log: ${(e as Error).message}`);
+      return [];
+    }
+  }
+
+  /**
    * Gera um tweet a partir das últimas mensagens do chat `chatId`.
    *
    * Pega o contexto acumulado em `app.context.getRecent(chatId)`, filtra as
@@ -259,18 +297,12 @@ export class TwitterBot {
    *          suficiente ou a IA retornar vazio.
    */
   async generateTweet(chatId: string): Promise<{ text: string; imageData: string | null; imageMimetype: string | null } | null> {
-    const ctx = this.app.context.getRecent(chatId);
-    if (!ctx || ctx.length === 0) {
-      this.app.debug('TWITTER', `sem contexto em ${chatId} pra gerar tweet`);
-      return null;
-    }
-
     const config = this.getConfig();
 
     // Pega as últimas 30 mensagens do contexto, filtra comandos e mensagens do
     // bot. Também coleta imagens (mensagens com imageData + imageMimetype) pra
     // poder anexá-las ao tweet se a IA decidir que faz sentido.
-    const recent = ctx.slice(-30);
+    const recent = this.app.context.getRecent(chatId).slice(-30);
     const lines: string[] = [];
     const images: Array<{ data: string; mimetype: string }> = [];
     for (const m of recent) {
@@ -278,6 +310,7 @@ export class TwitterBot {
       const text = String(m.content).trim();
       if (!text) continue;
       if (text.startsWith('!') || text.startsWith('/')) continue;  // comandos
+      if (text.startsWith('[mandou') || text.startsWith('[respondendo') || text.startsWith('[CONTEÚDO')) continue; // placeholders
       if (m.role === 'assistant') continue;  // pula mensagens do próprio bot
       const name = m.sender || 'Alguém';
       lines.push(`[${name}]: ${text}`);
@@ -286,45 +319,72 @@ export class TwitterBot {
       }
     }
 
+    // Se não tem contexto em memória, tenta buscar do decision-log
+    // (Retroactive.getRecentMessages). O decision-log tem senderName + text
+    // + timestamp — MUITO melhor que bot.log (que não tem nome).
     if (lines.length === 0) {
-      this.app.debug('TWITTER', `nenhuma mensagem de usuário em ${chatId} pra gerar tweet`);
+      this.app.debug('TWITTER', `sem contexto em memória — buscando decision-log`);
+      if (this.app.retroactive) {
+        const recentMsgs = this.app.retroactive.getRecentMessages(30);
+        if (recentMsgs.length > 0) {
+          // Inverte pra ordem cronológica (mais antigo → mais recente)
+          recentMsgs.reverse();
+          for (const m of recentMsgs) {
+            // Filtra comandos e placeholders
+            const text = m.text.trim();
+            if (!text || text.startsWith('!') || text.startsWith('/')) continue;
+            if (text.startsWith('[mandou') || text.startsWith('[respondendo') || text.startsWith('[CONTEÚDO')) continue;
+            lines.push(`[${m.senderName}]: ${text}`);
+          }
+          this.app.debug('TWITTER', `recuperadas ${lines.length} mensagens do decision-log`);
+        }
+      }
+    }
+
+    // Se ainda não tem, tenta bot.log como último recurso
+    if (lines.length === 0) {
+      this.app.debug('TWITTER', `decision-log vazio — tentando bot.log`);
+      const logLines = this.extractMessagesFromLog(50);
+      if (logLines.length > 0) {
+        lines.push(...logLines);
+        this.app.debug('TWITTER', `recuperadas ${logLines.length} mensagens do bot.log`);
+      }
+    }
+
+    if (lines.length === 0) {
+      this.app.debug('TWITTER', `nenhuma mensagem encontrada (memória + log) pra gerar tweet`);
       return null;
     }
 
     // Usa só as últimas 20 linhas formatadas pra não estourar o prompt.
     const conversationText = lines.slice(-20).join('\n');
 
-    // Monta prompt. Inclui referenceStyle (se houver no config do Twitter) e a
-    // instrução do marcador [COM_IMAGEM], que a IA usa pra sinalizar quando
-    // quer anexar a imagem mais recente da conversa ao tweet.
+    // Monta prompt. Usa a PERSONALIDADE REAL do Márcio (system-prompt.txt)
+    // como base — mesma voz do WhatsApp. Depois adiciona regras específicas
+    // de Twitter (280 chars, não citar nomes, etc).
+    const marcioPersonality = this.app.brain.getSystemPrompt();
+
     let tweetPrompt = [
-      'Você é o Márcio Pinto no Twitter. Escreva UM tweet baseado nas conversas recentes do seu grupo de WhatsApp.',
+      '=== SUA PERSONALIDADE (mesma do WhatsApp) ===',
+      marcioPersonality,
       '',
-      'REGRAS:',
+      '=== AGORA VOCÊ ESTÁ NO TWITTER ===',
+      'Escreva UM tweet baseado nas conversas recentes do seu grupo de WhatsApp.',
+      'Use a MESMA personalidade, MESMO estilo, MESMA voz que você usa no WhatsApp.',
+      'Você é a mesma pessoa — só que postando no Twitter em vez de respondendo no grupo.',
+      '',
+      'REGRAS DO TWITTER:',
       '- Máximo 280 caracteres.',
-      '- Português brasileiro, minúsculas, informal.',
       '- NUNCA cite nomes reais de pessoas do grupo.',
-      '- Pode ser opinião política (marxista/petista) MAS com sutileza — não é propaganda, é uma pessoa real postando.',
       '- Pode comentar algo que aconteceu no grupo SEM identificar quem disse.',
+      '- Pode ser sobre QUALQUER assunto que apareceu no grupo, não só política.',
+      '- Estilo twitter brasileiro: curto, direto, às vezes irônico.',
+      '- NÃO é propaganda política. É uma pessoa real postando. Política é só UM dos temas.',
       '',
       'NÃO SEJA CARICATO:',
-      '- NÃO use "liberalóide", "extrema direita", "fascista" — isso é caricatura de petista.',
-      '- NÃO exagere. Um tweet tipo "os liberal tá surtando kkk" é ok, mas "amo ver a extrema direita passando vergonha com IA" é exagero.',
-      '- Seja NATURAL. Posta como uma pessoa real de 20 anos postaria — observação casual, piada, opinião breve.',
-      '- Pode ser sobre QUALQUER assunto que apareceu no grupo, não só política.',
-      '- Se a conversa foi sobre futebol, posta sobre futebol. Se foi sobre trabalho, sobre trabalho. Política é só UM dos temas.',
-      '- Estilo twitter brasileiro: curto, direto, às vezes irônico.',
-      '',
-      'EXEMPLOS BONS:',
-      '- "mano, o debate tava tão tenso que até meu gato parou pra assistir"',
-      '- "descobri que meu amigo acha que 50 reais é muito dinheiro. gente, a gente tá frito"',
-      '- "o lula falou tudo hoje, não tem como negar"',
-      '- "kkkkk não acredito que isso aconteceu de verdade"',
-      '',
-      'EXEMPLOS RUINS (NÃO FAÇA):',
-      '- "os liberalóide já tão surtando no grupo kkkkkkkk amo ver a extrema direita passando vergonha com IA" ← caricato',
-      '- "viva o pt! lula livre! pai tá on!" ← fanatismo',
-      '- "como marxista, analiso que a burguesia está em declínio" ← acadêmico demais',
+      '- NÃO use "liberalóide", "extrema direita", "fascista" — isso é caricatura.',
+      '- Seja NATURAL. Posta como uma pessoa real de 20 anos postaria.',
+      '- Se a conversa foi sobre futebol, posta sobre futebol. Se foi sobre trabalho, sobre trabalho.',
       '',
       'Responda SÓ com o tweet, sem explicações. NUNCA comece com "!" ou "/".',
     ].join('\n');
@@ -542,6 +602,67 @@ export class TwitterBot {
       this.app.debug('TWITTER', `auto-post result=${result} | source=${sourceChatId}${tweetData.imageData ? ' (com imagem)' : ''}`);
     } catch (e) {
       this.app.debug('TWITTER', `erro no ciclo de auto-post: ${(e as Error).message}`);
+    }
+  }
+
+  // ===========================================================================
+  // PAINEL — gera tweet e retorna pro painel (sem mandar pro WhatsApp)
+  // ===========================================================================
+
+  /**
+   * Gera um tweet e retorna pro painel (sem mandar pra WhatsApp nem postar).
+   * O painel mostra o tweet e o usuário decide se posta ou cancela.
+   *
+   * @returns { text, hasImage } ou null se não conseguiu gerar.
+   */
+  async generateForPanel(): Promise<{ text: string; hasImage: boolean } | null> {
+    const config = this.getConfig();
+    if (!config.enabled || !TwitterApi) return null;
+
+    // Escolhe chat de origem (mesma lógica do generateAndPostTweet)
+    let sourceChatId: string | null = null;
+    if (config.sourceChats && config.sourceChats.length > 0) {
+      const found = config.sourceChats.find(id => this.app.context.count(id) > 0);
+      sourceChatId = found || config.sourceChats[0];
+    }
+    if (!sourceChatId) {
+      for (const id of this.app.context.activeChatIds()) {
+        if (id.endsWith('@g.us') && this.app.context.count(id) > 0) {
+          sourceChatId = id;
+          break;
+        }
+      }
+    }
+    if (!sourceChatId) {
+      this.app.debug('TWITTER', `generateForPanel: nenhum chat com contexto`);
+      return null;
+    }
+
+    const tweetData = await this.generateTweet(sourceChatId);
+    if (!tweetData) return null;
+
+    return { text: tweetData.text, hasImage: !!tweetData.imageData };
+  }
+
+  /**
+   * Posta um tweet DIRETO (sem aprovação no WhatsApp).
+   * Usado pelo painel quando o usuário clica "confirmar" depois de ver o tweet.
+   *
+   * @param text Texto do tweet (já gerado e aprovado pelo usuário no painel).
+   * @returns 'posted' ou 'error'.
+   */
+  async postDirect(text: string): Promise<'posted' | 'error'> {
+    if (!TwitterApi) return 'error';
+    const twitterClient = this.getClient();
+    if (!twitterClient) return 'error';
+
+    try {
+      await twitterClient.v2.tweet(text);
+      this.app.log('TWITTER', `✅ Tweet postado direto pelo painel: "${text}"`);
+      return 'posted';
+    } catch (e) {
+      this.app.debug('TWITTER', `erro ao postar direto: ${(e as Error).message}`);
+      return 'error';
     }
   }
 

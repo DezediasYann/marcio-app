@@ -23,6 +23,21 @@ export class WhatsAppClient {
   private app: MarcioApp;
 
   /**
+   * Último QR code gerado (string crua do whatsapp-web.js).
+   * Setado no evento 'qr', limpo no evento 'ready'.
+   * Lido pelo ControlPanel via GET /api/qr pra exibir no dashboard.
+   */
+  lastQr: string | null = null;
+
+  /**
+   * Timestamp (epoch ms) do último evento 'ready' do client — ou seja,
+   * a última vez que o WhatsApp ficou conectado (seja boot inicial ou
+   * reconnect após queda). Exposto no /api/bot/status pelo ControlPanel.
+   * 0 significa que nunca conectou ainda.
+   */
+  lastReconnect: number = 0;
+
+  /**
    * IDs das mensagens enviadas pelo próprio bot (loop-guard).
    * Quando o bot manda uma msg, registra o ID aqui por 10s.
    * O handler de message_create ignora essas msgs — sem isso, comandos
@@ -71,6 +86,8 @@ export class WhatsAppClient {
 
     this.client.on('qr', (qr: string) => {
       this.app.log('WA', 'QR code gerado — escaneie com o celular (WhatsApp → Config → Aparelhos conectados → Conectar aparelho)');
+      // Armazena o último QR pra o ControlPanel expor via GET /api/qr
+      this.lastQr = qr;
       // Printa o QR no terminal
       qrcode.generate(qr, { small: true });
     });
@@ -86,6 +103,10 @@ export class WhatsAppClient {
     this.client.on('ready', () => {
       const me = this.client.info?.wid?._serialized ?? '?';
       this.app.log('WA', `✅ WhatsApp pronto! Conectado como: ${me}`);
+      // Limpa o último QR — já conectado, não precisa mais.
+      this.lastQr = null;
+      // Registra o timestamp deste (re)connect — exposto no /api/bot/status.
+      this.lastReconnect = Date.now();
     });
 
     this.client.on('disconnected', (reason: string) => {

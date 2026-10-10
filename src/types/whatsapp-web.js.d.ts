@@ -27,7 +27,6 @@ declare module 'whatsapp-web.js' {
     getChats(): Promise<Chat[]>;
     getChatById(chatId: string): Promise<Chat>;
     getContactById(contactId: string): Promise<Contact>;
-    getContact(): Promise<Contact>;
     getMessageById(messageId: string): Promise<Message>;
     info: { wid: { _serialized: string; user: string }; pushname: string };
   }

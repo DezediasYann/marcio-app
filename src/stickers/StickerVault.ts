@@ -76,7 +76,13 @@ interface WaveState {
 
 interface WarState {
   timestamps: number[];
+  hashes: string[];   // hash de cada figurinha na janela (paralelo a timestamps)
   lastBotTs: number;
+}
+
+export interface WarResult {
+  joinWar: boolean;
+  dominantHash: string | null;  // hash da figurinha que domina a guerra (se a maioria é a mesma)
 }
 
 // ============================================================================
@@ -475,19 +481,39 @@ export class StickerVault {
       }
 
       // Verifica guerra (3+ figurinhas em 30s, mesmo diferentes)
-      const shouldJoinWar = this.registerAndCheckWar(chatId);
-      if (shouldJoinWar) {
-        let warStickerPath = this.getRandomFavorite();
+      // Calcula o hash da figurinha atual pra passar pro detector
+      const currentHash = this.hashMediaData(media.data);
+      const war = this.registerAndCheckWar(chatId, currentHash);
+      if (war.joinWar) {
+        // Se a maioria das figurinhas na guerra é a mesma (cultura Twitter de
+        // repetir), o bot responde com a mesma. Se são diferentes, improvisa
+        // (favorita ou aleatória).
+        let warStickerPath: string | null = null;
+        let source = '';
+
+        if (war.dominantHash) {
+          const filename = this.findStickerByHash(war.dominantHash);
+          if (filename) {
+            warStickerPath = path.join(this.vaultDir, filename);
+            source = `dominante=${filename}`;
+          }
+        }
+        if (!warStickerPath) {
+          warStickerPath = this.getRandomFavorite();
+          source = 'favorita';
+        }
         if (!warStickerPath) {
           warStickerPath = this.getRandom();
+          source = 'aleatória';
         }
+
         if (warStickerPath) {
           try {
             await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000));
             const warMedia = MessageMedia.fromFilePath(warStickerPath);
             await this.app.whatsapp.client.sendMessage(chatId, warMedia, { sendMediaAsSticker: true });
-            this.app.debug('WAR', `bot entrou na guerra — mandou ${path.basename(warStickerPath)} em ${chatId}`);
-            this.app.log('WAR', `Bot entrou em guerra de figurinha em ${chatId}.`);
+            this.app.debug('WAR', `bot entrou na guerra [${source}] — mandou ${path.basename(warStickerPath)} em ${chatId}`);
+            this.app.log('WAR', `Bot entrou em guerra de figurinha (${source}) em ${chatId}.`);
           } catch (e) {
             this.app.debug('WAR', `erro ao entrar na guerra: ${(e as Error).message}`);
           }
@@ -555,28 +581,75 @@ export class StickerVault {
   /**
    * Registra uma figurinha recebida e detecta se virou "guerra".
    * Se virou guerra (3+ figurinhas em 30s) e o bot deve participar (50% chance,
-   * respeitando cooldown de 5s), retorna true.
+   * respeitando cooldown de 5s), retorna { joinWar: true, dominantHash }.
+   *
+   * dominantHash é o hash da figurinha que MAIS aparece na janela de guerra,
+   * mas só é retornado se ela representa a MAIORIA (>= 60%) das figurinhas.
+   * Isso captura a "cultura Twitter" de repetir a mesma figurinha em cadeia:
+   * se a galera tá mandando a mesma, o bot responde com a mesma.
+   * Se as figurinhas são todas diferentes (guerra real), dominantHash é null
+   * e o chamador deve improvisar (favorita/aleatória).
+   *
+   * @param chatId ID do chat.
+   * @param hash Hash da figurinha atual (pode ser null se não conseguiu calcular).
+   * @returns { joinWar, dominantHash }
    */
-  registerAndCheckWar(chatId: string): boolean {
+  registerAndCheckWar(chatId: string, hash: string | null): WarResult {
     const now = Date.now();
     if (!this.warState.has(chatId)) {
-      this.warState.set(chatId, { timestamps: [], lastBotTs: 0 });
+      this.warState.set(chatId, { timestamps: [], hashes: [], lastBotTs: 0 });
     }
     const state = this.warState.get(chatId)!;
 
+    // Adiciona timestamp + hash atuais
     state.timestamps.push(now);
-    state.timestamps = state.timestamps.filter(ts => (now - ts) < STICKER_WAR_WINDOW_MS);
+    state.hashes.push(hash || `unknown_${now}_${Math.random()}`);  // fallback pra manter paridade com timestamps
+
+    // Remove entradas fora da janela de 30s (mantém timestamps e hashes sincronizados)
+    const keepFrom = state.timestamps.findIndex(ts => (now - ts) < STICKER_WAR_WINDOW_MS);
+    if (keepFrom > 0) {
+      state.timestamps = state.timestamps.slice(keepFrom);
+      state.hashes = state.hashes.slice(keepFrom);
+    } else if (keepFrom === -1) {
+      // Todos fora da janela — limpa
+      state.timestamps = [];
+      state.hashes = [];
+    }
 
     if (state.timestamps.length >= STICKER_WAR_MIN_STICKERS) {
       if (now - state.lastBotTs < STICKER_WAR_BOT_COOLDOWN_MS) {
-        return false;
+        return { joinWar: false, dominantHash: null };
       }
       if (Math.random() <= STICKER_WAR_BOT_CHANCE) {
         state.lastBotTs = now;
-        this.app.debug('WAR', `guerra de figurinha detectada em ${chatId} — ${state.timestamps.length} figurinhas em ${STICKER_WAR_WINDOW_MS / 1000}s — bot vai mandar uma`);
-        return true;
+
+        // Calcula o hash dominante (o que mais aparece na janela)
+        const counts = new Map<string, number>();
+        for (const h of state.hashes) {
+          counts.set(h, (counts.get(h) || 0) + 1);
+        }
+        let topHash: string | null = null;
+        let topCount = 0;
+        for (const [h, c] of counts) {
+          if (c > topCount) {
+            topCount = c;
+            topHash = h;
+          }
+        }
+
+        // Só considera "dominante" se representa >= 60% das figurinhas na janela.
+        // Isso evita que o bot repita uma figurinha que apareceu só 2x numa guerra de 5.
+        const total = state.timestamps.length;
+        const isDominant = topHash !== null && (topCount / total) >= 0.6;
+
+        // Se o hash dominante é "unknown_*" (não conseguiu calcular), não usa
+        const dominantHash = (isDominant && topHash && !topHash.startsWith('unknown_')) ? topHash : null;
+
+        this.app.debug('WAR', `guerra de figurinha detectada em ${chatId} — ${total} figurinhas em ${STICKER_WAR_WINDOW_MS / 1000}s — bot vai mandar ${dominantHash ? 'a dominante' : 'uma aleatória'}`);
+
+        return { joinWar: true, dominantHash };
       }
     }
-    return false;
+    return { joinWar: false, dominantHash: null };
   }
 }

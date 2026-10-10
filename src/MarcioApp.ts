@@ -28,6 +28,14 @@ import { Retroactive } from './brain/Retroactive';
 import { PermissionSystem } from './permissions/PermissionSystem';
 import { StickerVault } from './stickers/StickerVault';
 import { CommandRegistry } from './commands/CommandRegistry';
+import { BasicCommands } from './commands/BasicCommands';
+import { StickerCommands } from './commands/StickerCommands';
+import { AdminCommands } from './commands/AdminCommands';
+import { TwitterBot } from './twitter/TwitterBot';
+import { TwitterCommands } from './commands/TwitterCommands';
+import { Scheduler } from './scheduler/Scheduler';
+import { AssistiveCommands } from './commands/AssistiveCommands';
+import { ControlPanel } from './control/ControlPanel';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -83,9 +91,11 @@ export class MarcioApp {
   permissions!: PermissionSystem;
   stickers!: StickerVault;
   commands!: CommandRegistry;
+  twitter!: TwitterBot;
+  scheduler!: Scheduler;
+  control!: ControlPanel;
 
-  // Subsistemas da Fase 3.5+ — ainda não instanciados.
-  twitter?: any;       // Fase 3.5 — TwitterBot
+  // Todos os subsistemas estão instanciados (Fase 3 + 4 + 5a completa).
 
   // === Config de IA (lida de data/ai-config.json) ===
   aiConfig: AIConfig | null = null;
@@ -150,26 +160,62 @@ export class MarcioApp {
 
     // === FASE 3.2: CommandRegistry (plugin-based, substitui o switch) ===
     this.commands = new CommandRegistry(this);
-    // Fase 3.3+: carregar módulos aqui
-    // await this.commands.loadModules([
-    //   new AdminCommands(this),
-    //   new StickerCommands(this),
-    //   new TwitterCommands(this),
-    // ]);
+    // FASE 3.3-3.5: carregar módulos de comando
+    await this.commands.loadModules([
+      new BasicCommands(this),
+      new StickerCommands(this),
+      new AdminCommands(this),
+      new TwitterCommands(this),
+    ]);
     this.log('BOOT', `CommandRegistry inicializado — ${this.commands.count()} comando(s) registrado(s).`);
 
-    // === FASE 3.5: TwitterBot (auto-post + aprovação) ===
-    // this.twitter = new TwitterBot(this);
+    // === FASE 3.5: TwitterBot (auto-post + aprovação + reply to mentions) ===
+    this.twitter = new TwitterBot(this);
+    const twCfg = this.twitter.getConfig();
+    if (twCfg.enabled) {
+      this.log('BOOT', `Twitter inicializado — approvalMode=${twCfg.approvalMode} mentions=${twCfg.replyToMentions}`);
+    } else {
+      this.log('BOOT', 'Twitter inicializado (desativado no config).');
+    }
 
-    // WhatsApp por último (precisa do router montado)
-    this.whatsapp = new WhatsAppClient(this);
-    // Router é criado depois do WhatsApp (precisa de client pronto pra passar pro router)
+    // === FASE 4: Scheduler (eventos + lembretes agendados) ===
+    this.scheduler = new Scheduler(this);
+    this.scheduler.start();
+    this.log('BOOT', `Scheduler inicializado — ${this.scheduler.list().length} evento(s) pendente(s).`);
+
+    // === FASE 3.2: CommandRegistry (plugin-based, substitui o switch) ===
+    this.commands = new CommandRegistry(this);
+    // FASE 3.3-4: carregar módulos de comando
+    await this.commands.loadModules([
+      new BasicCommands(this),
+      new StickerCommands(this),
+      new AdminCommands(this),
+      new TwitterCommands(this),
+      new AssistiveCommands(this),
+    ]);
+    this.log('BOOT', `CommandRegistry inicializado — ${this.commands.count()} comando(s) registrado(s).`);
+
+    // Router ANTES do WhatsApp initialize (o handler message_create chama router)
     this.router = new MessageRouter(this);
+    // WhatsApp por último (dispara QR/ready/message_create)
+    this.whatsapp = new WhatsAppClient(this);
     await this.whatsapp.initialize();
 
     // Starta o timer de verificação retroativa (a cada 10min por default)
-    // Só depois do WhatsApp ready — senão o check tenta usar client antes de pronto
     this.retroactive.setupTimer();
+
+    // Starta os timers do Twitter (auto-post a cada 4h, mention check a cada 15min)
+    if (twCfg.enabled) {
+      this.twitter.startAutoPostTimer();
+      if (twCfg.replyToMentions) {
+        this.twitter.startMentionChecker();
+      }
+    }
+
+    // === FASE 5a: ControlPanel (dashboard web em http://localhost:3001) ===
+    this.control = new ControlPanel(this);
+    this.control.listen(3001);
+    this.log('BOOT', 'ControlPanel ouvindo em http://localhost:3001');
 
     this.log('BOOT', 'Márcio App pronto e conectado.');
   }
@@ -219,7 +265,15 @@ export class MarcioApp {
       if (this.retroactive) {
         this.retroactive.destroy();
       }
-      // Fase 3: salvar stickers, etc. aqui
+      if (this.twitter) {
+        this.twitter.destroy();
+      }
+      if (this.scheduler) {
+        this.scheduler.destroy();
+      }
+      if (this.control) {
+        this.control.destroy();
+      }
       if (this.whatsapp) {
         await this.whatsapp.destroy();
       }
@@ -237,6 +291,8 @@ export class MarcioApp {
   /**
    * Log persistente em arquivo (logs/bot.log) com timestamp BR.
    * Sempre escreve, independente de debugEnabled.
+   * Também faz broadcast pro ControlPanel (se ativo) — assim o painel
+   * mostra logs em tempo real via WebSocket.
    */
   log(tag: string, message: string): void {
     const time = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -248,16 +304,26 @@ export class MarcioApp {
     }
     // Também printa no console (útil no VS Code terminal)
     console.log(line);
+    // Broadcast pro painel (se ativo)
+    if (this.control) {
+      this.control.broadcast('log', { tag, message, time });
+    }
   }
 
   /**
    * Log de debug no terminal. Só printa se debugEnabled = true.
    * Equivalente à função debug() do index.js velho.
+   * Também faz broadcast pro ControlPanel (se ativo E debugEnabled).
    */
   debug(tag: string, ...args: unknown[]): void {
     if (!this.debugEnabled) return;
     const time = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
     console.log(`[${time}] [DEBUG ${tag}]`, ...args);
+    // Broadcast pro painel (só se debug tá on — senão o painel floods)
+    if (this.control) {
+      this.control.broadcast('log', { tag: `DEBUG ${tag}`, message, time });
+    }
   }
 
   // ===========================================================================
@@ -285,5 +351,57 @@ export class MarcioApp {
    */
   dataPath(filename: string): string {
     return path.join(this.config.dataDir, filename);
+  }
+
+  // ===========================================================================
+  // HELPERS DE WHATSAPP — react, notify, reportError
+  // Equivalente às funções react(), notify(), reportError() do index.js velho.
+  // Usados por TODOS os command handlers.
+  // ===========================================================================
+
+  /**
+   * Reage a uma mensagem com um emoji.
+   * @param msg Mensagem do WhatsApp.
+   * @param emoji Emoji (ex: '⏳', '✅', '❌').
+   */
+  async react(msg: any, emoji: string): Promise<void> {
+    try {
+      await msg.react(emoji);
+    } catch (e) {
+      this.log('REACT', `Falha ao reagir (${emoji}) na mensagem ${msg.id?._serialized}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Envia uma mensagem de texto prefixada com o nome do bot.
+   * @param chatId ID do chat de destino.
+   * @param text Texto da mensagem (sem prefixo — o bot adiciona).
+   */
+  async notify(chatId: string, text: string): Promise<void> {
+    // Se um comando foi injetado pelo painel E a resposta é pro PV do bot,
+    // manda a resposta pro painel também (pro usuário ver no log do dashboard).
+    if (this.control?.capturing && chatId === this.control.capturingChatId) {
+      this.control.broadcast('log', { tag: 'OUTPUT', message: text, time: new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }) });
+    }
+    try {
+      await this.whatsapp.client.sendMessage(chatId, `${this.config.botName}: ${text}`);
+    } catch (e) {
+      this.log('NOTIFY', `Falha ao enviar notificação para ${chatId}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Reporta um erro: reage com ❌, notifica o usuário e registra no log.
+   * @param msg Mensagem que disparou o erro.
+   * @param chatId ID do chat.
+   * @param userMessage Mensagem pro usuário (sem jargão técnico).
+   * @param error Erro original (opcional — pra log).
+   */
+  async reportError(msg: any, chatId: string, userMessage: string, error?: Error): Promise<void> {
+    await this.react(msg, '❌');
+    await this.notify(chatId, userMessage);
+    if (error) {
+      this.log('ERROR', `${chatId}: ${error.message || String(error)}`);
+    }
   }
 }

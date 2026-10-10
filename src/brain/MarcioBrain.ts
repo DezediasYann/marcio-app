@@ -928,7 +928,9 @@ export class MarcioBrain {
 
         if (!mentionedMe) {
           try {
-            const myContact = await this.app.whatsapp.client.getContact();
+            // client.getContact() (sem args) não existe em todas as versões
+            // do whatsapp-web.js. Usamos getContactById com o próprio wid.
+            const myContact = await this.app.whatsapp.client.getContactById(myId);
             const myContactIds = [
               myContact.id?._serialized,
               myContact.number ? `${myContact.number}@c.us` : null,

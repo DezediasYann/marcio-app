@@ -103,19 +103,28 @@ export class WhatsAppClient {
   }
 
   /**
-   * Handler de mensagem — Fase 2.1: captura no contexto + loga.
-   * Na Fase 3, isto vira: await this.app.router.handleMessage(msg).
+   * Handler de mensagem — Fase 3.1: figurinhas + contexto + IA.
+   * Na Fase 3.2, isto vira: await this.app.router.handleMessage(msg).
    */
   private async handleMessage(msg: Message): Promise<void> {
-    // Loop-guard: ignora próprias mensagens registradas via botSendMessage()
+    // Loop-guard: ignora próprias mensagens registradas via sendMessage()
     if (this.isOwnMessage(msg)) {
       return;
     }
 
     const chatId = msg.fromMe ? msg.to : msg.from;
 
-    // FASE 2.1: captura no contexto (texto, figurinha, imagem, quoted, URLs)
-    // A IA ainda não responde (Fase 2.5), mas o contexto já acumula.
+    // FASE 3.1: processa figurinha recebida (salva no vault + ondas/guerras)
+    // Roda ANTES do body check — figurinha não tem body
+    if (this.app.stickers && msg.hasMedia && msg.type === 'sticker') {
+      try {
+        await this.app.stickers.handleIncoming(msg, chatId);
+      } catch (e) {
+        this.app.debug('WA', `erro ao processar figurinha: ${(e as Error).message}`);
+      }
+    }
+
+    // Captura no contexto (texto, figurinha, imagem, quoted, URLs)
     if (this.app.context) {
       try {
         await this.app.context.captureMessage(msg, chatId);
@@ -124,10 +133,20 @@ export class WhatsAppClient {
       }
     }
 
-    // Log de debug (útil pra ver o que tá chegando)
+    // Log de debug
     const bodyPreview = (msg.body ?? '(sem texto)').slice(0, 80);
     const mediaTag = msg.hasMedia ? ` [${msg.type}]` : '';
     this.app.debug('MSG', `recebida: ${chatId}${mediaTag}: ${bodyPreview}`);
+
+    // FASE 2.5: dispara a IA (decide se responde — menção, chance, cooldown)
+    // Só pra mensagens não-comando (comandos vêm na Fase 3.2 com o MessageRouter)
+    if (this.app.brain && msg.body && !msg.body.startsWith('!') && !msg.body.startsWith('/')) {
+      try {
+        await this.app.brain.maybeAutoRespond(msg, chatId);
+      } catch (e) {
+        this.app.debug('WA', `erro no maybeAutoRespond: ${(e as Error).message}`);
+      }
+    }
   }
 
   /**

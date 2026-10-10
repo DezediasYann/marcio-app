@@ -23,9 +23,6 @@ import type { Message } from 'whatsapp-web.js';
 import type { MarcioApp } from '../MarcioApp';
 import https from 'node:https';
 import http from 'node:http';
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 
 // ============================================================================
 // TIPOS
@@ -306,78 +303,23 @@ export class Context {
   // ===========================================================================
 
   /**
-   * Tenta identificar qual figurinha foi mandada (busca por hash no vault).
+   * Tenta identificar qual figurinha foi mandada (via StickerVault.identify).
    * Retorna "[mandou a figurinha X]" ou "[mandou uma figurinha]".
-   *
-   * TEMPORÁRIO: lê stickers-meta.json direto. Na Fase 3, isto vira
-   * this.app.stickers.identify(msg).
    */
   private async describeSticker(msg: Message): Promise<string> {
+    if (!this.app.stickers) return '[mandou uma figurinha]';
     try {
-      const media = await msg.downloadMedia();
-      if (!media || !media.data) return '[mandou uma figurinha]';
-
-      const hash = this.hashMediaData(media.data);
-      const existingFilename = this.findStickerByHash(hash);
-      if (!existingFilename) return '[mandou uma figurinha]';
-
-      const meta = this.loadStickerMeta();
-      const stickerMeta = meta[existingFilename];
-      if (stickerMeta && stickerMeta.name) {
-        const favMark = stickerMeta.favorite ? ' ⭐' : '';
-        this.app.debug('AI-CTX', `figurinha identificada no contexto: "${stickerMeta.name}"`);
-        return `[mandou a figurinha "${stickerMeta.name}"${favMark}]`;
+      const identified = await this.app.stickers.identify(msg);
+      if (!identified) return '[mandou uma figurinha]';
+      if (identified.name) {
+        const favMark = identified.favorite ? ' ⭐' : '';
+        this.app.debug('AI-CTX', `figurinha identificada no contexto: "${identified.name}"`);
+        return `[mandou a figurinha "${identified.name}"${favMark}]`;
       }
       return '[mandou uma figurinha]';
     } catch {
       return '[mandou uma figurinha]';
     }
-  }
-
-  // --- helpers de sticker (TEMPORÁRIOS — movem pra StickerVault na Fase 3) ---
-
-  private hashMediaData(base64Data: string): string | null {
-    try {
-      const buffer = Buffer.from(base64Data, 'base64');
-      return crypto.createHash('sha256').update(buffer).digest('hex');
-    } catch {
-      return null;
-    }
-  }
-
-  private loadStickerMeta(): Record<string, any> {
-    try {
-      return JSON.parse(fs.readFileSync(this.app.dataPath('stickers-meta.json'), 'utf8'));
-    } catch {
-      return {};
-    }
-  }
-
-  private findStickerByHash(hash: string | null): string | null {
-    if (!hash) return null;
-    const meta = this.loadStickerMeta();
-    const vaultDir = this.app.dataPath('stickers-vault');
-
-    // Primeiro procura nos metadados (rápido)
-    for (const [filename, m] of Object.entries(meta)) {
-      if ((m as any).hash === hash) {
-        if (fs.existsSync(path.join(vaultDir, filename))) {
-          return filename;
-        }
-      }
-    }
-    // Fallback: compara conteúdo dos arquivos (lento)
-    try {
-      const files = fs.readdirSync(vaultDir).filter(f => /\.(webp|png|jpg)$/.test(f));
-      for (const f of files) {
-        try {
-          const buffer = fs.readFileSync(path.join(vaultDir, f));
-          const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
-          if (fileHash === hash) return f;
-        } catch { /* ignora */ }
-      }
-    } catch { /* ignora */ }
-    return null;
   }
 
   // ===========================================================================

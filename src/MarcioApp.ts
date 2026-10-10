@@ -18,10 +18,16 @@
  */
 
 import { WhatsAppClient } from './whatsapp/WhatsAppClient';
+import { MessageRouter } from './whatsapp/MessageRouter';
 import { Context } from './brain/Context';
 import { Memory } from './brain/Memory';
 import { Profile } from './brain/Profile';
 import { Directives } from './brain/Directives';
+import { MarcioBrain } from './brain/MarcioBrain';
+import { Retroactive } from './brain/Retroactive';
+import { PermissionSystem } from './permissions/PermissionSystem';
+import { StickerVault } from './stickers/StickerVault';
+import { CommandRegistry } from './commands/CommandRegistry';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -67,20 +73,19 @@ export class MarcioApp {
 
   // === Subsistemas ===
   whatsapp!: WhatsAppClient;
+  router!: MessageRouter;
   context!: Context;
   memory!: Memory;
   profile!: Profile;
   directives!: Directives;
+  brain!: MarcioBrain;
+  retroactive!: Retroactive;
+  permissions!: PermissionSystem;
+  stickers!: StickerVault;
+  commands!: CommandRegistry;
 
-  // Subsistemas das Fases 2.5-2.6 + 3 — ainda não instanciados.
-  // Declarados como opcionais (?) pra o Context poder checar `if (this.app.X)`
-  // antes de chamar. Quando a fase correspondente chegar, vira `!` + new no start().
-  brain?: any;         // Fase 2.5 — MarcioBrain
-  retroactive?: any;   // Fase 2.6 — Retroactive
-  commands?: any;      // Fase 3 — CommandRegistry
-  permissions?: any;   // Fase 3 — PermissionSystem
-  stickers?: any;      // Fase 3 — StickerVault
-  twitter?: any;       // Fase 3 — TwitterBot
+  // Subsistemas da Fase 3.5+ — ainda não instanciados.
+  twitter?: any;       // Fase 3.5 — TwitterBot
 
   // === Config de IA (lida de data/ai-config.json) ===
   aiConfig: AIConfig | null = null;
@@ -126,18 +131,45 @@ export class MarcioApp {
     this.directives = new Directives(this);
     this.log('BOOT', `Directives inicializado — ${this.directives.all().length} diretiva(s).`);
 
-    // === FASE 2.5-3: instanciar subsistemas aqui (ordem de dependência) ===
-    // this.brain       = new MarcioBrain(this);
-    // this.retroactive = new Retroactive(this);
-    // this.stickers    = new StickerVault(this);
-    // this.twitter     = new TwitterBot(this);
-    // this.permissions = new PermissionSystem(this);
-    // this.commands    = new CommandRegistry(this);
-    // await this.commands.loadModules([...]);
+    // === FASE 2.5: MarcioBrain (o cérebro do Márcio — IA, prompt, fallback) ===
+    this.brain = new MarcioBrain(this);
+    this.log('BOOT', `Brain inicializado — modelo=${this.brain.getAIConfig().model} fallbacks=${this.brain.getAllFallbackModels().length - 1}`);
 
-    // WhatsApp por último (precisa do registry montado nas próximas fases)
+    // === FASE 2.6: Retroactive (conversas retroativas — "voltar" a msgs ignoradas) ===
+    this.retroactive = new Retroactive(this);
+    this.retroactive.load();  // carrega decision-log.json
+    this.log('BOOT', `Retroactive inicializado — intervalo=${this.retroactive.intervalMin}min janela=${this.retroactive.windowMin}min`);
+
+    // === FASE 3.1: PermissionSystem (ops + banidos + resolveSenderIds) ===
+    this.permissions = new PermissionSystem(this);
+    this.log('BOOT', `Permissions inicializado — ${this.permissions.loadOps().length} op(s), ${this.permissions.loadBanned().length} banido(s).`);
+
+    // === FASE 3.1: StickerVault (vault + ondas/guerras + identify) ===
+    this.stickers = new StickerVault(this);
+    this.log('BOOT', `StickerVault inicializado — ${this.stickers.listNamed().length} figurinha(s) nomeada(s).`);
+
+    // === FASE 3.2: CommandRegistry (plugin-based, substitui o switch) ===
+    this.commands = new CommandRegistry(this);
+    // Fase 3.3+: carregar módulos aqui
+    // await this.commands.loadModules([
+    //   new AdminCommands(this),
+    //   new StickerCommands(this),
+    //   new TwitterCommands(this),
+    // ]);
+    this.log('BOOT', `CommandRegistry inicializado — ${this.commands.count()} comando(s) registrado(s).`);
+
+    // === FASE 3.5: TwitterBot (auto-post + aprovação) ===
+    // this.twitter = new TwitterBot(this);
+
+    // WhatsApp por último (precisa do router montado)
     this.whatsapp = new WhatsAppClient(this);
+    // Router é criado depois do WhatsApp (precisa de client pronto pra passar pro router)
+    this.router = new MessageRouter(this);
     await this.whatsapp.initialize();
+
+    // Starta o timer de verificação retroativa (a cada 10min por default)
+    // Só depois do WhatsApp ready — senão o check tenta usar client antes de pronto
+    this.retroactive.setupTimer();
 
     this.log('BOOT', 'Márcio App pronto e conectado.');
   }
@@ -177,14 +209,17 @@ export class MarcioApp {
   async shutdown(): Promise<void> {
     this.log('BOOT', 'Desligando Márcio App...');
     try {
-      // Salva pendências de memória + profile (auto-save de 30s pode não ter rodado)
+      // Salva pendências de memória + profile + retroactive (auto-save 30s pode não ter rodado)
       if (this.memory) {
         this.memory.destroy();
       }
       if (this.profile) {
         this.profile.destroy();
       }
-      // Fase 2.4+: salvar directives, decision-log, etc. aqui
+      if (this.retroactive) {
+        this.retroactive.destroy();
+      }
+      // Fase 3: salvar stickers, etc. aqui
       if (this.whatsapp) {
         await this.whatsapp.destroy();
       }

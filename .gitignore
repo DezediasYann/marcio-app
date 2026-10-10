@@ -1,0 +1,25 @@
+# Dependências
+node_modules/
+
+# Build TS
+dist/
+
+# Sessão do WhatsApp (NUNCA commitar — é a auth do seu número)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Logs
+logs/
+*.log
+
+# Estado runtime (opcional — descomente pra gitignore)
+# data/memories.json
+# data/decision-log.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

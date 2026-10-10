@@ -7,6 +7,10 @@ on:
     tags:
       - 'v*'
 
+# Permissões pra criar release e fazer upload de assets
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: windows-latest

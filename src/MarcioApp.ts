@@ -524,7 +524,11 @@ export class MarcioApp {
   // ===========================================================================
 
   private ensureDirs(): void {
-    const dirs = [this.config.dataDir, this.config.logDir];
+    const dirs = [
+      this.config.dataDir,
+      this.config.logDir,
+      path.join(this.config.dataDir, 'stickers-vault'),
+    ];
     // Garante que o dir de auth existe (se legacyAuthPath foi setado)
     if (this.config.legacyAuthPath) {
       dirs.push(this.config.legacyAuthPath);
@@ -534,6 +538,53 @@ export class MarcioApp {
         fs.mkdirSync(d, { recursive: true });
       } catch (e) {
         // ignora se já existe
+      }
+    }
+    // Cria arquivos default de config se não existirem (em runtime).
+    // Isso garante que o bot funciona mesmo se o lib.rs não criou os arquivos
+    // (ex: em dev mode, ou se o usuário deletou os arquivos).
+    this.ensureDefaultDataFiles();
+  }
+
+  /**
+   * Cria arquivos default de configuração em data/ se não existirem.
+   * NÃO sobrescreve arquivos existentes — só cria se faltam.
+   * Isso garante que o bot inicia "zerado mas funcional" na primeira vez.
+   */
+  private ensureDefaultDataFiles(): void {
+    const defaults: Array<{ name: string; content: string }> = [
+      { name: 'ai-config.json', content: JSON.stringify({
+        model: 'gemini-3.5-flash-lite',
+        fallbackModels: ['gemini-3.1-flash-lite'],
+        apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+        apiKey: '',
+        maxTokens: 400,
+        temperature: 0.75,
+        audioTranscription: {
+          enabled: true,
+          primaryModel: 'gemini-3.5-flash-lite',
+          fallbackModel: 'gemini-3.1-flash-lite',
+        },
+      }, null, 2) },
+      { name: 'banned.json', content: '[]' },
+      { name: 'ops.json', content: '[]' },
+      { name: 'directives.json', content: '[]' },
+      { name: 'memories.json', content: '{}' },
+      { name: 'chat-settings.json', content: '{}' },
+      { name: 'decision-log.json', content: '{}' },
+      { name: 'stickers-meta.json', content: '{}' },
+      // system-prompt.txt vazio — bot usa DEFAULT_SYSTEM_PROMPT hardcoded
+      { name: 'system-prompt.txt', content: '' },
+    ];
+    for (const { name, content } of defaults) {
+      const filePath = this.dataPath(name);
+      if (!fs.existsSync(filePath)) {
+        try {
+          fs.writeFileSync(filePath, content, 'utf8');
+          this.log('BOOT', `criado ${name} (default)`);
+        } catch (e) {
+          this.debug('BOOT', `erro ao criar ${name}: ${(e as Error).message}`);
+        }
       }
     }
   }

@@ -294,6 +294,123 @@ export class ControlPanel {
         return;
       }
 
+      // GET /setup-wizard.html — wizard de primeira execução (janela sem barra)
+      // Em produção, o lib.rs abre essa página em vez do index.html na primeira vez.
+      // Em dev, o usuário acessa http://localhost:3001/setup-wizard.html pra testar.
+      if (method === 'GET' && pathname === '/setup-wizard.html') {
+        return this.serveSetupWizard(res);
+      }
+
+      // ======================================================================
+      // SETUP WIZARD — estado do primeiro boot (data/setup-state.json)
+      // ======================================================================
+
+      // GET /api/setup/state — retorna { completed: boolean, completedAt?: string }
+      if (method === 'GET' && pathname === '/api/setup/state') {
+        try {
+          const state = this.readSetupState();
+          return this.json(res, state);
+        } catch (e) {
+          return this.json(res, { error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/setup/complete — marca setup como completo
+      // Body: { botName?: string, systemPrompt?: string, aiConfig?: {...} }
+      // Salva tudo (delega pros sistemas correspondentes) e marca setup-state.json.
+      //
+      // ⚠️ MODO DEV (porta 3001 aberta = beforeDevCommand rodando):
+      // NÃO SALVA NADA. Retorna erro 403 explicando. Isso evita que o usuário
+      // testando o wizard em dev sobrescreva dados reais (api-config.json,
+      // system-prompt.txt, etc.).
+      if (method === 'POST' && pathname === '/api/setup/complete') {
+        // Detecta dev: se a porta 3001 já estava aberta antes do Tauri iniciar,
+        // é porque o `npm run dev` (beforeDevCommand) está rodando o bot.
+        // Em produção, o Tauri spawna o bot depois — porta 3001 só abre depois.
+        const isDevMode = process.env.NODE_ENV !== 'production';
+        if (isDevMode) {
+          return this.json(res, {
+            ok: false,
+            error: 'modo dev detectado — setup/complete bloqueado pra não sobrescrever seus dados. Use o wizard em produção (após compilar com npm run tauri:build). Em dev, o wizard é só preview visual.',
+            devMode: true,
+          }, 403);
+        }
+
+        const body = await this.readJsonBody(req);
+        try {
+          // 1. Salva botName (se veio) — atualiza config do bot em runtime
+          if (typeof body?.botName === 'string' && body.botName.trim()) {
+            const newBotName = body.botName.trim();
+            (this.app.config as any).botName = newBotName;
+            this.app.log('SETUP', `botName configurado: ${newBotName}`);
+          }
+
+          // 2. Salva system-prompt.txt (se veio)
+          if (typeof body?.systemPrompt === 'string') {
+            try {
+              fs.writeFileSync(this.app.dataPath('system-prompt.txt'), body.systemPrompt, 'utf8');
+              this.app.log('SETUP', 'system-prompt.txt salvo');
+              this.app.brain.aiConfigCacheTime = 0;
+            } catch (e) {
+              this.app.debug('SETUP', `erro ao salvar system-prompt: ${(e as Error).message}`);
+            }
+          }
+
+          // 3. Salva ai-config.json (se veio) — merge com existente
+          if (body?.aiConfig && typeof body.aiConfig === 'object') {
+            try {
+              const filePath = this.app.dataPath('ai-config.json');
+              let existing: any = {};
+              try { existing = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch {}
+              const next = { ...existing, ...body.aiConfig };
+              fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf8');
+              this.app.brain.aiConfigCacheTime = 0;
+              if (this.app.audioTranscriber) this.app.audioTranscriber.invalidateConfigCache();
+              this.app.log('SETUP', `ai-config.json salvo — model=${next.model} apiKey=${next.apiKey ? '(set)' : '(vazio)'}`);
+            } catch (e) {
+              this.app.debug('SETUP', `erro ao salvar ai-config: ${(e as Error).message}`);
+            }
+          }
+
+          // 4. Marca setup como completo
+          this.writeSetupState({ completed: true, completedAt: new Date().toISOString() });
+
+          // 5. Notifica o Tauri (se estiver rodando) pra fechar a janela de setup
+          // e abrir a janela principal.
+          this.app.control?.broadcast('setup-complete', { completed: true });
+
+          return this.json(res, { ok: true, message: 'setup completo' });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/setup/reset — marca setup como NÃO completo (pra testar wizard de novo).
+      // ⚠️ SÓ FUNCIONA EM PRODUÇÃO com body.force === true.
+      // Em dev, retorna 403 (setup-state não deve ser mexido em dev — wizard é só preview).
+      if (method === 'POST' && pathname === '/api/setup/reset') {
+        const body = await this.readJsonBody(req).catch(() => ({}));
+        const isProd = process.env.NODE_ENV === 'production';
+        const force = body?.force === true;
+        if (!isProd) {
+          return this.json(res, {
+            ok: false,
+            error: 'modo dev — setup/reset bloqueado. Em dev, o wizard é só preview (não cria setup-state.json). Pra resetar em produção, envie { force: true }.',
+            devMode: true,
+          }, 403);
+        }
+        if (!force) {
+          return this.json(res, { ok: false, error: 'em produção, envie { force: true } pra resetar setup' }, 403);
+        }
+        try {
+          this.writeSetupState({ completed: false });
+          this.app.log('SETUP', 'setup resetado — wizard vai abrir na próxima vez');
+          return this.json(res, { ok: true });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
       // GET /chart.min.js, /js/*, /css/* — static files do publicDir
       // (Chart.js local, evita CDN bloqueado por Tracking Prevention do Edge)
       if (method === 'GET' && (pathname === '/chart.min.js' || pathname.startsWith('/js/') || pathname.startsWith('/css/'))) {
@@ -1455,6 +1572,61 @@ export class ControlPanel {
     } catch (e) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(`index.html não encontrado em ${filePath}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Serve o setup-wizard.html (janela de primeira execução).
+   * Mesmo Cache-Control agressivo do serveIndex — wizard pode mudar entre versões.
+   */
+  private serveSetupWizard(res: ServerResponse): void {
+    const filePath = path.join(this.publicDir, 'setup-wizard.html');
+    try {
+      const html = fs.readFileSync(filePath, 'utf8');
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
+      res.end(html);
+    } catch (e) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`setup-wizard.html não encontrado em ${filePath}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Lê data/setup-state.json — flag que indica se o wizard já foi completado.
+   * Retorna { completed: false } se arquivo não existe (primeira execução).
+   */
+  private readSetupState(): { completed: boolean; completedAt?: string } {
+    try {
+      const filePath = this.app.dataPath('setup-state.json');
+      if (!fs.existsSync(filePath)) {
+        return { completed: false };
+      }
+      const content = fs.readFileSync(filePath, 'utf8').trim();
+      if (!content) return { completed: false };
+      const parsed = JSON.parse(content);
+      return {
+        completed: !!parsed.completed,
+        completedAt: parsed.completedAt || undefined,
+      };
+    } catch {
+      return { completed: false };
+    }
+  }
+
+  /**
+   * Salva data/setup-state.json.
+   */
+  private writeSetupState(state: { completed: boolean; completedAt?: string }): void {
+    try {
+      const filePath = this.app.dataPath('setup-state.json');
+      fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf8');
+    } catch (e) {
+      this.app.debug('SETUP', `erro ao salvar setup-state: ${(e as Error).message}`);
     }
   }
 

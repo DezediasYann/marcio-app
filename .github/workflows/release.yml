@@ -1,7 +1,8 @@
 name: Release
 
 # Trigger: quando você criar uma tag tipo "v1.0.1"
-# O GitHub Actions compila o .exe, assina, e publica um release
+# O GitHub Actions compila o .exe/.dmg/.AppImage, assina, e publica um release
+# O updater do Tauri busca o latest.json em releases/latest/download/latest.json
 on:
   push:
     tags:
@@ -13,7 +14,17 @@ permissions:
 
 jobs:
   release:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        # Build pra Windows, macOS e Linux
+        include:
+          - platform: windows-latest
+            args: ''
+          - platform: macos-latest
+            args: ''
+          - platform: ubuntu-22.04
+            args: ''
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +36,13 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
+      - name: Install dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libgtk-3-dev libayatana-appindicator3-dev
+
+      - name: Install npm dependencies
         run: npm install
 
       - name: Build TypeScript + copy assets to tauri
@@ -34,19 +51,29 @@ jobs:
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
-          # Chave de signing do updater (gerar com: tauri signer generate -w ~/.tauri/marcio.key)
-          # Colocar a CHAVE PRIVADA como secret no GitHub (Settings → Secrets → Actions)
+          # Chave de signing do updater — gerar uma vez com:
+          #   npx @tauri-apps/cli signer generate -w ~/.tauri/marcio-app.key
+          # Isso cria:
+          #   - Chave privada (salvar como secret TAURI_SIGNING_PRIVATE_KEY no GitHub)
+          #   - Senha da chave (se setada — secret TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
+          #   - Chave pública (colar no tauri.conf.json → plugins.updater.pubkey)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Márcio App ${{ github.ref_name }}'
-          releaseBody: 'Nova versão do Márcio App. Baixe o instalador e execute.'
-          releaseDraft: true
+          releaseBody: 'Nova versão do Márcio App. Baixe o instalador da sua plataforma e execute.'
+          # ⚠️ releaseDraft: false — PRECISA ser false pro updater funcionar!
+          # Releases draft não são acessíveis por releases/latest/download/latest.json.
+          releaseDraft: false
           prerelease: false
+          args: ${{ matrix.args }}
 
       - name: Upload latest.json (pro updater encontrar)
-        uses: softprops/action-gh-release@v1
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
         with:
-          files: src-tauri/target/release/bundle/nsis/latest.json
+          files: |
+            src-tauri/target/release/bundle/nsis/latest.json
+            src-tauri/target/release/bundle/msi/latest.json

@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Márcio App — Setup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #0a0a0c 0%, #1a1a2e 50%, #16213e 100%);
+    color: #f5f5f7;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Gradient mesh overlay */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(at 20% 20%, rgba(191, 90, 242, 0.15) 0%, transparent 50%),
+      radial-gradient(at 80% 30%, rgba(10, 132, 255, 0.12) 0%, transparent 50%),
+      radial-gradient(at 50% 80%, rgba(48, 209, 88, 0.1) 0%, transparent 50%);
+  }
+
+  /* Custom titlebar com X embutido */
+  .titlebar {
+    position: fixed; top: 0; left: 0; right: 0; height: 44px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px;
+    background: rgba(20, 20, 30, 0.6);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 100;
+    -webkit-app-region: drag; /* permite arrastar janela por aqui */
+  }
+  .titlebar-left {
+    display: flex; align-items: center; gap: 10px;
+    -webkit-app-region: drag;
+  }
+  .titlebar-logo {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: linear-gradient(135deg, #ff453a, #bf5af2);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px; color: white;
+  }
+  .titlebar-title { font-weight: 600; font-size: 13px; opacity: 0.9; }
+  .titlebar-close {
+    -webkit-app-region: no-drag;
+    width: 32px; height: 32px; border-radius: 8px;
+    border: none; background: transparent; color: #f5f5f7;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; transition: background 0.15s;
+  }
+  .titlebar-close:hover { background: rgba(255, 69, 58, 0.3); }
+
+  /* Container principal */
+  .container {
+    position: relative; z-index: 1;
+    height: 100vh; padding-top: 44px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Progress bar no topo */
+  .progress-bar {
+    display: flex; gap: 6px; padding: 16px 24px 8px;
+  }
+  .progress-step {
+    flex: 1; height: 4px; border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1); transition: background 0.3s;
+  }
+  .progress-step.active { background: linear-gradient(90deg, #0a84ff, #bf5af2); }
+  .progress-step.done { background: #30d158; }
+
+  /* Header */
+  .header { padding: 16px 24px 8px; }
+  .step-label { font-size: 12px; font-weight: 600; color: #bf5af2; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
+  .step-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .step-subtitle { font-size: 13px; color: rgba(245, 245, 247, 0.6); }
+
+  /* Content */
+  .content {
+    flex: 1; overflow-y: auto; padding: 16px 24px 100px;
+  }
+  .content::-webkit-scrollbar { width: 8px; }
+  .content::-webkit-scrollbar-track { background: transparent; }
+  .content::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+
+  /* Step visibility */
+  .step { display: none; }
+  .step.active { display: block; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Form elements */
+  .form-group { margin-bottom: 20px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: rgba(245, 245, 247, 0.9); }
+  label .hint { font-weight: 400; font-size: 11px; color: rgba(245, 245, 247, 0.5); margin-left: 8px; }
+  input[type="text"], input[type="password"], textarea, select {
+    width: 100%; padding: 10px 14px;
+    background: rgba(28, 28, 30, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: #f5f5f7; font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    -webkit-user-select: text; user-select: text;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: rgba(10, 132, 255, 0.6);
+    box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+  }
+  textarea { resize: vertical; min-height: 200px; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; line-height: 1.5; }
+  input::placeholder, textarea::placeholder { color: rgba(245, 245, 247, 0.3); }
+
+  /* Cards (pra comandos) */
+  .cmd-card {
+    background: rgba(28, 28, 30, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .cmd-info { flex: 1; min-width: 0; }
+  .cmd-name { font-weight: 600; font-size: 13px; }
+  .cmd-help { font-size: 11px; color: rgba(245, 245, 247, 0.5); margin-top: 2px; }
+  .cmd-locked { font-size: 11px; color: #ff9f0a; }
+  .cmd-controls { display: flex; align-items: center; gap: 10px; }
+  .cmd-toggle {
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    font-size: 12px;
+  }
+  .cmd-toggle input { width: 16px; height: 16px; accent-color: #0a84ff; cursor: pointer; }
+  .cmd-perm {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f5f5f7; border-radius: 8px;
+    padding: 4px 8px; font-size: 11px; cursor: pointer;
+  }
+
+  /* QR display */
+  .qr-container {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px; gap: 16px;
+  }
+  .qr-box {
+    background: white; padding: 16px; border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+  .qr-box img { display: block; width: 240px; height: 240px; }
+  .qr-status { font-size: 14px; color: rgba(245, 245, 247, 0.7); text-align: center; max-width: 360px; }
+  .qr-status.success { color: #30d158; }
+  .qr-status.error { color: #ff453a; }
+  .qr-spinner {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: #0a84ff;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Footer com botões */
+  .footer {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 16px 24px;
+    background: rgba(20, 20, 30, 0.8);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px;
+  }
+  .btn {
+    padding: 10px 20px; border-radius: 10px;
+    border: none; cursor: pointer; font-size: 14px; font-weight: 600;
+    font-family: inherit; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: rgba(245, 245, 247, 0.7); }
+  .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: #f5f5f7; }
+  .btn-primary {
+    background: linear-gradient(135deg, #0a84ff, #bf5af2);
+    color: white;
+  }
+  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(10, 132, 255, 0.4); }
+  .btn-success { background: #30d158; color: white; }
+  .btn-success:hover:not(:disabled) { background: #28b54c; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    padding: 10px 20px; border-radius: 12px;
+    background: rgba(40, 40, 50, 0.95); color: #f5f5f7;
+    font-size: 13px; z-index: 200;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-8px); }
+  .toast.success { border-color: rgba(48, 209, 88, 0.4); }
+  .toast.error { border-color: rgba(255, 69, 58, 0.4); }
+
+  /* Preview card (bot name preview) */
+  .bot-preview {
+    background: rgba(28, 28, 30, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px; padding: 16px;
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 16px;
+  }
+  .bot-avatar {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: linear-gradient(135deg, #ff453a, #bf5af2);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 20px; color: white;
+  }
+  .bot-info-text { flex: 1; }
+  .bot-info-name { font-weight: 600; font-size: 15px; }
+  .bot-info-status { font-size: 11px; color: rgba(245, 245, 247, 0.5); margin-top: 2px; }
+
+  /* Checkbox row */
+  .checkbox-row { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px 0; }
+  .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #0a84ff; cursor: pointer; }
+  .checkbox-row span { font-size: 13px; user-select: none; }
+
+  /* Welcome */
+  .welcome {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; text-align: center; padding: 0 40px;
+  }
+  .welcome-logo {
+    width: 80px; height: 80px; border-radius: 24px;
+    background: linear-gradient(135deg, #ff453a, #bf5af2);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 36px; color: white;
+    margin-bottom: 24px;
+    box-shadow: 0 16px 48px rgba(191, 90, 242, 0.4);
+  }
+  .welcome h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  .welcome p { font-size: 14px; color: rgba(245, 245, 247, 0.6); max-width: 400px; line-height: 1.5; margin-bottom: 24px; }
+  .welcome-steps { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 500px; }
+  .welcome-step {
+    background: rgba(255, 255, 255, 0.05); padding: 6px 12px; border-radius: 12px;
+    font-size: 11px; color: rgba(245, 245, 247, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Banner de modo dev — avisa que wizard é só preview */
+  .dev-banner {
+    position: fixed; top: 44px; left: 0; right: 0;
+    background: linear-gradient(90deg, #ff9f0a, #ff453a);
+    color: white; padding: 6px 16px;
+    text-align: center; font-size: 12px; font-weight: 600;
+    z-index: 90;
+    box-shadow: 0 2px 8px rgba(255, 69, 58, 0.3);
+  }
+  .dev-banner strong { font-weight: 700; }
+
+  /* Ajusta container pra ter espaço pro banner */
+  .container.dev-mode { padding-top: 76px; }
+</style>
+</head>
+<body>
+
+<!-- Titlebar custom (sem barra do Windows) -->
+<div class="titlebar">
+  <div class="titlebar-left">
+    <div class="titlebar-logo">M</div>
+    <div class="titlebar-title">Márcio App — Setup</div>
+  </div>
+  <button class="titlebar-close" onclick="closeApp()" title="Fechar">✕</button>
+</div>
+
+<!-- Banner de modo dev (só aparece em dev) -->
+<div class="dev-banner" id="devBanner" style="display:none;">
+  ⚠️ <strong>MODO DEV — PREVIEW APENAS</strong> ⚠️ Nada será salvo. Seus dados (API key, prompt, etc.) não são afetados. Pra configurar de verdade, compile com <code>npm run tauri:build</code>.
+</div>
+
+<div class="container" id="mainContainer">
+
+  <!-- Progress bar -->
+  <div class="progress-bar" id="progressBar"></div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="step-label" id="stepLabel">Passo 1 de 6</div>
+    <div class="step-title" id="stepTitle">Bem-vindo!</div>
+    <div class="step-subtitle" id="stepSubtitle">Vamos configurar seu bot</div>
+  </div>
+
+  <!-- Content (steps) -->
+  <div class="content">
+
+    <!-- STEP 0: Welcome -->
+    <div class="step active" data-step="0">
+      <div class="welcome">
+        <div class="welcome-logo">M</div>
+        <h1>Bem-vindo ao Márcio App</h1>
+        <p>Seu bot de WhatsApp com IA. Vamos fazer uma configuração inicial rápida — depois você pode ajustar tudo pelo painel.</p>
+        <div class="welcome-steps">
+          <div class="welcome-step">1. Nome do bot</div>
+          <div class="welcome-step">2. Personalidade</div>
+          <div class="welcome-step">3. API Key</div>
+          <div class="welcome-step">4. Comandos</div>
+          <div class="welcome-step">5. WhatsApp</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1: Bot Name -->
+    <div class="step" data-step="1">
+      <div class="bot-preview">
+        <div class="bot-avatar" id="botAvatar">M</div>
+        <div class="bot-info-text">
+          <div class="bot-info-name" id="botNamePreview">Márcio Pinto</div>
+          <div class="bot-info-status">Preview do nome do bot</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Nome do bot <span class="hint">como ele se chama</span></label>
+        <input type="text" id="botName" placeholder="Márcio Pinto" value="Márcio Pinto" oninput="updateBotPreview()">
+      </div>
+      <div class="form-group">
+        <label>Como ele se apresenta <span class="hint">nome informal</span></label>
+        <input type="text" id="botAlias" placeholder="Márcio" value="Márcio">
+      </div>
+    </div>
+
+    <!-- STEP 2: System Prompt -->
+    <div class="step" data-step="2">
+      <div class="form-group">
+        <label>Personalidade do bot <span class="hint">system prompt — como ele deve agir</span></label>
+        <div style="font-size: 12px; color: rgba(245,245,247,0.5); margin-bottom: 8px;">
+          Deixe vazio pra usar o prompt padrão (Márcio Pinto, grupo "Penis", humorístico, etc.).
+          Ou cole seu próprio prompt personalizado.
+        </div>
+        <textarea id="systemPrompt" placeholder="Você é o [nome], amigo de [pessoas]... (deixe vazio pra usar default)"></textarea>
+      </div>
+    </div>
+
+    <!-- STEP 3: AI API Key -->
+    <div class="step" data-step="3">
+      <div class="form-group">
+        <label>Google Gemini API Key <span class="hint">obtenha em ai.google.dev</span></label>
+        <input type="password" id="apiKey" placeholder="AIza...">
+      </div>
+      <div class="form-group">
+        <label>Modelo principal <span class="hint">default: gemini-3.5-flash-lite</span></label>
+        <input type="text" id="aiModel" value="gemini-3.5-flash-lite">
+      </div>
+      <div class="form-group">
+        <label>Modelo fallback <span class="hint">tenta esse se o principal falhar</span></label>
+        <input type="text" id="aiFallback" value="gemini-3.1-flash-lite">
+      </div>
+      <div style="font-size: 12px; color: rgba(245,245,247,0.5); margin-top: 12px;">
+        💡 A API key fica salva só no seu computador (em <code>data/ai-config.json</code>). Nunca é enviada pra nenhum servidor além do Google.
+      </div>
+    </div>
+
+    <!-- STEP 4: Commands -->
+    <div class="step" data-step="4">
+      <div style="font-size: 13px; color: rgba(245,245,247,0.7); margin-bottom: 16px;">
+        Ative/desative comandos e mude permissão (público/só-op). Você pode mudar isso depois pelo painel.
+      </div>
+      <div id="commandsList">
+        <div class="qr-spinner" style="margin: 20px auto;"></div>
+        <div style="text-align: center; color: rgba(245,245,247,0.5); font-size: 12px;">Carregando comandos...</div>
+      </div>
+    </div>
+
+    <!-- STEP 5: WhatsApp QR -->
+    <div class="step" data-step="5">
+      <div class="qr-container" id="qrContainer">
+        <div class="qr-spinner"></div>
+        <div class="qr-status" id="qrStatus">Aguardando QR code do WhatsApp...</div>
+      </div>
+      <div style="text-align: center; font-size: 12px; color: rgba(245,245,247,0.5); max-width: 400px; margin: 0 auto;">
+        💡 Abra o WhatsApp no celular → Configurações → Aparelhos conectados → Conectar aparelho → escaneie o QR
+      </div>
+    </div>
+
+    <!-- STEP 6: Done -->
+    <div class="step" data-step="6">
+      <div class="welcome">
+        <div class="welcome-logo" style="background: linear-gradient(135deg, #30d158, #0a84ff);">✓</div>
+        <h1>Setup completo!</h1>
+        <p>Seu bot está pronto. O painel de controle vai abrir automaticamente.</p>
+        <div style="font-size: 12px; color: rgba(245,245,247,0.5); margin-top: 16px;">
+          Dica: você pode refazer o setup a qualquer momento pelo painel → Sobre → "Refazer setup".
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <button class="btn btn-ghost" id="btnBack" onclick="prevStep()" style="visibility: hidden;">← Voltar</button>
+    <button class="btn btn-primary" id="btnNext" onclick="nextStep()">Continuar →</button>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+const API_BASE = (window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_IPC__ || (window.chrome && window.chrome.webview) || location.protocol === 'tauri:' || location.hostname === 'tauri.localhost') ? 'http://localhost:3001' : '';
+const WS_BASE = (window.__TAURI__ || location.protocol === 'tauri:' || location.hostname === 'tauri.localhost') ? 'ws://localhost:3001' : '';
+
+let currentStep = 0;
+let commandsData = [];
+let qrPolling = null;
+let ws = null;
+
+function $(s) { return document.querySelector(s); }
+function $$(s) { return document.querySelectorAll(s); }
+
+function toast(msg, kind = '', ms = 3000) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + kind;
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function closeApp() {
+  if (window.__TAURI__) {
+    try {
+      const { getCurrentWindow } = window.__TAURI__.window || window.__TAURI__.webviewWindow;
+      getCurrentWindow().close();
+    } catch (e) {
+      // Fallback: tenta invoke
+      try { window.__TAURI__.core.invoke('quit'); } catch {}
+    }
+  } else {
+    // Em browser, fecha a aba
+    window.close();
+  }
+}
+
+function updateProgress() {
+  const total = 6;
+  const bar = $('#progressBar');
+  bar.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const step = document.createElement('div');
+    step.className = 'progress-step';
+    if (i < currentStep) step.classList.add('done');
+    else if (i === currentStep) step.classList.add('active');
+    bar.appendChild(step);
+  }
+}
+
+function showStep(n) {
+  $$('.step').forEach(s => s.classList.remove('active'));
+  const target = $(`.step[data-step="${n}"]`);
+  if (target) target.classList.add('active');
+  currentStep = n;
+
+  // Atualiza header
+  const titles = [
+    ['Passo 0', 'Bem-vindo!', 'Vamos configurar seu bot'],
+    ['Passo 1 de 5', 'Nome do bot', 'Como seu bot se chama'],
+    ['Passo 2 de 5', 'Personalidade', 'Defina como ele deve agir'],
+    ['Passo 3 de 5', 'IA (API Key)', 'Configure o Gemini'],
+    ['Passo 4 de 5', 'Comandos', 'Ative/desative comandos'],
+    ['Passo 5 de 5', 'WhatsApp', 'Conecte sua conta'],
+    ['Concluído', 'Tudo pronto!', 'Seu bot está configurado'],
+  ];
+  $('#stepLabel').textContent = titles[n][0];
+  $('#stepTitle').textContent = titles[n][1];
+  $('#stepSubtitle').textContent = titles[n][2];
+
+  // Botões
+  $('#btnBack').style.visibility = n === 0 || n === 6 ? 'hidden' : 'visible';
+  if (n === 6) {
+    // Em dev, muda o texto do botão final (não salva nada)
+    const isDev = !window.__TAURI__;
+    $('#btnNext').textContent = isDev ? 'Fechar preview' : 'Abrir painel →';
+    $('#btnNext').className = isDev ? 'btn btn-ghost' : 'btn btn-success';
+  } else if (n === 5) {
+    $('#btnNext').textContent = 'Pular (conectar depois)';
+    $('#btnNext').className = 'btn btn-ghost';
+  } else if (n === 0) {
+    $('#btnNext').textContent = 'Começar →';
+    $('#btnNext').className = 'btn btn-primary';
+  } else {
+    $('#btnNext').textContent = 'Continuar →';
+    $('#btnNext').className = 'btn btn-primary';
+  }
+
+  updateProgress();
+
+  // Ações específicas por step
+  if (n === 4) loadCommands();
+  if (n === 5) startQrPolling();
+  if (n === 5 || n === 6) stopQrPolling = n === 6;
+}
+
+function nextStep() {
+  if (currentStep === 6) {
+    // Abrir painel
+    finishSetup();
+    return;
+  }
+  if (currentStep === 5) {
+    // WhatsApp — pode pular
+    showStep(6);
+    return;
+  }
+  if (currentStep === 3) {
+    // Validar API key (não obrigatório, mas avisa se vazio)
+    const key = $('#apiKey').value.trim();
+    if (!key) {
+      if (!confirm('Você não preencheu a API key. IA vai ficar desativada. Continuar mesmo assim?')) return;
+    }
+  }
+  showStep(currentStep + 1);
+}
+
+function prevStep() {
+  if (currentStep > 0 && currentStep < 6) {
+    showStep(currentStep - 1);
+  }
+}
+
+function updateBotPreview() {
+  const name = $('#botName').value.trim() || 'Márcio Pinto';
+  $('#botNamePreview').textContent = name;
+  $('#botAvatar').textContent = name.charAt(0).toUpperCase();
+}
+
+// === COMMANDS ===
+async function loadCommands() {
+  try {
+    const r = await fetch(API_BASE + '/api/commands').then(r => r.json());
+    commandsData = r.commands || [];
+    renderCommands();
+  } catch (e) {
+    $('#commandsList').innerHTML = `<div style="text-align:center;color:#ff453a;font-size:13px;">Erro ao carregar comandos: ${e.message}</div>`;
+  }
+}
+
+function renderCommands() {
+  const list = $('#commandsList');
+  if (!commandsData.length) {
+    list.innerHTML = '<div style="text-align:center;color:rgba(245,245,247,0.5);font-size:13px;">Nenhum comando</div>';
+    return;
+  }
+  // Ordena: locked primeiro
+  const sorted = [...commandsData].sort((a, b) => {
+    if (a.locked !== b.locked) return a.locked ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  list.innerHTML = sorted.map(c => {
+    const isLocked = c.locked;
+    const isDisabled = c.disabled;
+    const isOp = c.effectiveOpOnly;
+    const help = (c.help || '').slice(0, 60);
+
+    if (isLocked) {
+      return `<div class="cmd-card" style="opacity:0.7;">
+        <div class="cmd-info">
+          <div class="cmd-name">${escapeHtml(c.name)}</div>
+          <div class="cmd-help">${escapeHtml(help)}</div>
+        </div>
+        <div class="cmd-locked">🔒 admin (travado)</div>
+      </div>`;
+    }
+
+    return `<div class="cmd-card">
+      <div class="cmd-info">
+        <div class="cmd-name">${escapeHtml(c.name)}</div>
+        <div class="cmd-help">${escapeHtml(help)}</div>
+      </div>
+      <div class="cmd-controls">
+        <label class="cmd-toggle">
+          <input type="checkbox" ${isDisabled ? '' : 'checked'} data-cmd="${escapeHtml(c.name)}" data-field="disabled" onchange="onCmdToggle(this)">
+          <span>ativo</span>
+        </label>
+        <select class="cmd-perm" data-cmd="${escapeHtml(c.name)}" onchange="onCmdPerm(this)">
+          <option value="public" ${!isOp ? 'selected' : ''}>🌐 público</option>
+          <option value="op" ${isOp ? 'selected' : ''}>⭐ só op</option>
+        </select>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function onCmdToggle(checkbox) {
+  const cmd = checkbox.dataset.cmd;
+  const disabled = !checkbox.checked;
+  try {
+    await fetch(API_BASE + '/api/commands/' + encodeURIComponent(cmd), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ disabled }),
+    });
+    toast(`${cmd} ${disabled ? 'desativado' : 'ativado'}`, 'success');
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+    checkbox.checked = !disabled; // reverte
+  }
+}
+
+async function onCmdPerm(select) {
+  const cmd = select.dataset.cmd;
+  const opOnly = select.value === 'op';
+  try {
+    await fetch(API_BASE + '/api/commands/' + encodeURIComponent(cmd), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opOnly }),
+    });
+    toast(`${cmd}: ${opOnly ? 'só op' : 'público'}`, 'success');
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  }
+}
+
+// === WHATSAPP QR ===
+let stopQrPolling = false;
+async function startQrPolling() {
+  if (qrPolling) return;
+  stopQrPolling = false;
+
+  const poll = async () => {
+    if (stopQrPolling) return;
+    try {
+      // 1. Checa status do bot
+      const status = await fetch(API_BASE + '/api/bot/status').then(r => r.json());
+      if (status.whatsappConnected) {
+        showQrSuccess();
+        return;
+      }
+      // 2. Busca QR
+      const qrRes = await fetch(API_BASE + '/api/qr').then(r => r.json());
+      if (qrRes.qr) {
+        showQr(qrRes.qr);
+      } else {
+        showQrStatus('Aguardando WhatsApp gerar QR...', 'pending');
+      }
+    } catch (e) {
+      showQrStatus('Bot ainda iniciando... aguarde', 'pending');
+    }
+    qrPolling = setTimeout(poll, 2000);
+  };
+  poll();
+}
+
+function showQr(qrString) {
+  const container = $('#qrContainer');
+  // Usa api.qrserver.com (mesma do painel) pra renderizar QR como imagem
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrString)}&bgcolor=ffffff&color=000000`;
+  container.innerHTML = `
+    <div class="qr-box"><img src="${qrUrl}" alt="QR Code"></div>
+    <div class="qr-status">Escaneie com o WhatsApp do celular</div>
+  `;
+}
+
+function showQrSuccess() {
+  stopQrPolling = true;
+  if (qrPolling) { clearTimeout(qrPolling); qrPolling = null; }
+  const container = $('#qrContainer');
+  container.innerHTML = `
+    <div style="font-size: 64px;">✅</div>
+    <div class="qr-status success">WhatsApp conectado com sucesso!</div>
+  `;
+  toast('WhatsApp conectado!', 'success');
+  // Auto-avança pra step final depois de 1.5s
+  setTimeout(() => showStep(6), 1500);
+}
+
+function showQrStatus(msg, kind) {
+  const status = $('#qrStatus');
+  const container = $('#qrContainer');
+  container.innerHTML = `
+    <div class="qr-spinner"></div>
+    <div class="qr-status ${kind === 'success' ? 'success' : kind === 'error' ? 'error' : ''}">${msg}</div>
+  `;
+}
+
+// === FINISH ===
+async function finishSetup() {
+  const botName = $('#botName').value.trim();
+  const systemPrompt = $('#systemPrompt').value;
+  const apiKey = $('#apiKey').value.trim();
+  const aiModel = $('#aiModel').value.trim();
+  const aiFallback = $('#aiFallback').value.trim();
+
+  // Em dev: NÃO SALVA NADA. Apenas mostra mensagem e fecha.
+  if (!window.__TAURI__) {
+    toast('MODO DEV — nada foi salvo. Wizard é só preview visual.', 'info', 4000);
+    setTimeout(() => {
+      // Em browser, fecha a aba (ou redireciona pro painel)
+      if (window.opener) {
+        window.close();
+      } else {
+        window.location.href = API_BASE + '/';
+      }
+    }, 1500);
+    return;
+  }
+
+  try {
+    const body = {
+      botName: botName || 'Márcio Pinto',
+      systemPrompt: systemPrompt || '',
+      aiConfig: {
+        model: aiModel || 'gemini-3.5-flash-lite',
+        fallbackModels: [aiFallback || 'gemini-3.1-flash-lite'],
+        apiKey: apiKey,
+        apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+        audioTranscription: {
+          enabled: true,
+          primaryModel: aiModel || 'gemini-3.5-flash-lite',
+          fallbackModel: aiFallback || 'gemini-3.1-flash-lite',
+        },
+      },
+    };
+    const resp = await fetch(API_BASE + '/api/setup/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok || result.devMode) {
+      // Backend bloqueou (modo dev) — não salvou nada
+      toast('Backend em modo dev — nada foi salvo.', 'info', 4000);
+      console.warn('[SETUP] backend bloqueou:', result.error);
+      setTimeout(() => closeApp(), 1500);
+      return;
+    }
+    toast('Setup salvo!', 'success');
+
+    // Em Tauri: chama comando Rust pra abrir janela main e fechar setup
+    setTimeout(() => {
+      if (window.__TAURI__) {
+        try {
+          window.__TAURI__.core.invoke('open_main_window');
+        } catch (e) {
+          console.error('[SETUP] erro ao chamar open_main_window:', e);
+          try {
+            const { getCurrentWindow } = window.__TAURI__.window || window.__TAURI__.webviewWindow;
+            getCurrentWindow().close();
+          } catch {}
+        }
+      } else {
+        window.location.href = API_BASE + '/';
+      }
+    }, 800);
+  } catch (e) {
+    toast('Erro ao salvar setup: ' + e.message, 'error');
+  }
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// === Init ===
+window.addEventListener('DOMContentLoaded', () => {
+  updateProgress();
+  updateBotPreview();
+
+  // Detecta modo dev: se NÃO é Tauri (browser) OU se a URL é localhost (dev server)
+  // Em Tauri produção, location.protocol === 'tauri:' ou hostname === 'tauri.localhost'.
+  const isDevMode = !window.__TAURI__ ||
+    (location.hostname === 'localhost' && location.protocol !== 'tauri:' && location.hostname !== 'tauri.localhost');
+
+  if (isDevMode) {
+    // Mostra banner de modo dev
+    const banner = document.getElementById('devBanner');
+    if (banner) banner.style.display = 'block';
+    const container = document.getElementById('mainContainer');
+    if (container) container.classList.add('dev-mode');
+    console.warn('[SETUP] MODO DEV detectado — wizard é só preview, NADA será salvo.');
+    // Desabilita o botão "Abrir painel" no step final (não faz sentido em dev)
+    // Será tratado em showStep quando chegar no step 6.
+  }
+
+  // Escuta WS pra detectar setup-complete (caso o painel principal mande)
+  try {
+    const url = WS_BASE ? WS_BASE + '/' : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/';
+    ws = new WebSocket(url);
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'setup-complete' && msg.data?.completed) {
+          toast('Setup completo!', 'success');
+        }
+      } catch {}
+    };
+  } catch {}
+
+  // Log pra debug
+  console.log('[SETUP] init — API_BASE:', API_BASE, 'isTauri:', !!window.__TAURI__, 'isDevMode:', isDevMode);
+});
+
+// Expor funções no window (pra onclick inline)
+window.nextStep = nextStep;
+window.prevStep = prevStep;
+window.closeApp = closeApp;
+window.updateBotPreview = updateBotPreview;
+window.loadCommands = loadCommands;
+window.onCmdToggle = onCmdToggle;
+window.onCmdPerm = onCmdPerm;
+</script>
+</body>
+</html>

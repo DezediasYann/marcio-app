@@ -13,6 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "Márcio App",
         "width": 1200,
         "height": 800,
@@ -20,7 +21,22 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "visible": false
+      },
+      {
+        "label": "setup",
+        "title": "Márcio App — Setup",
+        "url": "setup-wizard.html",
+        "width": 560,
+        "height": 720,
+        "minWidth": 480,
+        "minHeight": 600,
+        "resizable": false,
+        "fullscreen": false,
+        "center": true,
+        "decorations": false,
+        "visible": false
       }
     ],
     "security": {

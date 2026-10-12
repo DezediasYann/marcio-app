@@ -20,8 +20,11 @@ logs/
 src-tauri/target/
 src-tauri/Cargo.lock
 src-tauri/gen/
+# Arquivos copiados pelo copy-to-tauri.js (artefatos de build)
 src-tauri/dist/
 src-tauri/data/
+src-tauri/package.json
+src-tauri/patch-whatsapp-web.js
 
 # OS
 .DS_Store

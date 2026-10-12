@@ -2013,6 +2013,22 @@
               </div>
               <div class="muted small mt-2" id="updateStatus"></div>
             </div>
+
+            <div class="card mt-3" style="padding:16px;text-align:center;">
+              <div class="card-title">🧙 Setup Wizard</div>
+              <div class="card-subtitle">Refaz o wizard de configuração inicial</div>
+              <div class="row-flex mt-2" style="justify-content:center;gap:8px;flex-wrap:wrap;">
+                <button class="ghost" onclick="openSetupWizard()">🧙 Abrir wizard (preview dev)</button>
+                <button class="danger" onclick="resetSetupState()" id="btnResetSetup" style="display:none;">↺ Resetar setup-state</button>
+              </div>
+              <div class="muted small mt-2" style="max-width:380px;margin:8px auto 0;" id="setupHintDev">
+                💡 Em DEV, o wizard é só <strong>preview visual</strong> — nada é salvo. Seus dados (API key, prompt, etc.) não são afetados.
+                Em produção (após <code>npm run tauri:build</code>), o wizard salva de verdade.
+              </div>
+              <div class="muted small mt-2" style="max-width:380px;margin:8px auto 0;display:none;" id="setupHintProd">
+                💡 "Resetar setup-state" marca como não-completado — próxima vez que abrir o app, vai mostrar o wizard de novo. Seus dados NÃO são afetados.
+              </div>
+            </div>
           </div>
         </section>
 
@@ -4438,7 +4454,14 @@
             await update.downloadAndInstall();
             toast('✅ Atualizado! Reiniciando…', 'success');
             await new Promise(r => setTimeout(r, 2000));
-            window.__TAURI__.process.relaunch();
+            // Usa comando customizado (mais confiável que window.__TAURI__.process.relaunch)
+            try {
+              await window.__TAURI__.core.invoke('relaunch_app');
+            } catch (e) {
+              console.error('[UPDATE] erro ao reiniciar:', e);
+              // Fallback: tenta API antiga
+              try { window.__TAURI__.process?.relaunch?.(); } catch {}
+            }
           } else {
             if (status) status.textContent = 'Atualização cancelada';
           }
@@ -4449,6 +4472,42 @@
       } catch (e) {
         if (status) status.textContent = '❌ Erro: ' + e;
         toast('Erro ao verificar: ' + e, 'error', 5000);
+      }
+    }
+
+    // === SETUP WIZARD ===
+    // Abre o wizard de configuração inicial sem afetar dados (pra testar).
+    // Em Tauri: chama comando Rust que abre a janela setup.
+    // Em browser: abre setup-wizard.html em nova aba.
+    function openSetupWizard() {
+      if (window.__TAURI__) {
+        try {
+          window.__TAURI__.core.invoke('reopen_setup');
+          toast('Abrindo wizard…', 'info');
+        } catch (e) {
+          toast('Erro: ' + e, 'error', 5000);
+        }
+      } else {
+        // Em browser, abre em nova aba
+        window.open(API_BASE + '/setup-wizard.html', '_blank');
+        toast('Wizard aberto em nova aba', 'info');
+      }
+    }
+
+    // Reseta o setup-state.json (marca como não completado).
+    // Em produção, exige confirmação explícita.
+    async function resetSetupState() {
+      const isProd = window.__TAURI__ && location.protocol === 'tauri:' || location.hostname === 'tauri.localhost';
+      const msg = isProd
+        ? 'Resetar setup-state? Na próxima vez que abrir o app, vai mostrar o wizard de novo. Seus dados (memórias, figurinhas, etc.) NÃO são afetados.'
+        : 'Resetar setup-state? (Em dev, isso só afeta o arquivo data/setup-state.json.)';
+      if (!confirm(msg)) return;
+      try {
+        const force = isProd ? true : false;
+        await apiPost('/api/setup/reset', { force });
+        toast('Setup-state resetado ✓', 'success');
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error', 5000);
       }
     }
     async function loadMaintenance() {
@@ -4544,6 +4603,26 @@
     function init() {
       console.log('[MARCIO] init() start');
       try {
+        // Detecta modo dev vs produção (Tauri)
+        const isDev = !window.__TAURI__;
+        if (isDev) {
+          // Em dev: esconde botão "Resetar setup-state" (não tem efeito)
+          const btnReset = document.getElementById('btnResetSetup');
+          if (btnReset) btnReset.style.display = 'none';
+          const hintDev = document.getElementById('setupHintDev');
+          if (hintDev) hintDev.style.display = 'block';
+          const hintProd = document.getElementById('setupHintProd');
+          if (hintProd) hintProd.style.display = 'none';
+        } else {
+          // Em produção: mostra botão "Resetar setup-state"
+          const btnReset = document.getElementById('btnResetSetup');
+          if (btnReset) btnReset.style.display = 'inline-flex';
+          const hintDev = document.getElementById('setupHintDev');
+          if (hintDev) hintDev.style.display = 'none';
+          const hintProd = document.getElementById('setupHintProd');
+          if (hintProd) hintProd.style.display = 'block';
+        }
+
         // Initial loads
         loadStats();
         // Start polling stats every 10s (backup)
@@ -4715,6 +4794,8 @@
       loadAutostartStatus: () => typeof loadAutostartStatus !== 'undefined' ? loadAutostartStatus : null,
       testNotification: () => typeof testNotification !== 'undefined' ? testNotification : null,
       checkForUpdates: () => typeof checkForUpdates !== 'undefined' ? checkForUpdates : null,
+      openSetupWizard: () => typeof openSetupWizard !== 'undefined' ? openSetupWizard : null,
+      resetSetupState: () => typeof resetSetupState !== 'undefined' ? resetSetupState : null,
       closeModal: () => typeof closeModal !== 'undefined' ? closeModal : null,
     };
     var _ok = 0, _fail = 0;

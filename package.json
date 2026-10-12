@@ -11,7 +11,9 @@
     "postinstall": "node patch-whatsapp-web.js",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "signer:generate": "tauri signer generate -w ~/.tauri/marcio-app.key",
+    "signer:generate:ci": "tauri signer generate -w $RUNNER_TEMP/marcio-app.key"
   },
   "dependencies": {
     "@tauri-apps/plugin-autostart": "^2.7.0",

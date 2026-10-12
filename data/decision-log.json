@@ -494,6 +494,27 @@
       "text": "doente",
       "timestamp": 1791844205660,
       "decision": "pending"
+    },
+    {
+      "msgId": "false_120363163279095316@g.us_3EB0C1F4A26809E6EBF4DB_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "@all",
+      "timestamp": 1791847580010,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363163279095316@g.us_3EB059F3A21B7EAE8D72A8_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "comentem",
+      "timestamp": 1791847646310,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363163279095316@g.us_3EB0F5167E81E4A561D478_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "agr q eu vi q eu falei \"mario\"",
+      "timestamp": 1791847670135,
+      "decision": "pending"
     }
   ]
 }

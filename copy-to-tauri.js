@@ -57,9 +57,10 @@ fs.writeFileSync(path.join(tauriDataDir, '.gitkeep'), '');
 fs.writeFileSync(path.join(tauriDataDir, 'stickers-vault', '.gitkeep'), '');
 console.log('✅ data/ criado ZERADO (só pastas com .gitkeep) — bot cria defaults em runtime');
 
-// package.json + patch-whatsapp-web.js (sempre sobrescreve)
+// package.json + patch-whatsapp-web.js + changelog.json (sempre sobrescreve)
 copyFile(path.join(__dirname, 'package.json'), path.join(tauriDir, 'package.json'));
 copyFile(path.join(__dirname, 'patch-whatsapp-web.js'), path.join(tauriDir, 'patch-whatsapp-web.js'));
+copyFile(path.join(__dirname, 'changelog.json'), path.join(tauriDir, 'changelog.json'));
 
 console.log('✅ copy-to-tauri concluído — build ZERADO (sem dados de usuário, sem API key, sem figurinhas)');
 

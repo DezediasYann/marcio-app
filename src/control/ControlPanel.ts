@@ -417,6 +417,45 @@ export class ControlPanel {
         return this.serveStaticFile(pathname, res);
       }
 
+      // ======================================================================
+      // CHANGELOG — "O que há de novo?"
+      // ======================================================================
+
+      // GET /api/changelog — retorna o changelog completo (de data/changelog.json)
+      // + info de qual versão o usuário já viu (de changelog-state.json)
+      if (method === 'GET' && pathname === '/api/changelog') {
+        try {
+          const changelog = this.readChangelog();
+          const seenVersion = this.readChangelogState().lastSeenVersion;
+          // Versão atual do app (do package.json lido uma vez)
+          const currentVersion = this.getCurrentVersion();
+          // hasNew = tem versão mais nova que a última vista
+          const hasNew = changelog.releases.some(r => this.compareVersions(r.version, seenVersion) > 0);
+          return this.json(res, {
+            currentVersion,
+            lastSeenVersion: seenVersion,
+            hasNew,
+            releases: changelog.releases,
+          });
+        } catch (e) {
+          return this.json(res, { error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/changelog/dismiss — marca versão como vista (não mostra de novo)
+      // Body: { version?: string } — se não vier, usa a versão atual do app
+      if (method === 'POST' && pathname === '/api/changelog/dismiss') {
+        const body = await this.readJsonBody(req).catch(() => ({}));
+        try {
+          const version = (body?.version as string) || this.getCurrentVersion();
+          this.writeChangelogState({ lastSeenVersion: version, dismissedAt: new Date().toISOString() });
+          this.app.log('CHANGELOG', `versão ${version} marcada como vista`);
+          return this.json(res, { ok: true, lastSeenVersion: version });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
       // GET /api/stats
       if (method === 'GET' && pathname === '/api/stats') {
         return this.json(res, this.buildStats());
@@ -1630,6 +1669,111 @@ export class ControlPanel {
     }
   }
 
+  // ===========================================================================
+  // CHANGELOG — "O que há de novo?"
+  // ===========================================================================
+
+  /**
+   * Versão atual do app (cacheada do package.json). Lida 1x no boot.
+   */
+  private _cachedVersion: string | null = null;
+  private getCurrentVersion(): string {
+    if (this._cachedVersion) return this._cachedVersion;
+    try {
+      // Em produção, package.json tá no cwd do bot (AppData).
+      // Em dev, tá no rootDir.
+      const rootDir = this.app.config.rootDir;
+      const pkgPath = path.join(rootDir, 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      this._cachedVersion = pkg.version || '1.0.0';
+    } catch {
+      this._cachedVersion = '1.0.0';
+    }
+    return this._cachedVersion;
+  }
+
+  /**
+   * Lê data/changelog.json — arquivo com as novidades por versão.
+   * Procura em 3 locais (em ordem):
+   *  1. data/changelog.json (user-editável — se o usuário customizou)
+   *  2. rootDir/data/changelog.json (bundled com o app — em produção: AppData)
+   *  3. rootDir/changelog.json (fallback — em dev: raiz do projeto)
+   * Se não existe em nenhum, retorna objeto vazio.
+   */
+  private readChangelog(): { releases: Array<any> } {
+    const candidates = [
+      this.app.dataPath('changelog.json'),
+      path.join(this.app.config.rootDir, 'data', 'changelog.json'),
+      path.join(this.app.config.rootDir, 'changelog.json'),
+    ];
+    for (const filePath of candidates) {
+      try {
+        if (!fs.existsSync(filePath)) continue;
+        const content = fs.readFileSync(filePath, 'utf8').trim();
+        if (!content) continue;
+        return JSON.parse(content);
+      } catch (e) {
+        this.app.debug('CHANGELOG', `erro ao ler ${filePath}: ${(e as Error).message}`);
+      }
+    }
+    this.app.debug('CHANGELOG', 'nenhum changelog.json encontrado — retornando vazio');
+    return { releases: [] };
+  }
+
+  /**
+   * Lê data/changelog-state.json — qual versão o usuário já viu.
+   * Retorna { lastSeenVersion: '0.0.0' } se não existe (primeira vez = mostra tudo).
+   */
+  private readChangelogState(): { lastSeenVersion: string; dismissedAt?: string } {
+    try {
+      const filePath = this.app.dataPath('changelog-state.json');
+      if (!fs.existsSync(filePath)) {
+        return { lastSeenVersion: '0.0.0' };  // nunca viu — mostra tudo
+      }
+      const content = fs.readFileSync(filePath, 'utf8').trim();
+      if (!content) return { lastSeenVersion: '0.0.0' };
+      const parsed = JSON.parse(content);
+      return {
+        lastSeenVersion: parsed.lastSeenVersion || '0.0.0',
+        dismissedAt: parsed.dismissedAt || undefined,
+      };
+    } catch {
+      return { lastSeenVersion: '0.0.0' };
+    }
+  }
+
+  /**
+   * Salva data/changelog-state.json.
+   */
+  private writeChangelogState(state: { lastSeenVersion: string; dismissedAt?: string }): void {
+    try {
+      const filePath = this.app.dataPath('changelog-state.json');
+      fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf8');
+    } catch (e) {
+      this.app.debug('CHANGELOG', `erro ao salvar changelog-state: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Compara 2 versões semânticas (ex: '1.2.3' vs '1.2.4').
+   * Retorna > 0 se a > b, 0 se iguais, < 0 se a < b.
+   */
+  private compareVersions(a: string, b: string): number {
+    const parse = (v: string): number[] => {
+      return (v || '0.0.0').split('.').map(n => parseInt(n.replace(/\D/g, '')) || 0);
+    };
+    const pa = parse(a);
+    const pb = parse(b);
+    const maxLen = Math.max(pa.length, pb.length);
+    for (let i = 0; i < maxLen; i++) {
+      const na = pa[i] || 0;
+      const nb = pb[i] || 0;
+      if (na > nb) return 1;
+      if (na < nb) return -1;
+    }
+    return 0;
+  }
+
   /**
    * Serve um arquivo estático do publicDir (chart.min.js, /js/*, /css/*).
    * Path traversal protegido — normaliza e checa que está dentro do publicDir.
@@ -2060,6 +2204,14 @@ export class ControlPanel {
    * Lê todos os arquivos soltos em data/ (exceto subdirs grandes tipo
    * stickers-vault) e retorna como { name: base64 }.
    *
+   * Inclui TODOS os .json e .txt soltos em data/:
+   *  - memories.json, directives.json, ai-config.json, system-prompt.txt
+   *  - ops.json, banned.json, chat-profiles.json, stickers-meta.json
+   *  - decision-log.json, chat-settings.json, events.json
+   *  - profile-book.json (sistema novo de perfis)
+   *  - command-overrides.json (overrides de comandos)
+   *  - setup-state.json (estado do wizard — opcional, não crítico)
+   *
    * Subdirs incluídos: NENHUM (stickers-vault é huge; os outros não existem
    * por default). Se quiser adicionar um subdir no futuro, dá pra estender.
    */
@@ -2198,6 +2350,16 @@ export class ControlPanel {
       const i = info('chat-settings.json', d => Object.keys(d || {}).length);
       comps.push({ id: 'chat-settings', label: 'Settings de chat', description: 'IA on/off e entrosão por chat', icon: '⚙️', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
     }
+    // profile-book (sistema novo de perfis — separado do chat-profiles)
+    {
+      const i = info('profile-book.json', d => Object.keys(d?.profiles || d || {}).length);
+      comps.push({ id: 'profile-book', label: 'ProfileBook', description: 'Perfis de pessoas/grupos (sistema novo)', icon: '👤', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // command-overrides (overrides de comandos — ativar/desativar, op↔public)
+    {
+      const i = info('command-overrides.json', d => Object.keys(d || {}).length);
+      comps.push({ id: 'command-overrides', label: 'Overrides de comandos', description: 'Configs de ativar/desativar e permissão', icon: '🔧', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
     // events
     {
       const i = info('events.json', d => Array.isArray(d) ? d.length : 0);
@@ -2322,6 +2484,18 @@ export class ControlPanel {
             const d = readJson('chat-settings.json');
             if (d !== null) { data['chat-settings'] = d; exported.push(comp); }
             else errors.push('chat-settings: arquivo não encontrado');
+            break;
+          }
+          case 'profile-book': {
+            const d = readJson('profile-book.json');
+            if (d !== null) { data['profile-book'] = d; exported.push(comp); }
+            else errors.push('profile-book: arquivo não encontrado');
+            break;
+          }
+          case 'command-overrides': {
+            const d = readJson('command-overrides.json');
+            if (d !== null) { data['command-overrides'] = d; exported.push(comp); }
+            else errors.push('command-overrides: arquivo não encontrado');
             break;
           }
           case 'events': {
@@ -2462,6 +2636,16 @@ export class ControlPanel {
             break;
           case 'chat-settings':
             if (writeJson('chat-settings.json', content)) applied.push(comp);
+            break;
+          case 'profile-book':
+            if (writeJson('profile-book.json', content)) applied.push(comp);
+            break;
+          case 'command-overrides':
+            if (writeJson('command-overrides.json', content)) {
+              applied.push(comp);
+              // Recarrega overrides no CommandRegistry
+              try { this.app.commands.loadOverrides(); } catch { /* ignora */ }
+            }
             break;
           case 'events':
             if (writeJson('events.json', content)) applied.push(comp);

@@ -1,0 +1,156 @@
+{
+  "releases": [
+    {
+      "version": "1.0.0",
+      "date": "2025-01-15",
+      "title": "🎉 Primeira versão pública!",
+      "sections": [
+        {
+          "icon": "🧠",
+          "title": "IA Conversacional",
+          "items": [
+            "Bot responde mensagens no WhatsApp usando Google Gemini (3.5 Flash Lite + fallback 3.1 Flash Lite)",
+            "Personalidade customizável via system prompt (editor no painel)",
+            "Memória permanente de fatos sobre pessoas (ex: 'Yann mora em SP')",
+            "Aprendizado de estilo de escrita por chat (gírias, maiúsculas, emojis)",
+            "Decisão inteligente: cooldown, chance, triggers (pergunta/drama/política/fofoca), entrosão ajustável",
+            "Sistema retroativo: volta a mensagens ignoradas e responde se ficar interessante",
+            "Modo silêncio: IA pode decidir não responder ([SILENCIO])",
+            "Hot-reload de config (muda modelo/key sem reiniciar)"
+          ]
+        },
+        {
+          "icon": "🎵",
+          "title": "Transcrição de Áudios",
+          "items": [
+            "Transcreve áudios do WhatsApp usando Gemini multimodal",
+            "Só transcreve quando decide responder (economiza cota diária)",
+            "Fallback automático 3.5 → 3.1 Flash Lite se rate limit",
+            "Reage 🔇 se ambos modelos falharem",
+            "Transcrição persiste no contexto (IA lembra do que falaram)",
+            "Badge '🎵 áudio' no painel Conversas"
+          ]
+        },
+        {
+          "icon": "🎭",
+          "title": "Figurinhas",
+          "items": [
+            "Cria figurinhas de imagens/vídeos/links (!figurinha)",
+            "Vault com deduplicação automática (/fig dedup)",
+            "Nomeia figurinhas (/fig nome) — IA pode pedir específicas",
+            "Favoritas (/fig fav) — priorizadas nas respostas",
+            "Ondas e guerras de figurinhas detectadas automaticamente",
+            "IA responde figurinha com figurinha (cultura WhatsApp)"
+          ]
+        },
+        {
+          "icon": "📋",
+          "title": "Comandos",
+          "items": [
+            "Públicos: !ajuda, !pergunta, /resumo, /entrosao, /ia, /memoria, /perfil, /educa, /figurinha, /fig",
+            "Assistivos: /enquete, /evento, /lembrete, /clima, /calcula, /busca",
+            "Admin (só ops + só PV): /admin, /op, /deop, /ops, /ban, /unban, /banidos",
+            "Painel: ativar/desativar comandos + mudar op↔public (persistente)",
+            "Comandos admin travados (sempre só-op + só-PV)"
+          ]
+        },
+        {
+          "icon": "🤖",
+          "title": "Painel de Controle (Web)",
+          "items": [
+            "Design iOS 26/27 'Liquid Glass' (glassmorphism + gradient mesh)",
+            "16 seções: Dashboard, Log, Console, Bot, Memórias, Figurinhas, Chats, Eventos, Conversas, Ops, Prompt, IA, Comandos, Diretivas, Tema, Backup, Sobre",
+            "WebSocket: logs em tempo real + auto-refresh de stats",
+            "Auto-refresh de Conversas (msgs novas aparecem sozinhas)",
+            "Sync de mute/IA entre WhatsApp e painel",
+            "Editor de prompt com hot-reload",
+            "Config de IA com teste de conexão",
+            "Galeria de figurinhas com preview + favoritos",
+            "Editor de memórias (CRUD completo)",
+            "Modal de chat com contexto + perfil + IA toggle + entrosão slider"
+          ]
+        },
+        {
+          "icon": "💬",
+          "title": "Conversas (clone do WhatsApp)",
+          "items": [
+            "Painel mostra histórico de mensagens (backfill de ~100 msgs dos 30 chats mais ativos)",
+            "Badges de decisão: ✅ respondido, ⏭️ pulado, ⏳ pendente, 📨 recebida, 📜 histórico",
+            "Auto-refresh debounced quando chegam msgs novas",
+            "Auto-scroll inteligente (preserva scroll se lendo antigas)",
+            "Badge de áudio 🎵 em msgs transcritas",
+            "Quotes (mensagens citadas) exibidas",
+            "Avatares e nomes dos chats"
+          ]
+        },
+        {
+          "icon": "👤",
+          "title": "ProfileBook (sistema novo de perfis)",
+          "items": [
+            "Perfis de pessoas e grupos (separado do chat-profiles antigo)",
+            "Linkagem de IDs (mesma pessoa com @lid de grupo + @c.us de PV)",
+            "Resolução por nome (IA ajuda a vincular perfis)",
+            "Atualização periódica via IA (a cada 30min, perfis stale)",
+            "Traits personalizadas (anotações manuais)"
+          ]
+        },
+        {
+          "icon": "⚙️",
+          "title": "Configurações",
+          "items": [
+            "IA on/off por chat (persiste entre restarts)",
+            "Entrosão 0-2 por chat (0=quieto, 1=normal, 2=2x participativo)",
+            "Mute democrático (!mute/!unmute com votação)",
+            "Modo manutenção (pausa bot mas painel funciona)",
+            "Auto-start do app com o Windows (Tauri)",
+            "Notificações nativas (IA offline, WhatsApp caiu, erro crítico)"
+          ]
+        },
+        {
+          "icon": "💾",
+          "title": "Backup & Restore",
+          "items": [
+            "Backup seletivo (escolhe o que exportar: memórias, configs, figurinhas, etc.)",
+            "Import granular (restaura só o que quer)",
+            "Export de figurinhas (imagens .webp em base64)",
+            "Compat com formato legado ({files: {name: base64}})",
+            "Inclui TODOS os dados: memories, directives, ai-config, ops, banned, chat-profiles, profile-book, stickers-meta, stickers-vault, decision-log, chat-settings, command-overrides, events, system-prompt"
+          ]
+        },
+        {
+          "icon": "🧙",
+          "title": "Setup Wizard (primeira execução)",
+          "items": [
+            "Janela sem barra do Windows com X embutido",
+            "6 steps: welcome, nome do bot, personalidade, API key, comandos, WhatsApp QR",
+            "Login WhatsApp direto no app (QR code)",
+            "Em dev: modo preview (não salva nada)",
+            "Em produção: salva configs + marca setup completo"
+          ]
+        },
+        {
+          "icon": "🔄",
+          "title": "Auto-update",
+          "items": [
+            "Verifica atualizações no GitHub (tauri-plugin-updater)",
+            "Download + instala + reinicia automático",
+            "Release multi-plataforma (Windows, macOS, Linux)",
+            "Tela 'O que há de novo?' após atualizar"
+          ]
+        },
+        {
+          "icon": "📦",
+          "title": "Build de Produção",
+          "items": [
+            "App desktop nativo (Tauri 2 + Rust)",
+            "Build zerado (sem dados de usuário, sem figurinhas, sem API key)",
+            "Cross-platform: Windows (.exe/.msi), macOS (.dmg), Linux (.AppImage)",
+            "Dados em AppData (sobrevive a reinstalações)",
+            "npm install automático na primeira execução",
+            "Patch do whatsapp-web.js aplicado automaticamente"
+          ]
+        }
+      ]
+    }
+  ]
+}

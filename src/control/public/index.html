@@ -1022,6 +1022,45 @@
       animation: fadeIn 0.2s var(--ease);
     }
     .modal-overlay.show { display: flex; }
+
+    /* === Changelog modal (O que há de novo?) === */
+    .changelog-hero {
+      text-align: center; padding: 24px 20px 16px;
+      background: linear-gradient(135deg, rgba(191, 90, 242, 0.15), rgba(10, 132, 255, 0.15));
+      border-bottom: 1px solid var(--border);
+    }
+    .changelog-hero-icon { font-size: 48px; margin-bottom: 8px; }
+    .changelog-hero-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .changelog-hero-version { font-size: 12px; color: var(--text-secondary); }
+    .changelog-hero-date { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+    .changelog-content {
+      overflow-y: auto; padding: 20px; max-height: 60vh;
+    }
+    .changelog-content::-webkit-scrollbar { width: 6px; }
+    .changelog-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    .changelog-section { margin-bottom: 20px; }
+    .changelog-section-header {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 14px; font-weight: 700; margin-bottom: 8px;
+      color: var(--text);
+    }
+    .changelog-section-icon { font-size: 18px; }
+    .changelog-items { list-style: none; padding: 0; margin: 0; }
+    .changelog-items li {
+      font-size: 13px; line-height: 1.6;
+      color: var(--text-secondary);
+      padding: 4px 0 4px 20px;
+      position: relative;
+    }
+    .changelog-items li::before {
+      content: '•'; position: absolute; left: 8px;
+      color: var(--accent, #0a84ff); font-weight: bold;
+    }
+    .changelog-footer {
+      padding: 16px 20px; border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .changelog-dismiss-label { font-size: 12px; color: var(--text-tertiary); }
     .modal {
       background: var(--bg-glass-strong);
       backdrop-filter: var(--blur);
@@ -2020,6 +2059,7 @@
               <div class="row-flex mt-2" style="justify-content:center;gap:8px;flex-wrap:wrap;">
                 <button class="ghost" onclick="openSetupWizard()">🧙 Abrir wizard (preview dev)</button>
                 <button class="danger" onclick="resetSetupState()" id="btnResetSetup" style="display:none;">↺ Resetar setup-state</button>
+                <button class="ghost" onclick="checkChangelog()">📋 O que há de novo?</button>
               </div>
               <div class="muted small mt-2" style="max-width:380px;margin:8px auto 0;" id="setupHintDev">
                 💡 Em DEV, o wizard é só <strong>preview visual</strong> — nada é salvo. Seus dados (API key, prompt, etc.) não são afetados.
@@ -4640,9 +4680,83 @@
         // Show dashboard
         showSection('dashboard');
         console.log('[MARCIO] init() complete');
+
+        // Check changelog (mostra "O que há de novo?" se tem versão não vista)
+        setTimeout(checkChangelog, 1000);
       } catch (e) {
         console.error('[MARCIO] init() FATAL:', e);
         __showErrorBanner('init() fatal: ' + e.message, e.stack);
+      }
+    }
+
+    // === CHANGELOG ("O que há de novo?") ===
+    async function checkChangelog() {
+      try {
+        const r = await apiGet('/api/changelog');
+        if (r.hasNew && r.releases && r.releases.length > 0) {
+          dbg('CHANGELOG', `novidades disponíveis — versão atual: ${r.currentVersion}, última vista: ${r.lastSeenVersion}`);
+          showChangelogModal(r.releases, r.currentVersion);
+        } else {
+          dbg('CHANGELOG', `sem novidades — versão atual: ${r.currentVersion}, última vista: ${r.lastSeenVersion}`);
+        }
+      } catch (e) {
+        dbgErr('CHANGELOG', 'erro ao checar changelog:', e.message);
+      }
+    }
+
+    function showChangelogModal(releases, currentVersion) {
+      // Filtra só releases mais novos que a última versão vista
+      // (se lastSeenVersion = '0.0.0', mostra todos)
+      const modalContent = $('#modalContent');
+      if (!modalContent) return;
+
+      const releasesHtml = releases.map(release => {
+        const sectionsHtml = (release.sections || []).map(section => {
+          const itemsHtml = (section.items || []).map(item => `<li>${escapeHtml(item)}</li>`).join('');
+          return `
+            <div class="changelog-section">
+              <div class="changelog-section-header">
+                <span class="changelog-section-icon">${section.icon || '✨'}</span>
+                <span>${escapeHtml(section.title || '')}</span>
+              </div>
+              <ul class="changelog-items">${itemsHtml}</ul>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="changelog-hero">
+            <div class="changelog-hero-icon">${release.title?.includes('🎉') ? release.title.split(' ')[0] : '✨'}</div>
+            <div class="changelog-hero-title">${escapeHtml(release.title || `v${release.version}`)}</div>
+            <div class="changelog-hero-version">v${escapeHtml(release.version)}</div>
+            ${release.date ? `<div class="changelog-hero-date">${escapeHtml(formatDate(release.date))}</div>` : ''}
+          </div>
+          <div class="changelog-content">${sectionsHtml}</div>
+        `;
+      }).join('');
+
+      modalContent.innerHTML = `
+        ${releasesHtml}
+        <div class="changelog-footer">
+          <span class="changelog-dismiss-label">Não mostrar isso de novo</span>
+          <div class="row-flex" style="gap:8px;">
+            <button class="ghost" onclick="closeModal()">Ver depois</button>
+            <button class="primary" onclick="dismissChangelog('${escapeHtml(currentVersion)}')">Entendi ✓</button>
+          </div>
+        </div>
+      `;
+      $('#modalOverlay').classList.add('show');
+    }
+
+    async function dismissChangelog(version) {
+      try {
+        await apiPost('/api/changelog/dismiss', { version });
+        closeModal();
+        toast('Novidades marcadas como vistas ✓', 'success');
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error', 5000);
+        // Fecha mesmo assim — não trava o usuário
+        closeModal();
       }
     }
 
@@ -4796,6 +4910,8 @@
       checkForUpdates: () => typeof checkForUpdates !== 'undefined' ? checkForUpdates : null,
       openSetupWizard: () => typeof openSetupWizard !== 'undefined' ? openSetupWizard : null,
       resetSetupState: () => typeof resetSetupState !== 'undefined' ? resetSetupState : null,
+      checkChangelog: () => typeof checkChangelog !== 'undefined' ? checkChangelog : null,
+      dismissChangelog: () => typeof dismissChangelog !== 'undefined' ? dismissChangelog : null,
       closeModal: () => typeof closeModal !== 'undefined' ? closeModal : null,
     };
     var _ok = 0, _fail = 0;

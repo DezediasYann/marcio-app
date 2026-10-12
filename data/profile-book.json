@@ -47,7 +47,7 @@
     "type": "person",
     "name": "Yann",
     "photoUrl": "https://pps.whatsapp.net/v/t61.24694-24/642843356_2657829587944450_8523475339961661933_n.jpg?ccb=11-4&oh=01_Q5Aa5wHRk9PR4E6yO2CGvqQib_hxBshUbvcYt-Z849uVy_4Scg&oe=6ADA679C&_nc_sid=5e03e0&_nc_cat=102",
-    "interactionCount": 158,
+    "interactionCount": 161,
     "dataPoints": 5,
     "aiSummary": "Yann tem 22 anos, é flamenguista, gamer de League of Legends e tem posicionamento político de esquerda. Ele interage de forma bem-humorada, usando áudios, figurinhas e comandos de bot.",
     "aiShortView": "22 anos, flamenguista, gamer, esquerda, bem-humorado, usa figurinhas",
@@ -62,7 +62,7 @@
     "firstSeen": "2026-10-12T20:31:18.024Z",
     "lastUpdated": "2026-10-12T22:35:15.262Z",
     "lastAIUpdate": "2026-10-12T22:35:15.262Z",
-    "messageCountSinceUpdate": 8,
+    "messageCountSinceUpdate": 11,
     "aliases": []
   },
   "diogo": {
@@ -190,7 +190,7 @@
     "type": "group",
     "name": "GH (Gays e Hetero)",
     "aliases": [],
-    "interactionCount": 9,
+    "interactionCount": 12,
     "dataPoints": 0,
     "aiSummary": "",
     "aiShortView": "",
@@ -199,7 +199,7 @@
     "firstSeen": "2026-10-12T22:26:13.245Z",
     "lastUpdated": null,
     "lastAIUpdate": null,
-    "messageCountSinceUpdate": 9
+    "messageCountSinceUpdate": 12
   },
   "3148244598937@lid": {
     "id": "3148244598937@lid",

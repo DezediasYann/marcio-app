@@ -25,6 +25,7 @@ src-tauri/dist/
 src-tauri/data/
 src-tauri/package.json
 src-tauri/patch-whatsapp-web.js
+src-tauri/changelog.json
 
 # OS
 .DS_Store

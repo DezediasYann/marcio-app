@@ -57,7 +57,8 @@
       "dist/**/*",
       "data/**/*",
       "package.json",
-      "patch-whatsapp-web.js"
+      "patch-whatsapp-web.js",
+      "changelog.json"
     ],
     "externalBin": [],
     "copyright": "",

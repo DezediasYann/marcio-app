@@ -125,7 +125,7 @@ export class WhatsAppClient {
 
   /**
    * Handler de mensagem — Fase 3.2: delega pro MessageRouter.
-   * Toda a lógica de dispatch (loop-guard, figurinha, contexto, twitter,
+   * Toda a lógica de dispatch (loop-guard, figurinha, contexto,
    * comando? registry : IA) vive no router. Aqui é só ponte.
    */
   private async handleMessage(msg: Message): Promise<void> {

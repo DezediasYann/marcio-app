@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build TypeScript
+      - name: Build TypeScript + copy assets to tauri
         run: npm run build
 
       - name: Build Tauri app

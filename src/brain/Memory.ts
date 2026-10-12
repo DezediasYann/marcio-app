@@ -185,6 +185,79 @@ export class Memory {
   }
 
   // ===========================================================================
+  // REPLACE — usado pelo endpoint POST /api/memories/import (painel)
+  // ===========================================================================
+
+  /**
+   * Substitui TODAS as memórias por um novo conjunto (vindo de um export
+   * anterior via /api/memories/export ou /api/backup).
+   *
+   * Validação rigorosa (nunca confie em input do usuário):
+   *  - `data` deve ser um objeto plano.
+   *  - Cada valor deve ser um array de entries.
+   *  - Cada entry deve ter `fact` (string não-vazia). `sourceChat` e
+   *    `timestamp` são opcionais (defaultam pra '' e agora).
+   *  - Sanitiza fact (trim, cap 200 chars).
+   *  - Dedup dentro de cada usuário (case-insensitive substring).
+   *  - Cap de 30 fatos por usuário (preservando os mais recentes).
+   *  - Rejeita chaves de usuário que pareçam chatIds (formato antigo
+   *    per-chat) — exige formato global por userName.
+   *
+   * @returns Stats { users, facts } do que foi efetivamente salvo.
+   */
+  replace(data: unknown): { users: number; facts: number } {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('formato inválido — esperado objeto { userName: MemoryEntry[] }');
+    }
+    const obj = data as Record<string, unknown>;
+    const cleaned: MemoriesData = {};
+    let totalFacts = 0;
+    let totalUsers = 0;
+
+    for (const [userName, rawFacts] of Object.entries(obj)) {
+      // Rejeita formato antigo (per-chat) — keys com @g.us/@c.us/@lid
+      if (/@(g\.us|c\.us|lid)$/i.test(userName)) {
+        // Pula silenciosamente — formato legado não deve passar direto
+        continue;
+      }
+      if (!Array.isArray(rawFacts)) {
+        continue;
+      }
+      const entries: MemoryEntry[] = [];
+      const seenLower: string[] = [];
+      for (const f of rawFacts) {
+        if (!f || typeof f !== 'object') continue;
+        const factRaw = String((f as any).fact ?? '').trim();
+        if (!factRaw) continue;
+        const fact = factRaw.length > 200 ? factRaw.slice(0, 200) + '...' : factRaw;
+        // Dedup case-insensitive por substring (mesma regra do add())
+        const fl = fact.toLowerCase();
+        const dup = seenLower.some(s => s.includes(fl) || fl.includes(s));
+        if (dup) continue;
+        seenLower.push(fl);
+        entries.push({
+          fact,
+          sourceChat: String((f as any).sourceChat ?? ''),
+          timestamp: String((f as any).timestamp ?? new Date().toISOString()),
+        });
+      }
+      if (entries.length === 0) continue;
+      // Cap 30/user — preserva os mais recentes (timestamp desc)
+      entries.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+      const capped = entries.slice(0, 30);
+      cleaned[userName] = capped;
+      totalUsers++;
+      totalFacts += capped.length;
+    }
+
+    this.cache = cleaned;
+    this.dirty = true;
+    this.save();
+    this.app.log('MEMORY', `replace: ${totalUsers} usuário(s), ${totalFacts} fato(s) salvos`);
+    return { users: totalUsers, facts: totalFacts };
+  }
+
+  // ===========================================================================
   // BUILD TEXT (pra injetar no prompt da IA)
   // ===========================================================================
 

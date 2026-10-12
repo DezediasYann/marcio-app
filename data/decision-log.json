@@ -1,272 +1,354 @@
 {
   "120363022575323428@g.us": [
     {
-      "msgId": "false_120363022575323428@g.us_ACD9879E6F11D7B899D8AE4A90E753EC_3148244598937@lid",
+      "msgId": "false_120363022575323428@g.us_AC7EB605AEEEBBCAAEE393EC127A6A70_3148244598937@lid",
       "senderName": "Leticia Dezedias",
-      "text": "Ai gente",
-      "timestamp": 1791642787478,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_ACAB1B2521718FB0B3A2354585302D02_3148244598937@lid",
-      "senderName": "Leticia Dezedias",
-      "text": "Tô sonhando com algo relacionado a eleição desde domingo",
-      "timestamp": 1791642806395,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_ACECC317EBE124E8E5E2396DE9B25DFF_3148244598937@lid",
-      "senderName": "Leticia Dezedias",
-      "text": "Ontem eu falei com daniel q ia votar com a blusa do brasil",
-      "timestamp": 1791642851171,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_AC17D7F9E82E435F1924CAB841537FF9_3148244598937@lid",
-      "senderName": "",
-      "text": "Aí vi um vídeo do yuri marçal mandando a galera ir votar cedo, pq vão fazer de tudo pra atrapalhar",
-      "timestamp": 1791642889589,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_ACC3F63ED41CCEB40F0EE70EB3333F29_3148244598937@lid",
-      "senderName": "Leticia Dezedias",
-      "text": "Sonhei q ia e a mulher NAO ME DEIXAVA votar",
-      "timestamp": 1791642906879,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_AC097F0B6883674FE8D1478B22A7321E_179199390302392@lid",
-      "senderName": "Luiza 🫶",
-      "text": "mds a psicose política",
-      "timestamp": 1791642933471,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_AC5FC2642FED1B27C67DE034E8990FD1_3148244598937@lid",
-      "senderName": "Leticia Dezedias",
-      "text": "Falava q eu era a última da fila e que o resultado ja tava certo (a mulher falava pelo menos q o Lula ganharia)",
-      "timestamp": 1791642933857,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_AC63B63AF2E17BB7C21F21660C3FC605_3148244598937@lid",
-      "senderName": "Leticia Dezedias",
-      "text": "E eu começava a chorar",
-      "timestamp": 1791642940572,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_ACBDD64DB6A6B1F202911A2402A2BD50_3148244598937@lid",
-      "senderName": "Leticia Dezedias",
-      "text": "Achando ser golpe",
-      "timestamp": 1791642945543,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_ACECC121234D4F064A438A1C4CD05CC0_3148244598937@lid",
-      "senderName": "Leticia Dezedias",
-      "text": "Nossa, eu ficava desesperada real",
-      "timestamp": 1791642953813,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_AC355A01AD12B7754668BDECC1F6AA3C_179199390302392@lid",
-      "senderName": "",
-      "text": "ELE CAI LEVAR LRRR",
-      "timestamp": 1791642956544,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_AC79F24E27635DD1E993133C14D57CE7_179199390302392@lid",
-      "senderName": "Luiza 🫶",
-      "text": "aí estamos todos assim lele",
-      "timestamp": 1791642968117,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_AC17323F4A3FCD34CFD991BD85E0E741_179199390302392@lid",
-      "senderName": "Luiza 🫶",
-      "text": "ele vai ganhar, tenho mttt fe",
-      "timestamp": 1791642974299,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_AC135A82266706F680F0D2C0856D3E66_3148244598937@lid",
-      "senderName": "",
-      "text": "Senti um tom de deboche",
-      "timestamp": 1791643018687,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_ACEC69F89B7D211EC39B52E4B44BE324_179199390302392@lid",
-      "senderName": "Luiza 🫶",
-      "text": "KKKKKKKKKK N AGUENTO C ISSO",
-      "timestamp": 1791643090291,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_3EB07BD1EF3196FDCB4A92_77129039540435@lid",
-      "senderName": "",
-      "text": "minha orientadora ta gravando um VIDEO pra falar sobre como o bolsonaro destruiu as universidades em 4 anos",
-      "timestamp": 1791644244438,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363022575323428@g.us_3EB0CDC357CDED839D804F_77129039540435@lid",
-      "senderName": "Yann",
-      "text": "mas ISSO é psicose política",
-      "timestamp": 1791644254411,
+      "text": "Minha mae perdeu o medo do meu pai ver e tá bem foda-se",
+      "timestamp": 1791844379361,
       "decision": "pending"
     },
     {
-      "msgId": "false_120363022575323428@g.us_3EB0FF1D20F797F6789584_77129039540435@lid",
-      "senderName": "Yann",
-      "text": "princesa",
-      "timestamp": 1791644255693,
+      "msgId": "false_120363022575323428@g.us_AC256B440F78537AAD3C02CB142E314E_179199390302392@lid",
+      "senderName": "Luiza 🫶",
+      "text": "mds eu amo ela dms",
+      "timestamp": 1791844524333,
       "decision": "pending"
     }
   ],
   "120363338508497641@g.us": [
     {
-      "msgId": "false_120363338508497641@g.us_ACF044AA566A8999EB46CDCD781F76EA_87029090148605@lid",
-      "senderName": "Carlos Eduardo Lima",
-      "text": "Lula Molusco",
-      "timestamp": 1791639324782,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_AC3225FD306B4577204FFE6D245E3EE9_87029090148605@lid",
-      "senderName": "Carlos Eduardo Lima",
-      "text": "Old",
-      "timestamp": 1791639343666,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_AC60B4035922FB79441A6750E76AA6CB_251088133451836@lid",
+      "msgId": "false_120363338508497641@g.us_ACAAA4D44B4139F6FB1306552A983349_251088133451836@lid",
       "senderName": "Carlos D.",
-      "text": "Caramba fi, obrigado",
-      "timestamp": 1791640677283,
+      "text": "Me entupi de café pra não perder o foco e ter energia pra fazer trabalho da faculdade e agora to sem foco e com energia de sobra com o coração a 130bpm",
+      "timestamp": 1791842673842,
       "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_3A8E2EF079DE1FDBEB8E_155963365548068@lid",
+      "msgId": "false_120363338508497641@g.us_ACA5BB1A1EE5745A21FF000CADEE8E65_251088133451836@lid",
       "senderName": "",
-      "text": "passado",
-      "timestamp": 1791640726188,
-      "decision": "responded"
+      "text": "",
+      "timestamp": 1791842707605,
+      "decision": "responded",
+      "botResponse": "[FIGURINHA: cantora iza fazendo um aborto]",
+      "botResponseTimestamp": 1791842707605,
+      "quotedMsgId": "false_120363338508497641@g.us_ACA5BB1A1EE5745A21FF000CADEE8E65_251088133451836@lid"
     },
     {
-      "msgId": "false_120363338508497641@g.us_AC24DEE19359750E13500B87B24F60D2_251088133451836@lid",
+      "msgId": "false_120363338508497641@g.us_3A7C593E977C38BB8F5A_116058623053950@lid",
+      "senderName": "Cauã Lemos",
+      "text": "Isso é lindo",
+      "timestamp": 1791842724763,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC58DE4ABBAA44EEF8337BC99C1A7A53_251088133451836@lid",
       "senderName": "Carlos D.",
-      "text": "Ele decidindo mandar . Quando da na telha",
-      "timestamp": 1791640760193,
+      "text": "Só porque eduquei bem?",
+      "timestamp": 1791842736686,
       "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_3A4B4427DDD072AB7D84_77129039540435@lid",
+      "msgId": "false_120363338508497641@g.us_3EB005E1AAA2B94E8AAEF5_77129039540435@lid",
       "senderName": "Yann",
-      "text": "ontem eu fiz um rework na forma como ele interage aqui, diminui a chance pra 1% dele querer interagir, agr preciso ficar atento",
-      "timestamp": 1791641265597,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_3AFB442EC149802849AB_77129039540435@lid",
-      "senderName": "Yann",
-      "text": "mas os comandos sao bafo",
-      "timestamp": 1791641274226,
+      "text": "pior q eu sinto q café é horrivel pq ele n te da foco ele só te faz ficar mais agitado, que pra uma mente hyperativa se traduz numa mente super agitada e bagunçada",
+      "timestamp": 1791842850774,
       "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_3AD9592EC80F4AA6A2FF_77129039540435@lid",
+      "msgId": "false_120363338508497641@g.us_3EB0334DEF405EF0273268_77129039540435@lid",
       "senderName": "Yann",
-      "text": "eu n sei como melhorar o /resumo",
-      "timestamp": 1791641280715,
+      "text": "eu gosto mt de beber café, amo o sabor, mas esse efeito é superdesagradável",
+      "timestamp": 1791842866801,
       "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_3A2D81466FFBDC21708C_77129039540435@lid",
-      "senderName": "",
-      "text": "minha psicose politica criou o márcio, estou mal com a possibilidade do flavio ganhar #help",
-      "timestamp": 1791641377656,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_3A9794B7DB12FE0BF1AC_77129039540435@lid",
-      "senderName": "Yann",
-      "text": "ah, se mencionar nominalmente ou por @ a chance dele falar algo é 100%",
-      "timestamp": 1791641395285,
+      "msgId": "false_120363338508497641@g.us_ACE8DAF9D671DCF7B8BDDFA78497FE1A_251088133451836@lid",
+      "senderName": "Carlos D.",
+      "text": "Euuu",
+      "timestamp": 1791842990421,
       "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_3A51C13819023DC73710_155963365548068@lid",
-      "senderName": "",
-      "text": "marcio vc eh sacudo?",
-      "timestamp": 1791641502537,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_3A0A538CF08A9B1C8C46_77129039540435@lid",
-      "senderName": "Yann",
-      "text": "eu estou com a sensação de querer aprendeu o que perguntas difíceis ele só manda a figurinha da imensa carpenter",
-      "timestamp": 1791641563741,
+      "msgId": "false_120363338508497641@g.us_AC8EACAD0335C5AD70EAEFF49298DC3E_251088133451836@lid",
+      "senderName": "Carlos D.",
+      "text": "É que o o foco que procuro é não ter sono esmo",
+      "timestamp": 1791843008013,
       "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_3A6D35FFABF4123BF7D7_155963365548068@lid",
-      "senderName": "",
-      "text": "marcio oq vc acha de",
-      "timestamp": 1791641669448,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_3A0F122AEA69C5E26DF6_155963365548068@lid",
+      "msgId": "false_120363338508497641@g.us_3EB090921A2CD71E93AD0F_155963365548068@lid",
       "senderName": "ítalo",
-      "text": "yann e quando vc mudar a data do seu aniversário pro dia 31",
-      "timestamp": 1791641770300,
+      "text": "ta todo mundo com cabelo rosa, a barba DESSE tamanho, sobrepeso, bebendo na sta cecilia falando que o amor venceu. FAZ O L! ou seja, é difícil",
+      "timestamp": 1791843275134,
       "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_3AE11C6309379E76D258_77129039540435@lid",
+      "msgId": "false_120363338508497641@g.us_3EB052FB8969EB0A2FC367_77129039540435@lid",
       "senderName": "Yann",
-      "text": "oi?",
-      "timestamp": 1791641813952,
+      "text": "eu ja nomeei essa",
+      "timestamp": 1791843327495,
       "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_AC403412C37B2619A905AD82F14BC5B9_162354142703765@lid",
-      "senderName": "Felipe 🐍",
-      "text": "o que você sente quando",
-      "timestamp": 1791644041064,
-      "decision": "skip"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_AC07998C691974249DB62A91FA8386C5_162354142703765@lid",
-      "senderName": "Felipe 🐍",
-      "text": "pilantra me deixou no vácuo",
-      "timestamp": 1791644113496,
-      "decision": "responded"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_3EB008A428F0DE83A349A3_77129039540435@lid",
+      "msgId": "false_120363338508497641@g.us_3EB02C65B6B669708B7775_77129039540435@lid",
       "senderName": "Yann",
-      "text": "ele ficou avaliando se respondia e escolheu nao responder",
-      "timestamp": 1791644179335,
-      "decision": "pending"
+      "text": "e era pra ter ido",
+      "timestamp": 1791843330058,
+      "decision": "skip"
     },
     {
-      "msgId": "false_120363338508497641@g.us_ACA2259799E4E59432681A0D2F9B1B29_162354142703765@lid",
-      "senderName": "Felipe 🐍",
-      "text": "mico",
-      "timestamp": 1791644253379,
-      "decision": "pending"
-    },
-    {
-      "msgId": "false_120363338508497641@g.us_3EB0AF062BFA4F45BB1E92_77129039540435@lid",
+      "msgId": "false_120363338508497641@g.us_ACD074AF3E916284206EBA3194ABA388_251088133451836@lid",
       "senderName": "",
-      "text": "Márcio eu estou prestes a te desligar pra te desmontar e montar de novo. Foi um bom proof of concept, mas o código está ilegivel e eu não aguento mais lidar com ele. Dá tchauzinho vida",
-      "timestamp": 1791644368707,
-      "decision": "responded"
+      "text": "",
+      "timestamp": 1791843330401,
+      "decision": "responded",
+      "botResponse": "[FIGURINHA: cantora iza fazendo um aborto]",
+      "botResponseTimestamp": 1791843330401
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACA78D4A3BBCA3E7D6FE2B5650ECBFF9_251088133451836@lid",
+      "senderName": "Carlos D.",
+      "text": "Ata",
+      "timestamp": 1791843331637,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB0EC69FDD3EFE22F68C4_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "eu vou corrigir",
+      "timestamp": 1791843331673,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB05126C0F66BBA45C05A_155963365548068@lid",
+      "senderName": "ítalo",
+      "text": "cara kkkkkkkkkkkkkkkk",
+      "timestamp": 1791843343651,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB095EF3B0E2977BF5D39_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "pera",
+      "timestamp": 1791843349086,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB05DD479903706F6B1B2_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "o nome é mistica?",
+      "timestamp": 1791843352652,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB008CC1AB9B2C1CAB58F_155963365548068@lid",
+      "senderName": "ítalo",
+      "text": "eu n aguento esse bofe igual um velho tentando interagir com a ia",
+      "timestamp": 1791843359274,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB031F4EE461A8454DF76_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "gretchen jean gray embasbacada",
+      "timestamp": 1791843363147,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACD838BF73F216DAACB84884ED6F23A6_251088133451836@lid",
+      "senderName": "Carlos D.",
+      "text": "Supus",
+      "timestamp": 1791843427085,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC8BAF0CF9C6CA2E819D0C02A7398366_251088133451836@lid",
+      "senderName": "Carlos D.",
+      "text": "Gostasse?",
+      "timestamp": 1791843431607,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACC1324AEC9A05B80D80B2E471DC1980_251088133451836@lid",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843444660,
+      "decision": "responded",
+      "botResponse": "[FIGURINHA: gretchen mística (x-man) embasbacada]",
+      "botResponseTimestamp": 1791843444660,
+      "quotedMsgId": "false_120363338508497641@g.us_ACC1324AEC9A05B80D80B2E471DC1980_251088133451836@lid"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACF3E70684D8A4A2FDE8F071B6FBDD17_251088133451836@lid",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843451885,
+      "decision": "responded",
+      "botResponse": "[FIGURINHA: gretchen mística (x-man) embasbacada]",
+      "botResponseTimestamp": 1791843451885,
+      "quotedMsgId": "false_120363338508497641@g.us_ACF3E70684D8A4A2FDE8F071B6FBDD17_251088133451836@lid"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC8C7A97362CF50DAF821BB0A2298F68_251088133451836@lid",
+      "senderName": "Carlos D.",
+      "text": "Viu sempre deixo ele sem palavras",
+      "timestamp": 1791843494024,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC29FA6B705534C25632546DA337D9C0_251088133451836@lid",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843500917,
+      "decision": "responded",
+      "botResponse": "totalmente bug tester kkkkkkkkkkkkkkkkk",
+      "botResponseTimestamp": 1791843500917,
+      "quotedMsgId": "false_120363338508497641@g.us_AC29FA6B705534C25632546DA337D9C0_251088133451836@lid"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACAC4AD5024906D2E2FB28359A808343_251088133451836@lid",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843524473,
+      "decision": "responded",
+      "botResponse": "testa os bagulho que quebra, acha erro e deixa o criador doido tentando arrumar o código",
+      "botResponseTimestamp": 1791843524473,
+      "quotedMsgId": "false_120363338508497641@g.us_ACAC4AD5024906D2E2FB28359A808343_251088133451836@lid"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC21D1ED24C95E5DA9C3E942CBA83FAD_251088133451836@lid",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843538032,
+      "decision": "responded",
+      "botResponse": "exatamente isso, só falta me pagar um café pra compensar a dor de cabeça",
+      "botResponseTimestamp": 1791843538032,
+      "quotedMsgId": "false_120363338508497641@g.us_AC21D1ED24C95E5DA9C3E942CBA83FAD_251088133451836@lid"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACD4E6C5F4FEDD2D269DCB2C9BAC2EE3_251088133451836@lid",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843549490,
+      "decision": "responded",
+      "botResponse": "[FIGURINHA: lumena agradecendo. \"Obrigada\".]",
+      "botResponseTimestamp": 1791843549490,
+      "quotedMsgId": "false_120363338508497641@g.us_ACD4E6C5F4FEDD2D269DCB2C9BAC2EE3_251088133451836@lid"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB001227BB4F5C432D01C_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "CADE",
+      "timestamp": 1791843564726,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACC068735E88151E987B1A24FB817B66_251088133451836@lid",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843586174,
+      "decision": "responded",
+      "botResponse": "olha lá, o cara acha que eu sou robô de telemensagem pra responder no susto",
+      "botResponseTimestamp": 1791843586174,
+      "quotedMsgId": "false_120363338508497641@g.us_ACC068735E88151E987B1A24FB817B66_251088133451836@lid"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB07DFF9E86488B1BDB2A_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "nao é bug",
+      "timestamp": 1791843615138,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB0D5C29DA70A03CA970F_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "ele leu a mensagem e deixou pra la",
+      "timestamp": 1791843621075,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC61802C4FD84725B48F5BE05233EA7A_251088133451836@lid",
+      "senderName": "Carlos D.",
+      "text": "Justo também",
+      "timestamp": 1791843640190,
+      "decision": "skip"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB0DBF442EFEEB8C47B95_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "ai off mt chato so ter 1 dia de aula",
+      "timestamp": 1791844739064,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB08E036437543CFBEAF2_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "nao faço nada krl",
+      "timestamp": 1791844743082,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3EB0F99978E544A90DA62D_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "pq vc refez a mesma figurinha 300x",
+      "timestamp": 1791845115446,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACE3F0B1814425C5253E366D3550DF15_261984465498304@lid",
+      "senderName": "joão",
+      "text": "ele cortou",
+      "timestamp": 1791845143342,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC12BD87E4E2DE802911F5515B58A9CA_261984465498304@lid",
+      "senderName": "joão",
+      "text": "pior q eu abri o gp p corrigir mesmo",
+      "timestamp": 1791845148661,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC0582CA4158A46215B58D2C8611D8F7_261984465498304@lid",
+      "senderName": "joão",
+      "text": "esqueci de recortar",
+      "timestamp": 1791845157654,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3A268EAB233AD29B6C03_116058623053950@lid",
+      "senderName": "Cauã Lemos",
+      "text": "Em 2027:",
+      "timestamp": 1791845194569,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_AC0B518F1DF344BAC748C039D1456EDE_87029090148605@lid",
+      "senderName": "Carlos Eduardo Lima",
+      "text": "Pior q café e energéticos no geral são pessimos com foco",
+      "timestamp": 1791845313894,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3A867871442841D225A3_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "dilma eu te amo",
+      "timestamp": 1791845333212,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_ACBCF31E2C1DACA02CA47F4CEB8BC753_87029090148605@lid",
+      "senderName": "Carlos Eduardo Lima",
+      "text": "Tem remédios q ajudam com isso, mas acho q só um profissional pode indicar receita",
+      "timestamp": 1791845354862,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363338508497641@g.us_3A117E07E8AB03CFB28E_116058623053950@lid",
+      "senderName": "Cauã Lemos",
+      "text": "https://www.youtube.com/live/bBrrDmPwMo8?is=W5xPp4uVOUMTg1Q7\nCaso queiram ver, @all",
+      "timestamp": 1791845512878,
+      "decision": "pending"
     }
   ],
   "77129039540435@lid": [
@@ -283,6 +365,96 @@
       "text": "uai",
       "timestamp": 1791641643676,
       "decision": "responded"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3EB06742ED31B5304C0FD1",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791842963919,
+      "decision": "responded",
+      "botResponse": "tô bem sim, nem senti o tranco kkkkkk",
+      "botResponseTimestamp": 1791842963919,
+      "quotedMsgId": "false_77129039540435@lid_3EB06742ED31B5304C0FD1"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3EB0FF7B28AB9C4E7D8637",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791842967816,
+      "decision": "responded",
+      "botResponse": "qual o que, bi?",
+      "botResponseTimestamp": 1791842967816,
+      "quotedMsgId": "false_77129039540435@lid_3EB0FF7B28AB9C4E7D8637"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3EB0E4852C442D4BFAE542",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791842973965,
+      "decision": "responded",
+      "botResponse": "[FIGURINHA: imensa carpenter]",
+      "botResponseTimestamp": 1791842973965,
+      "quotedMsgId": "false_77129039540435@lid_3EB0E4852C442D4BFAE542"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3EB0CF9C85E90B2969090B",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791842980696,
+      "decision": "responded",
+      "botResponse": "ah a foto poxa, pior que n lembro de cabeça qual tá lá agora kkkkkk",
+      "botResponseTimestamp": 1791842980696,
+      "quotedMsgId": "false_77129039540435@lid_3EB0CF9C85E90B2969090B"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3A15A54A29896FC05419",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843274941,
+      "decision": "responded",
+      "botResponse": "pior que eu nem sei qual tá lá agora, mas se o yann colocou deve ser alguma loucura kkkkkk\n_❌ nenhuma imagem disponível pra trocar foto_",
+      "botResponseTimestamp": 1791843274941,
+      "quotedMsgId": "false_77129039540435@lid_3A15A54A29896FC05419"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3EB0EBDE19EECEF3FD474B",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843297733,
+      "decision": "responded",
+      "botResponse": "calma bi, buguei aqui achando que cê tava perguntando se eu queria trocar kkkkkkk",
+      "botResponseTimestamp": 1791843297733,
+      "quotedMsgId": "false_77129039540435@lid_3EB0EBDE19EECEF3FD474B"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3EB08BB5E3E274A9741610",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791843307811,
+      "decision": "responded",
+      "botResponse": "[FIGURINHA: imensa carpenter]",
+      "botResponseTimestamp": 1791843307811,
+      "quotedMsgId": "false_77129039540435@lid_3EB08BB5E3E274A9741610"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3AC0F00E4A202D35B541",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791844492922,
+      "decision": "responded",
+      "botResponse": "ah, pior que nem sei qual tá lá agora, mas o yann que bota essas coisas então deve ser alguma zoação dele kkkkkk",
+      "botResponseTimestamp": 1791844492922,
+      "quotedMsgId": "false_77129039540435@lid_3AC0F00E4A202D35B541"
+    },
+    {
+      "msgId": "false_77129039540435@lid_3A02B3DCD172CAA050DC",
+      "senderName": "",
+      "text": "",
+      "timestamp": 1791844515921,
+      "decision": "responded",
+      "botResponse": "nada não bi, viaijei aqui kkkkkkk",
+      "botResponseTimestamp": 1791844515921,
+      "quotedMsgId": "false_77129039540435@lid_3A02B3DCD172CAA050DC"
     }
   ],
   "120363424081364843@g.us": [
@@ -306,6 +478,22 @@
       "text": "para de ser doido",
       "timestamp": 1791585473170,
       "decision": "responded"
+    }
+  ],
+  "120363163279095316@g.us": [
+    {
+      "msgId": "false_120363163279095316@g.us_3EB07B66BDFA3951B0425C_77129039540435@lid",
+      "senderName": "Yann",
+      "text": "me aceita",
+      "timestamp": 1791844197888,
+      "decision": "pending"
+    },
+    {
+      "msgId": "false_120363163279095316@g.us_3EB0D4BE19C5DCD6EAF655_155963365548068@lid",
+      "senderName": "ítalo",
+      "text": "doente",
+      "timestamp": 1791844205660,
+      "decision": "pending"
     }
   ]
 }

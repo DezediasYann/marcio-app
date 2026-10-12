@@ -109,12 +109,14 @@ export class VoteSystem {
     // Ops podem mutar/desmutar sozinhos (sem enquete)
     if (voterIsOp) {
       if (voteType === 'mute') {
-        this.app.brain.democraticallyMutedChats.add(chatId);
+        // Persiste via chatSettings (que também atualiza brain.democraticallyMutedChats
+        // e faz broadcast pro painel) — estado sobrevive a restarts.
+        this.app.chatSettings.setMuted(chatId, true);
         await this.app.react(msg, EMOJI.SUCCESS);
         await this.app.notify(chatId, '🤐 bot silenciado pelo op. Use *!unmute* pra desmutar.');
         this.app.log('MUTE', `Bot mutado por op ${senderIds.join(' / ')} em ${chatId}.`);
       } else {
-        this.app.brain.democraticallyMutedChats.delete(chatId);
+        this.app.chatSettings.setMuted(chatId, false);
         await this.app.react(msg, EMOJI.SUCCESS);
         await this.app.notify(chatId, '🔊 bot desmutado pelo op.');
         this.app.log('MUTE', `Bot desmutado por op ${senderIds.join(' / ')} em ${chatId}.`);
@@ -153,12 +155,12 @@ export class VoteSystem {
           // Aprovado!
           this.muteVotes.delete(chatId);
           if (voteType === 'mute') {
-            this.app.brain.democraticallyMutedChats.add(chatId);
+            this.app.chatSettings.setMuted(chatId, true);
             await this.app.react(msg, EMOJI.SUCCESS);
             await this.app.notify(chatId, `🤐 *Bot silenciado!*\n\nVotação aprovada: ${poll.votes.size}/${memberCount} membros votaram.\n\nUse *!unmute* pra iniciar votação de desmutar.`);
             this.app.log('MUTE', `Bot mutado democraticamente em ${chatId} (${poll.votes.size}/${memberCount} votos).`);
           } else {
-            this.app.brain.democraticallyMutedChats.delete(chatId);
+            this.app.chatSettings.setMuted(chatId, false);
             await this.app.react(msg, EMOJI.SUCCESS);
             await this.app.notify(chatId, `🔊 *Bot desmutado!*\n\nVotação aprovada: ${poll.votes.size}/${memberCount} membros votaram.`);
             this.app.log('MUTE', `Bot desmutado democraticamente em ${chatId} (${poll.votes.size}/${memberCount} votos).`);

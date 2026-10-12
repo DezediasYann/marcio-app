@@ -25,6 +25,8 @@ import { Profile } from './brain/Profile';
 import { Directives } from './brain/Directives';
 import { MarcioBrain } from './brain/MarcioBrain';
 import { Retroactive } from './brain/Retroactive';
+import { ProfileBook } from './brain/ProfileBook';
+import { AudioTranscriber } from './brain/AudioTranscriber';
 import { PermissionSystem } from './permissions/PermissionSystem';
 import { StickerVault } from './stickers/StickerVault';
 import { ChatSettings } from './permissions/ChatSettings';
@@ -32,8 +34,7 @@ import { CommandRegistry } from './commands/CommandRegistry';
 import { BasicCommands } from './commands/BasicCommands';
 import { StickerCommands } from './commands/StickerCommands';
 import { AdminCommands } from './commands/AdminCommands';
-import { TwitterBot } from './twitter/TwitterBot';
-import { TwitterCommands } from './commands/TwitterCommands';
+
 import { Scheduler } from './scheduler/Scheduler';
 import { AssistiveCommands } from './commands/AssistiveCommands';
 import { ControlPanel } from './control/ControlPanel';
@@ -86,14 +87,16 @@ export class MarcioApp {
   context!: Context;
   memory!: Memory;
   profile!: Profile;
+  profileBook!: ProfileBook;
   directives!: Directives;
   brain!: MarcioBrain;
   retroactive!: Retroactive;
+  audioTranscriber!: AudioTranscriber;
   permissions!: PermissionSystem;
   stickers!: StickerVault;
   chatSettings!: ChatSettings;
   commands!: CommandRegistry;
-  twitter!: TwitterBot;
+
   scheduler!: Scheduler;
   control!: ControlPanel;
 
@@ -149,6 +152,14 @@ export class MarcioApp {
     this.profile = new Profile(this);
     this.log('BOOT', 'Profile inicializado.');
 
+    // === ProfileBook (perfis IA de pessoas + grupos — cross-chat) ===
+    this.profileBook = new ProfileBook(this);
+    const _personCount = this.profileBook.byType('person').length;
+    const _groupCount = this.profileBook.byType('group').length;
+    this.log('BOOT', `ProfileBook inicializado — ${_personCount} pessoa(s), ${_groupCount} grupo(s).`);
+    // Starta varredura periódica de perfis stale (a cada 30min)
+    this.profileBook.startAutoUpdateTimer();
+
     // === FASE 2.4: Directives (regras customizadas do dono) ===
     this.directives = new Directives(this);
     this.log('BOOT', `Directives inicializado — ${this.directives.all().length} diretiva(s).`);
@@ -167,6 +178,11 @@ export class MarcioApp {
     this.retroactive.load();  // carrega decision-log.json
     this.log('BOOT', `Retroactive inicializado — intervalo=${this.retroactive.intervalMin}min janela=${this.retroactive.windowMin}min`);
 
+    // === FASE 6k: AudioTranscriber (transcrição de áudios do WhatsApp via Gemini multimodal) ===
+    this.audioTranscriber = new AudioTranscriber(this);
+    const _audioCfg = this.audioTranscriber.getConfig();
+    this.log('BOOT', `AudioTranscriber inicializado — enabled=${_audioCfg.enabled} primary=${_audioCfg.primaryModel} fallback=${_audioCfg.fallbackModel}`);
+
     // === FASE 3.1: PermissionSystem (ops + banidos + resolveSenderIds) ===
     this.permissions = new PermissionSystem(this);
     this.log('BOOT', `Permissions inicializado — ${this.permissions.loadOps().length} op(s), ${this.permissions.loadBanned().length} banido(s).`);
@@ -177,23 +193,13 @@ export class MarcioApp {
 
     // === FASE 3.2: CommandRegistry (plugin-based, substitui o switch) ===
     this.commands = new CommandRegistry(this);
-    // FASE 3.3-3.5: carregar módulos de comando
+    // FASE 3.3-4: carregar módulos de comando
     await this.commands.loadModules([
       new BasicCommands(this),
       new StickerCommands(this),
       new AdminCommands(this),
-      new TwitterCommands(this),
     ]);
     this.log('BOOT', `CommandRegistry inicializado — ${this.commands.count()} comando(s) registrado(s).`);
-
-    // === FASE 3.5: TwitterBot (auto-post + aprovação + reply to mentions) ===
-    this.twitter = new TwitterBot(this);
-    const twCfg = this.twitter.getConfig();
-    if (twCfg.enabled) {
-      this.log('BOOT', `Twitter inicializado — approvalMode=${twCfg.approvalMode} mentions=${twCfg.replyToMentions}`);
-    } else {
-      this.log('BOOT', 'Twitter inicializado (desativado no config).');
-    }
 
     // === FASE 4: Scheduler (eventos + lembretes agendados) ===
     this.scheduler = new Scheduler(this);
@@ -202,14 +208,15 @@ export class MarcioApp {
 
     // === FASE 3.2: CommandRegistry (plugin-based, substitui o switch) ===
     this.commands = new CommandRegistry(this);
-    // FASE 3.3-4: carregar módulos de comando
     await this.commands.loadModules([
       new BasicCommands(this),
       new StickerCommands(this),
       new AdminCommands(this),
-      new TwitterCommands(this),
       new AssistiveCommands(this),
     ]);
+    // Carrega overrides persistentes (data/command-overrides.json) — permite
+    // ativar/desativar comandos e mudar opOnly↔public via painel.
+    this.commands.loadOverrides();
     this.log('BOOT', `CommandRegistry inicializado — ${this.commands.count()} comando(s) registrado(s).`);
 
     // Router ANTES do WhatsApp initialize (o handler message_create chama router)
@@ -221,14 +228,6 @@ export class MarcioApp {
     // Starta o timer de verificação retroativa (a cada 10min por default)
     this.retroactive.setupTimer();
 
-    // Starta os timers do Twitter (auto-post a cada 4h, mention check a cada 15min)
-    if (twCfg.enabled) {
-      this.twitter.startAutoPostTimer();
-      if (twCfg.replyToMentions) {
-        this.twitter.startMentionChecker();
-      }
-    }
-
     // === FASE 5a: ControlPanel (dashboard web em http://localhost:3001) ===
     this.control = new ControlPanel(this);
     this.control.listen(3001);
@@ -238,6 +237,28 @@ export class MarcioApp {
     this.startStatsHistory();
 
     this.log('BOOT', 'Márcio App pronto e conectado.');
+
+    // === Backfill de histórico (espera WhatsApp 'ready') ===
+    // NÃO pode rodar antes — client.getChats() falha se WA não tá pronto.
+    // O client.initialize() resolve antes do evento 'ready' disparar, então
+    // precisamos esperar. Se já ficou ready (lastReconnect > 0), roda direto.
+    const runBackfill = () => {
+      this.log('BOOT', 'WhatsApp ready — disparando backfill de histórico...');
+      this.retroactive.backfillHistory(30, 100).catch(e => {
+        this.log('BOOT', `backfill falhou: ${(e as Error).message}`);
+      });
+    };
+    if (this.whatsapp.lastReconnect > 0) {
+      runBackfill();
+    } else {
+      // client é EventEmitter mas o tipo não expõe .once()/.removeListener()
+      const client = this.whatsapp.client as any;
+      const handler = () => {
+        client.removeListener('ready', handler);
+        runBackfill();
+      };
+      client.on('ready', handler);
+    }
   }
 
   /**
@@ -316,11 +337,11 @@ export class MarcioApp {
       if (this.profile) {
         this.profile.destroy();
       }
+      if (this.profileBook) {
+        this.profileBook.destroy();
+      }
       if (this.retroactive) {
         this.retroactive.destroy();
-      }
-      if (this.twitter) {
-        this.twitter.destroy();
       }
       if (this.scheduler) {
         this.scheduler.destroy();
@@ -419,16 +440,6 @@ export class MarcioApp {
         });
       }
     }
-
-    // Tweet aguardando aprovação
-    if (tag === 'TWITTER' && message.includes('tweet enviado pra aprovação')) {
-      if (canNotify('tweet-pending')) {
-        this.control.broadcast('notification', {
-          title: '🐦 Tweet aguardando aprovação',
-          body: 'Um tweet foi gerado e está pronto pra postar. Veja no painel.',
-        });
-      }
-    }
   }
 
   /**
@@ -456,7 +467,7 @@ export class MarcioApp {
 
   /**
    * Para o bot graciosamente (salva estado, fecha WhatsApp).
-   * Os subsistemas de dados (memory, profile, retroactive, scheduler, twitter)
+   * Os subsistemas de dados (memory, profile, retroactive, scheduler)
    * são persistidos/fechados, mas continuam instanciados — podem ser
    * re-utilizados quando startBot() re-inicializar o WhatsApp.
    */
@@ -466,9 +477,9 @@ export class MarcioApp {
       // Salva pendências
       if (this.memory) this.memory.destroy();
       if (this.profile) this.profile.destroy();
+      if (this.profileBook) this.profileBook.destroy();
       if (this.retroactive) this.retroactive.destroy();
       if (this.scheduler) this.scheduler.destroy();
-      if (this.twitter) this.twitter.destroy();
       // Fecha WhatsApp
       if (this.whatsapp) await this.whatsapp.destroy();
     } catch (e) {

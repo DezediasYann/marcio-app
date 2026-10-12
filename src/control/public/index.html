@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0a0a0c">
+  <!-- favicon inline (data URI) — evita 404, não depende de arquivo externo -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23e20000'/%3E%3Ctext x='50' y='72' font-size='70' font-weight='bold' text-anchor='middle' fill='white' font-family='sans-serif'%3EM%3C/text%3E%3C/svg%3E">
   <title>🤖 Márcio Control Panel</title>
+  <!-- CSP permissivo — permite inline scripts (onclick), eval, ws:, etc.
+       Necessário no Tauri WebView2 pra não bloquear os handlers onclick. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * ws: wss: http: https:; img-src * data: blob:;">
   <style>
     /* ================================================================
        iOS 26/27 — LIQUID GLASS DESIGN LANGUAGE
@@ -502,6 +507,30 @@
     .badge.warn { background: rgba(255, 159, 10, 0.18); color: var(--warning); border-color: rgba(255, 159, 10, 0.3); }
     .badge.bad  { background: rgba(255, 69, 58, 0.18); color: var(--error); border-color: rgba(255, 69, 58, 0.3); }
     .badge.accent { background: rgba(10, 132, 255, 0.18); color: var(--accent); border-color: rgba(10, 132, 255, 0.3); }
+    /* Variantes com hífen (usadas na seção Comandos) — aliases das classes acima */
+    .badge-good { background: rgba(48, 209, 88, 0.18); color: var(--success); border-color: rgba(48, 209, 88, 0.3); }
+    .badge-warn { background: rgba(255, 159, 10, 0.18); color: var(--warning); border-color: rgba(255, 159, 10, 0.3); }
+    .badge-bad  { background: rgba(255, 69, 58, 0.18); color: var(--error); border-color: rgba(255, 69, 58, 0.3); }
+    .badge-info { background: rgba(10, 132, 255, 0.18); color: var(--accent); border-color: rgba(10, 132, 255, 0.3); }
+    /* Select de permissão (op↔public) na seção Comandos */
+    .cmd-perm-select {
+      background: var(--bg-glass-light);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-pill);
+      padding: 4px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .cmd-perm-select:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+    }
+    /* Card de comando travado (admin) — visual mais escuro */
+    .cmd-locked {
+      opacity: 0.85;
+      border-left: 3px solid var(--warning);
+    }
 
     /* ================================================================
        LIVE LOG
@@ -800,13 +829,181 @@
       justify-content: space-between;
       gap: 12px;
     }
+    .chat-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(10, 132, 255, 0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+      overflow: hidden; border: 2px solid rgba(10, 132, 255, 0.2);
+    }
+    .chat-avatar img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
     .chat-item:hover {
       background: var(--bg-glass-hover);
       transform: translateY(-1px);
       box-shadow: var(--shadow-sm);
     }
-    .chat-id { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
-    .chat-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-secondary); }
+    .chat-item-active {
+      background: rgba(10, 132, 255, 0.15);
+      border-color: rgba(10, 132, 255, 0.4);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .chat-id { font-family: var(--font-mono); font-size: 13px; color: var(--text); font-weight: 600; }
+    .chat-sub { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
+    .chat-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    .chat-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 28px; padding: 3px 8px; border-radius: 10px;
+      font-size: 10px; font-weight: 700; font-family: var(--font-mono);
+      letter-spacing: 0.3px; white-space: nowrap;
+    }
+    .chat-badge.bad { background: rgba(255, 69, 58, 0.2); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.3); }
+    .chat-badge.good { background: rgba(48, 209, 88, 0.2); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.3); }
+    .chat-badge.neutral { background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); border: 1px solid rgba(255, 255, 255, 0.1); }
+
+    /* ================================================================
+       CONVERSATION MESSAGES — balões estilo WhatsApp
+       ================================================================ */
+    .conv-msg {
+      margin-bottom: 14px;
+      padding: 10px 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      max-width: 78%;
+      position: relative;
+      word-wrap: break-word;
+    }
+    .conv-msg.bot {
+      margin-left: auto;
+      background: rgba(10, 132, 255, 0.12);
+      border: 1px solid rgba(10, 132, 255, 0.2);
+    }
+    .conv-msg.user {
+      margin-right: auto;
+    }
+    .conv-msg-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 6px; flex-wrap: wrap;
+    }
+    .conv-msg-sender {
+      font-weight: 700; font-size: 12px;
+      letter-spacing: 0.2px;
+    }
+    .conv-msg-time {
+      font-size: 10px; color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+    .conv-msg-badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 8px;
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.3px; text-transform: uppercase;
+    }
+    .conv-msg-badge.good { background: rgba(48, 209, 88, 0.2); color: #30d158; }
+    .conv-msg-badge.bad { background: rgba(255, 69, 58, 0.2); color: #ff453a; }
+    .conv-msg-badge.neutral { background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
+    .conv-msg-badge.faded { background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); opacity: 0.6; }
+    /* Badge de áudio — roxo translúcido (destaque visual sutil) */
+    .conv-msg-badge.audio { background: rgba(191, 90, 242, 0.2); color: #bf5af2; border: 1px solid rgba(191, 90, 242, 0.3); }
+    /* Chat-badge na lista lateral (contador de áudios) */
+    .chat-badge.audio { background: rgba(191, 90, 242, 0.18); color: #bf5af2; border: 1px solid rgba(191, 90, 242, 0.3); }
+    /* Texto da msg de áudio — itálico sutil pra indicar que é transcrição */
+    .conv-msg-text-audio {
+      font-style: italic;
+      opacity: 0.92;
+    }
+    .conv-msg-text {
+      font-size: 14px; line-height: 1.5;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+    .conv-msg-quote {
+      font-size: 11px; color: var(--text-secondary);
+      background: rgba(0, 0, 0, 0.2); border-left: 3px solid rgba(10, 132, 255, 0.4);
+      padding: 6px 10px; border-radius: 6px; margin-bottom: 6px;
+      font-style: italic;
+    }
+    .conv-msg-quote::before { content: '↪ respondendo: '; opacity: 0.6; }
+
+    /* ================================================================
+       PROFILE GRID — cards de perfis (pessoas + grupos)
+       ================================================================ */
+    .profile-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 14px;
+    }
+    .profile-card {
+      background: var(--bg-glass-light);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .profile-card:hover {
+      background: var(--bg-glass-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      border-color: rgba(10, 132, 255, 0.3);
+    }
+    .profile-card-header {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .profile-avatar {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: rgba(10, 132, 255, 0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; flex-shrink: 0;
+      overflow: hidden; border: 2px solid rgba(10, 132, 255, 0.2);
+    }
+    .profile-avatar img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .profile-name {
+      font-weight: 700; font-size: 15px; color: var(--text);
+      word-break: break-word;
+    }
+    .profile-id {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--text-secondary); word-break: break-all;
+    }
+    .profile-stats {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      font-size: 11px; color: var(--text-secondary);
+    }
+    .profile-stat {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(255,255,255,0.05); padding: 3px 8px;
+      border-radius: 8px;
+    }
+    .profile-stat strong { color: var(--text); font-weight: 700; }
+    .profile-summary {
+      font-size: 12px; line-height: 1.5; color: var(--text);
+      background: rgba(0,0,0,0.15); padding: 10px;
+      border-radius: 8px; border-left: 3px solid rgba(10, 132, 255, 0.4);
+    }
+    .profile-tags {
+      display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .profile-tag {
+      display: inline-flex; padding: 3px 10px; border-radius: 12px;
+      font-size: 11px; font-weight: 600;
+      background: rgba(10, 132, 255, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(10, 132, 255, 0.2);
+    }
+    .profile-type-badge {
+      display: inline-flex; padding: 2px 8px; border-radius: 6px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .profile-type-badge.person { background: rgba(48, 209, 88, 0.2); color: #30d158; }
+    .profile-type-badge.group { background: rgba(255, 159, 10, 0.2); color: #ff9f0a; }
 
     /* ================================================================
        MODAL
@@ -961,7 +1158,10 @@
     .muted { color: var(--text-secondary); }
     .small { font-size: 12px; }
     .mono { font-family: var(--font-mono); }
-    .mt-0 { margin-top: 0; } .mt-1 { margin-top: 8px; } .mt-2 { margin-top: 16px; }
+    .mt-0 { margin-top: 0; } .mt-1 { margin-top: 8px; } .mt-2 { margin-top: 16px; } .mt-3 { margin-top: 24px; }
+    .checkbox-row { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px 0; }
+    .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent, #0a84ff); }
+    .checkbox-row span { user-select: none; }
     .mb-0 { margin-bottom: 0; } .mb-1 { margin-bottom: 8px; } .mb-2 { margin-bottom: 16px; }
     .flex-1 { flex: 1; }
 
@@ -1115,7 +1315,7 @@
       object-fit: contain;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="/chart.min.js?v=1"></script>
 </head>
 <body>
 
@@ -1167,8 +1367,8 @@
         <button class="nav-item" data-section="events" onclick="showSection('events')">
           <span class="icon">📅</span><span>Eventos</span>
         </button>
-        <button class="nav-item" data-section="twitter" onclick="showSection('twitter')">
-          <span class="icon">🐦</span><span>Twitter</span>
+        <button class="nav-item" data-section="conversations" onclick="showSection('conversations')">
+          <span class="icon">💬</span><span>Conversas</span>
         </button>
         <button class="nav-item" data-section="ops" onclick="showSection('ops')">
           <span class="icon">🔒</span><span>Ops & Banidos</span>
@@ -1180,6 +1380,9 @@
         </button>
         <button class="nav-item" data-section="ai" onclick="showSection('ai')">
           <span class="icon">🤖</span><span>IA</span>
+        </button>
+        <button class="nav-item" data-section="commands" onclick="showSection('commands')">
+          <span class="icon">⚙️</span><span>Comandos</span>
         </button>
         <button class="nav-item" data-section="directives" onclick="showSection('directives')">
           <span class="icon">📜</span><span>Diretivas</span>
@@ -1411,18 +1614,23 @@
           <div class="glass-card">
             <div class="card-header">
               <div>
-                <div class="card-title">🧠 Memórias</div>
-                <div class="card-subtitle">Fatos que o bot lembra sobre cada usuário</div>
+                <div class="card-title">🧠 Memórias & Perfis</div>
+                <div class="card-subtitle">Perfis IA de pessoas e grupos — cross-chat, auto-aprendizado</div>
               </div>
               <div class="card-actions">
-                <input type="search" id="memorySearch" placeholder="🔍 buscar fatos…" oninput="renderMemories()" style="width: 200px;">
-                <button class="primary" onclick="openAddFactModal()">+ Adicionar fato</button>
-                <button class="ghost sm" onclick="loadMemories()">↻</button>
+                <input type="search" id="profileSearch" placeholder="🔍 buscar perfis…" oninput="renderProfiles()" style="width: 180px;">
+                <button class="ghost sm" onclick="migrateMemories()" title="Migrar memories.json antigo">📦 Migrar</button>
+                <button class="ghost sm" onclick="mineProfiles()" title="Criar perfis de conversas passadas">⛏️ Minerar</button>
+                <button class="primary" onclick="openAddProfileModal()">+ Novo perfil</button>
+                <button class="ghost sm" onclick="loadProfiles()">↻</button>
               </div>
             </div>
-            <div class="split-view">
-              <div class="split-list" id="memoryUsers"></div>
-              <div class="split-detail" id="memoryFacts"></div>
+            <div class="tabs mb-2">
+              <button class="tab active" data-ptab="person" onclick="switchProfileTab('person')">👤 Pessoas</button>
+              <button class="tab" data-ptab="group" onclick="switchProfileTab('group')">👥 Grupos</button>
+            </div>
+            <div id="profileGrid" class="profile-grid">
+              <div class="empty-state"><div class="icon">🧠</div><div class="text">Carregando perfis…</div></div>
             </div>
           </div>
         </section>
@@ -1438,9 +1646,14 @@
                 <div class="card-subtitle">Galeria de figurinhas do bot</div>
               </div>
               <div class="card-actions">
-                <button class="warning" onclick="dedupStickers()">🧹 Dedup</button>
+                <button class="warning" onclick="mergeDuplicates()">🔀 Merge duplicatas</button>
                 <button class="ghost sm" onclick="loadStickers()">↻</button>
               </div>
+            </div>
+            <div class="tabs mb-2">
+              <button class="tab active" data-stab="all" onclick="switchStickerTab('all')">Todas</button>
+              <button class="tab" data-stab="fav" onclick="switchStickerTab('fav')">⭐ Favoritas</button>
+              <button class="tab" data-stab="named" onclick="switchStickerTab('named')">📛 Nomeadas</button>
             </div>
             <div id="stickerGrid" class="sticker-grid">
               <div class="empty-state"><div class="icon">🎭</div><div class="text">Carregando figurinhas…</div></div>
@@ -1485,25 +1698,32 @@
         </section>
 
         <!-- ============================================================
-             9. TWITTER
+             8b. CONVERSAS (clone do WhatsApp com decision-log)
              ============================================================ -->
-        <section class="section" id="section-twitter">
-          <div class="glass-card">
-            <div class="card-header">
+        <section class="section" id="section-conversations">
+          <div class="glass-card" style="padding:0;overflow:hidden;">
+            <div class="card-header" style="padding:16px;">
               <div>
-                <div class="card-title">🐦 Twitter</div>
-                <div class="card-subtitle">Status da integração com Twitter</div>
+                <div class="card-title">💬 Conversas</div>
+                <div class="card-subtitle">Histórico do WhatsApp + mensagens processadas pelo bot</div>
               </div>
-              <button class="ghost sm" onclick="loadTwitter()">↻</button>
+              <div class="card-actions">
+                <button class="ghost sm" onclick="backfillConversations()" title="Buscar mensagens antigas do WhatsApp">📥 Backfill</button>
+                <button class="ghost sm" onclick="backfillConversations(true)" title="Re-busca TODAS as mensagens (ignora cache) — útil se o bot perdeu msgs ou se o histórico mudou">🔄 Re-backfill</button>
+                <button class="ghost sm" onclick="loadConversations()">↻</button>
+              </div>
             </div>
-            <div id="twitterStatus">
-              <div class="empty-state"><div class="icon">🐦</div><div class="text">Carregando status…</div></div>
+            <div style="display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 320px);min-height:400px;">
+              <div id="convChatList" style="overflow-y:auto;border-right:1px solid rgba(255,255,255,0.08);padding:8px;"></div>
+              <div id="convMessages" style="overflow-y:auto;padding:16px;">
+                <div class="empty-state"><div class="icon">👈</div><div class="text">selecione uma conversa</div></div>
+              </div>
             </div>
           </div>
         </section>
 
         <!-- ============================================================
-             10. OPS & BANIDOS
+             9. OPS & BANIDOS
              ============================================================ -->
         <section class="section" id="section-ops">
           <div class="glass-card">
@@ -1603,10 +1823,66 @@
               </div>
             </div>
           </div>
+
+          <!-- Card de Transcrição de Áudio (dentro da seção IA) -->
+          <div class="glass-card mt-3">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🔊 Transcrição de Áudios</div>
+                <div class="card-subtitle">Quando o bot decidiu responder, transcreve o áudio pra IA poder ver o conteúdo</div>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="checkbox-row">
+                <input type="checkbox" id="aiAudioEnabled">
+                <span>Ativar transcrição de áudios</span>
+              </label>
+              <span class="muted small" id="aiAudioHint">Se desativado, o bot ignora áudios (não transcreve nem responde).</span>
+            </div>
+            <div class="form-grid">
+              <div class="form-row">
+                <label>Modelo principal <span class="muted small">(tentado primeiro)</span></label>
+                <input type="text" id="aiAudioPrimary" placeholder="gemini-3.5-flash-lite">
+              </div>
+              <div class="form-row">
+                <label>Modelo fallback <span class="muted small">(tentado se o principal der 429/503)</span></label>
+                <input type="text" id="aiAudioFallback" placeholder="gemini-3.1-flash-lite">
+              </div>
+            </div>
+            <div class="muted small mt-1">
+              💡 Lógica: o bot usa a mesma decisão de chance/triggers/entrosão das mensagens de texto.
+              Só transcreve quando decidiu que vai responder (economiza requests da cota diária).
+              Se ambos modelos falharem (rate limit), reage 🔇 no áudio e fica quieto.
+            </div>
+          </div>
         </section>
 
         <!-- ============================================================
-             13. DIRETIVAS
+             13. COMANDOS
+             ============================================================ -->
+        <section class="section" id="section-commands">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">⚙️ Comandos</div>
+                <div class="card-subtitle">Ativa/desativa comandos e muda permissão op↔public. Mudanças são persistentes.</div>
+              </div>
+              <div class="card-actions">
+                <button class="ghost sm" onclick="loadCommands()">↻</button>
+              </div>
+            </div>
+            <div class="muted small mb-2">
+              💡 Comandos <span class="badge badge-warn">🔒 admin</span> são travados (sempre só-op + só-PV), não dá pra mexer.
+              Outros comandos podem ser desativados ou ter a permissão trocida (op↔public).
+            </div>
+            <div id="commandsList" style="display:flex;flex-direction:column;gap:8px;">
+              <div class="empty-state"><div class="text">carregando comandos…</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             14. DIRETIVAS
              ============================================================ -->
         <section class="section" id="section-directives">
           <div class="glass-card">
@@ -1685,33 +1961,19 @@
             <div class="card-header">
               <div>
                 <div class="card-title">💾 Backup & Restore</div>
-                <div class="card-subtitle">Exporte e importe dados do bot</div>
+                <div class="card-subtitle">Escolha o que exportar/importar — tudo num arquivo único</div>
+              </div>
+              <div class="card-actions">
+                <button class="success" onclick="openExportModal()">⬇ Exportar</button>
+                <button class="primary" onclick="openImportModal()">⬆ Importar</button>
               </div>
             </div>
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <div class="row-between" style="background: var(--bg-glass-light); padding: 14px 16px; border-radius: var(--radius-md);">
-                <div>
-                  <div style="font-weight: 600;">📦 Backup completo</div>
-                  <div class="muted small">Baixa um .zip com tudo da pasta data/</div>
-                </div>
-                <button class="primary" onclick="downloadBackup()">⬇ Baixar</button>
-              </div>
-              <div class="row-between" style="background: var(--bg-glass-light); padding: 14px 16px; border-radius: var(--radius-md);">
-                <div>
-                  <div style="font-weight: 600;">📤 Restore</div>
-                  <div class="muted small">Restaura de um .zip anterior</div>
-                </div>
-                <input type="file" id="restoreFile" accept=".zip" style="display:none" onchange="uploadRestore(event)">
-                <button class="warning" onclick="document.getElementById('restoreFile').click()">↑ Enviar zip</button>
-              </div>
-              <div class="row-between" style="background: var(--bg-glass-light); padding: 14px 16px; border-radius: var(--radius-md);">
-                <div>
-                  <div style="font-weight: 600;">🧠 Export memórias</div>
-                  <div class="muted small">Baixa as memórias em JSON</div>
-                </div>
-                <button onclick="exportMemories()">⬇ Export JSON</button>
-              </div>
+            <div class="muted small" style="margin-bottom: 12px;">
+              O sistema de backup agora é <strong>seletivo</strong>: você escolhe quais componentes
+              quer exportar (memórias, diretivas, figurinhas, config, etc.) e tudo é salvo num
+              único arquivo <code>.json</code> que pode ser importado depois — total ou parcialmente.
             </div>
+            <div id="backupComponentsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;"></div>
           </div>
         </section>
 
@@ -1726,7 +1988,7 @@
               <div class="about-version">v1.0 · Painel de controle</div>
             </div>
             <div class="muted" style="text-align: center; margin-bottom: 24px;">
-              Bot de WhatsApp com IA generativa, memórias, figurinhas, eventos, Twitter e mais.
+              Bot de WhatsApp com IA generativa, memórias, figurinhas, eventos e mais.
             </div>
             <div class="card-title" style="margin-bottom: 10px;">🛠 Tech Stack</div>
             <div class="tech-stack">
@@ -1775,9 +2037,75 @@
     'use strict';
 
     // ================================================================
+    // GLOBAL ERROR HANDLER — captura TUDO e mostra na tela
+    // (crítico pra debugar no Tauri WebView2 onde não tem dev tools fácil)
+    // ================================================================
+    window.__MARCIO_ERRORS = [];
+    function __showErrorBanner(msg, source, lineno) {
+      let banner = document.getElementById('__errorBanner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = '__errorBanner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#ff453a;color:white;padding:12px 16px;font-family:monospace;font-size:13px;max-height:40vh;overflow-y:auto;white-space:pre-wrap;';
+        document.body.appendChild(banner);
+      }
+      const line = `[ERROR] ${msg}${source ? ' (' + source + (lineno ? ':' + lineno : '') + ')' : ''}\n`;
+      window.__MARCIO_ERRORS.push(line);
+      banner.textContent = window.__MARCIO_ERRORS.join('');
+    }
+    window.addEventListener('error', (e) => {
+      __showErrorBanner(e.message, e.filename, e.lineno);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const msg = e.reason?.message || String(e.reason);
+      __showErrorBanner('Unhandled rejection: ' + msg);
+    });
+    console.log('[MARCIO] script start');
+
+    // ================================================================
+    // ENVIRONMENT DETECTION (Tauri vs Browser)
+    // ================================================================
+    // ATENÇÃO: NÃO usar o nome "isTauri" — o Tauri define window.isTauri
+    // como read-only nativo. Se fizermos `var isTauri = ...` no top-level,
+    // vira window.isTauri = ... e falha com "Cannot assign to read only property".
+    // Solução: usar nome único que não conflita com nada do Tauri.
+    var PANEL_PORT = 3001;
+    var MARCIO_TAURI_MODE = !!(
+      window.__TAURI__ ||
+      window.__TAURI_INTERNALS__ ||
+      window.__TAURI_IPC__ ||
+      (window.chrome && window.chrome.webview) ||
+      location.protocol === 'tauri:' ||
+      location.hostname === 'tauri.localhost' ||
+      (location.protocol === 'https:' && location.hostname === 'tauri.localhost')
+    );
+    // API_BASE: empty string (relative) in browser, full URL in Tauri.
+    var API_BASE = MARCIO_TAURI_MODE ? 'http://localhost:' + PANEL_PORT : '';
+    // WS_BASE: empty in browser (uses location.host), full URL in Tauri.
+    var WS_BASE = MARCIO_TAURI_MODE ? 'ws://localhost:' + PANEL_PORT : '';
+    // Expose for debugging in dev tools
+    window.__MARCIO_ENV__ = { isTauri: MARCIO_TAURI_MODE, API_BASE: API_BASE, WS_BASE: WS_BASE, PANEL_PORT: PANEL_PORT };
+    console.log('[MARCIO] env:', window.__MARCIO_ENV__);
+    console.log('[MARCIO] build: 1.0.3-renamed');
+    // state será exposto depois de declarado
+
+    // ================================================================
+    // DEBUG LOGGER — all UI debug goes through here so it's easy to
+    // filter in VS Code dev tools (search "[MARCIO]")
+    // ================================================================
+    function dbg(tag, ...args) {
+      console.log(`[MARCIO:${tag}]`, ...args);
+    }
+    function dbgErr(tag, ...args) {
+      console.error(`[MARCIO:${tag}]`, ...args);
+    }
+    window.__dbg = dbg;
+    window.__dbgErr = dbgErr;
+
+    // ================================================================
     // STATE
     // ================================================================
-    const state = {
+    var _marcio_state = {
       ws: null,
       wsConnected: false,
       currentSection: 'dashboard',
@@ -1798,19 +2126,19 @@
       consoleHistoryIdx: -1,
       aiConfig: null,
       aiFallbacks: [],
-      twitterEnabled: false,
     };
+    window.__MARCIO_STATE__ = _marcio_state;  // debug
 
-    const SECTION_TITLES = {
+    var SECTION_TITLES = {
       dashboard: ['Dashboard', 'Visão geral do bot'],
       log:       ['Live Log', 'Logs em tempo real'],
       console:   ['Console', 'Execute comandos no bot'],
       bot:       ['Bot & WhatsApp', 'Gerencie o ciclo de vida'],
-      memories:  ['Memórias', 'Fatos que o bot lembra'],
+      memories:  ['Memórias & Perfis', 'Perfis IA de pessoas e grupos'],
       stickers:  ['Figurinhas', 'Galeria de figurinhas'],
       chats:     ['Chats', 'Conversas ativas'],
       events:    ['Eventos', 'Eventos agendados'],
-      twitter:   ['Twitter', 'Integração com Twitter'],
+      conversations: ['Conversas', 'Mensagens processadas pelo bot'],
       ops:       ['Ops & Banidos', 'Permissões'],
       prompt:    ['Prompt', 'System prompt editor'],
       ai:        ['IA', 'Configuração do modelo'],
@@ -1823,8 +2151,8 @@
     // ================================================================
     // UTILS
     // ================================================================
-    const $  = (sel) => document.querySelector(sel);
-    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+    var $  = (sel) => document.querySelector(sel);
+    var $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
     function nowTime() {
       const d = new Date();
@@ -1884,35 +2212,68 @@
     }
 
     async function apiGet(path) {
-      const r = await fetch(path);
-      if (!r.ok) {
-        let msg = `GET ${path} → ${r.status}`;
-        try { const j = await r.json(); if (j.error) msg += `: ${j.error}`; } catch {}
-        throw new Error(msg);
+      const url = API_BASE + path;
+      dbg('apiGet', path, '→', url);
+      try {
+        const r = await fetch(url);
+        if (!r.ok) {
+          let msg = `GET ${path} → ${r.status}`;
+          try { const j = await r.json(); if (j.error) msg += `: ${j.error}`; } catch {}
+          dbgErr('apiGet', path, msg);
+          throw new Error(msg);
+        }
+        const data = await r.json();
+        dbg('apiGet', path, '✓', Array.isArray(data) ? `array[${data.length}]` : typeof data === 'object' ? Object.keys(data).slice(0, 5) : typeof data);
+        return data;
+      } catch (e) {
+        if (e.message.startsWith('GET ')) throw e;  // já formatado
+        dbgErr('apiGet', path, 'network error:', e.message);
+        throw new Error(`GET ${path} → network: ${e.message}`);
       }
-      return r.json();
     }
     async function apiPost(path, body) {
-      const r = await fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body || {}),
-      });
-      if (!r.ok) {
-        let msg = `POST ${path} → ${r.status}`;
-        try { const j = await r.json(); if (j.error) msg += `: ${j.error}`; } catch {}
-        throw new Error(msg);
+      const url = API_BASE + path;
+      dbg('apiPost', path, '→', url, body);
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+        });
+        if (!r.ok) {
+          let msg = `POST ${path} → ${r.status}`;
+          try { const j = await r.json(); if (j.error) msg += `: ${j.error}`; } catch {}
+          dbgErr('apiPost', path, msg);
+          throw new Error(msg);
+        }
+        const data = await r.json();
+        dbg('apiPost', path, '✓');
+        return data;
+      } catch (e) {
+        if (e.message.startsWith('POST ')) throw e;
+        dbgErr('apiPost', path, 'network error:', e.message);
+        throw new Error(`POST ${path} → network: ${e.message}`);
       }
-      return r.json();
     }
     async function apiDelete(path) {
-      const r = await fetch(path, { method: 'DELETE' });
-      if (!r.ok) {
-        let msg = `DELETE ${path} → ${r.status}`;
-        try { const j = await r.json(); if (j.error) msg += `: ${j.error}`; } catch {}
-        throw new Error(msg);
+      const url = API_BASE + path;
+      dbg('apiDelete', path, '→', url);
+      try {
+        const r = await fetch(url, { method: 'DELETE' });
+        if (!r.ok) {
+          let msg = `DELETE ${path} → ${r.status}`;
+          try { const j = await r.json(); if (j.error) msg += `: ${j.error}`; } catch {}
+          dbgErr('apiDelete', path, msg);
+          throw new Error(msg);
+        }
+        const data = await r.json();
+        dbg('apiDelete', path, '✓');
+        return data;
+      } catch (e) {
+        if (e.message.startsWith('DELETE ')) throw e;
+        dbgErr('apiDelete', path, 'network error:', e.message);
+        throw new Error(`DELETE ${path} → network: ${e.message}`);
       }
-      return r.json();
     }
 
     // ================================================================
@@ -1935,7 +2296,7 @@
     // SIDEBAR / NAVIGATION
     // ================================================================
     function showSection(name) {
-      state.currentSection = name;
+      _marcio_state.currentSection = name;
       $$('.section').forEach(s => s.classList.remove('active'));
       const el = document.getElementById(`section-${name}`);
       if (el) el.classList.add('active');
@@ -1955,16 +2316,18 @@
         case 'log': renderLogLines(); break;
         case 'console': $('#consoleInput').focus(); break;
         case 'bot': loadBotStatus(); break;
-        case 'memories': loadMemories(); break;
+        case 'memories': loadProfiles(); break;
         case 'stickers': loadStickers(); break;
         case 'chats': loadChats(); break;
         case 'events': loadEvents(); break;
-        case 'twitter': loadTwitter(); break;
+        case 'conversations': loadConversations(); break;
         case 'ops': loadOps(); break;
         case 'prompt': loadPrompt(); break;
         case 'ai': loadAiConfig(); break;
+        case 'commands': loadCommands(); break;
         case 'directives': loadDirectives(); break;
         case 'theme': loadMaintenance(); loadAutostartStatus(); break;
+        case 'backup': loadBackupComponents(); break;
       }
     }
     function toggleSidebar(force) {
@@ -1979,38 +2342,51 @@
     // WEBSOCKET
     // ================================================================
     function connectWs() {
-      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const url = `${proto}//${location.host}/`;
+      let url;
+      if (WS_BASE) {
+        // Tauri: full URL
+        url = WS_BASE + '/';
+      } else {
+        // Browser: relative
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        url = `${proto}//${location.host}/`;
+      }
+      dbg('WS', 'connecting to', url);
       setStatus('connecting', 'conectando…');
-      try { state.ws = new WebSocket(url); }
+      try { _marcio_state.ws = new WebSocket(url); }
       catch (e) {
+        dbgErr('WS', 'construct error:', e.message);
         setStatus('offline', 'WS erro');
         setTimeout(connectWs, 3000);
         return;
       }
-      state.ws.onopen = () => {
-        state.wsConnected = true;
+      _marcio_state.ws.onopen = () => {
+        _marcio_state.wsConnected = true;
         setStatus('online', 'online');
+        dbg('WS', '✓ connected');
         appendLogLine('SYSTEM', 'WebSocket conectado.', { cls: 'system' });
       };
-      state.ws.onmessage = (ev) => {
+      _marcio_state.ws.onmessage = (ev) => {
         let msg; try { msg = JSON.parse(ev.data); } catch { return; }
         handleWsMessage(msg);
       };
-      state.ws.onclose = () => {
-        state.wsConnected = false;
+      _marcio_state.ws.onclose = (ev) => {
+        _marcio_state.wsConnected = false;
         setStatus('offline', 'reconectando em 3s…');
+        dbg('WS', 'disconnected:', ev.code, ev.reason || '(no reason)');
         appendLogLine('SYSTEM', 'WebSocket desconectado. Reconectando…', { cls: 'system' });
         setTimeout(connectWs, 3000);
       };
-      state.ws.onerror = () => { /* onclose handles */ };
+      _marcio_state.ws.onerror = (ev) => {
+        dbgErr('WS', 'error event:', ev);
+      };
     }
 
     function handleWsMessage(msg) {
       if (!msg || !msg.type) return;
       switch (msg.type) {
         case 'snapshot':
-          if (msg.data) { state.stats = msg.data; renderStats(msg.data); renderDashboard(); }
+          if (msg.data) { _marcio_state.stats = msg.data; renderStats(msg.data); renderDashboard(); }
           break;
         case 'log':
           if (msg.data) {
@@ -2038,6 +2414,20 @@
           }
           break;
         case 'pong': break;
+        case 'chat-settings-update':
+          // Settings de um chat mudaram (via comando !mute, /ia off, ou painel).
+          // Atualiza lista de chats E re-renderiza o modal se o chat afetado tá aberto.
+          if (msg.data) {
+            scheduleChatSettingsRefresh(msg.data.chatId);
+          }
+          break;
+        case 'conversation-update':
+          // Msg nova chegou ou bot respondeu — agenda reload debounced
+          // do painel Conversas (só se o usuário estiver na seção).
+          if (msg.data) {
+            scheduleConvRefresh(msg.data.chatId);
+          }
+          break;
         case 'notification':
           // Notificação nativa — se tiver Tauri, usa invoke; senão, browser API
           if (msg.data) {
@@ -2090,8 +2480,8 @@
     // ================================================================
     function appendLogLine(tag, message, opts = {}) {
       const entry = { tag, message, cls: opts.cls || '', time: opts.time || nowTime() };
-      state.logLines.push(entry);
-      while (state.logLines.length > state.maxLogLines) state.logLines.shift();
+      _marcio_state.logLines.push(entry);
+      while (_marcio_state.logLines.length > _marcio_state.maxLogLines) _marcio_state.logLines.shift();
       renderLogLines();
     }
     function renderLogLines() {
@@ -2099,7 +2489,7 @@
       if (!body) return;
       const filterText = ($('#logFilterText')?.value || '').toLowerCase();
       const filterTag  = $('#logFilterTag')?.value || '';
-      const lines = state.logLines.filter(e => {
+      const lines = _marcio_state.logLines.filter(e => {
         if (filterTag && e.cls !== filterTag) return false;
         if (filterText && !(e.message.toLowerCase().includes(filterText) || e.tag.toLowerCase().includes(filterText))) return false;
         return true;
@@ -2108,26 +2498,26 @@
         `<div class="log-line ${e.cls}"><span class="ts">[${e.time}]</span><span class="tag">${escapeHtml(e.tag)}</span><span class="msg">${escapeHtml(e.message)}</span></div>`
       ).join('');
       const counter = $('#logCount');
-      if (counter) counter.textContent = `${lines.length} / ${state.logLines.length} linhas`;
+      if (counter) counter.textContent = `${lines.length} / ${_marcio_state.logLines.length} linhas`;
       // mini-log on dashboard
       const mini = $('#miniLog');
       if (mini) {
-        const miniLines = state.logLines.slice(-30);
+        const miniLines = _marcio_state.logLines.slice(-30);
         mini.innerHTML = miniLines.map(e =>
           `<div class="log-line ${e.cls}"><span class="ts">[${e.time}]</span><span class="tag">${escapeHtml(e.tag)}</span><span class="msg">${escapeHtml(e.message)}</span></div>`
         ).join('');
         mini.scrollTop = mini.scrollHeight;
       }
-      if (state.autoScroll) body.scrollTop = body.scrollHeight;
+      if (_marcio_state.autoScroll) body.scrollTop = body.scrollHeight;
     }
     function clearLog() {
-      state.logLines = [];
+      _marcio_state.logLines = [];
       renderLogLines();
       appendLogLine('SYSTEM', 'log limpo.', { cls: 'system' });
     }
     function toggleAutoScroll() {
-      state.autoScroll = !state.autoScroll;
-      $('#autoScrollBtn').textContent = `⏷ auto-scroll: ${state.autoScroll ? 'on' : 'off'}`;
+      _marcio_state.autoScroll = !_marcio_state.autoScroll;
+      $('#autoScrollBtn').textContent = `⏷ auto-scroll: ${_marcio_state.autoScroll ? 'on' : 'off'}`;
     }
 
     // ================================================================
@@ -2147,18 +2537,18 @@
       if (ev.key === 'Enter') { sendCommand(); }
       else if (ev.key === 'ArrowUp') {
         ev.preventDefault();
-        if (state.consoleHistory.length === 0) return;
-        if (state.consoleHistoryIdx === -1) state.consoleHistoryIdx = state.consoleHistory.length - 1;
-        else if (state.consoleHistoryIdx > 0) state.consoleHistoryIdx--;
-        input.value = state.consoleHistory[state.consoleHistoryIdx] || '';
+        if (_marcio_state.consoleHistory.length === 0) return;
+        if (_marcio_state.consoleHistoryIdx === -1) _marcio_state.consoleHistoryIdx = _marcio_state.consoleHistory.length - 1;
+        else if (_marcio_state.consoleHistoryIdx > 0) _marcio_state.consoleHistoryIdx--;
+        input.value = _marcio_state.consoleHistory[_marcio_state.consoleHistoryIdx] || '';
       } else if (ev.key === 'ArrowDown') {
         ev.preventDefault();
-        if (state.consoleHistoryIdx === -1) return;
-        if (state.consoleHistoryIdx < state.consoleHistory.length - 1) {
-          state.consoleHistoryIdx++;
-          input.value = state.consoleHistory[state.consoleHistoryIdx];
+        if (_marcio_state.consoleHistoryIdx === -1) return;
+        if (_marcio_state.consoleHistoryIdx < _marcio_state.consoleHistory.length - 1) {
+          _marcio_state.consoleHistoryIdx++;
+          input.value = _marcio_state.consoleHistory[_marcio_state.consoleHistoryIdx];
         } else {
-          state.consoleHistoryIdx = -1;
+          _marcio_state.consoleHistoryIdx = -1;
           input.value = '';
         }
       }
@@ -2167,14 +2557,14 @@
       const input = $('#consoleInput');
       const text = input.value.trim();
       if (!text) return;
-      state.consoleHistory.push(text);
-      if (state.consoleHistory.length > 100) state.consoleHistory.shift();
-      state.consoleHistoryIdx = -1;
+      _marcio_state.consoleHistory.push(text);
+      if (_marcio_state.consoleHistory.length > 100) _marcio_state.consoleHistory.shift();
+      _marcio_state.consoleHistoryIdx = -1;
       input.value = '';
       appendConsole('in', text);
       // Send via WS or fallback to POST
-      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-        state.ws.send(JSON.stringify({ action: 'run-command', text }));
+      if (_marcio_state.ws && _marcio_state.ws.readyState === WebSocket.OPEN) {
+        _marcio_state.ws.send(JSON.stringify({ action: 'run-command', text }));
       } else {
         apiPost('/api/command', { text })
           .then(r => {
@@ -2195,7 +2585,7 @@
     async function loadStats() {
       try {
         const s = await apiGet('/api/stats');
-        state.stats = s;
+        _marcio_state.stats = s;
         renderStats(s);
         renderDashboard();
       } catch (e) {
@@ -2225,7 +2615,7 @@
       ).join('');
     }
     function renderDashboard() {
-      const s = state.stats;
+      const s = _marcio_state.stats;
       if (!s) return;
       const botOnline  = s.uptime > 0;
       const waOnline   = botOnline; // proxy; real WA status from /api/bot/status
@@ -2242,8 +2632,8 @@
     }
 
     // === Gráficos (Chart.js) ===
-    let chartIaInstance = null;
-    let chartMsgsInstance = null;
+    var chartIaInstance = null;
+    var chartMsgsInstance = null;
 
     async function loadChartHistory() {
       try {
@@ -2414,171 +2804,379 @@
     }
 
     // ================================================================
-    // MEMORIES
+    // PROFILES (ProfileBook — perfis IA de pessoas + grupos)
     // ================================================================
-    async function loadMemories() {
-      try {
-        state.memories = await apiGet('/api/memories');
-        const users = Object.keys(state.memories).sort();
-        if (users.length && !state.currentMemoryUser) state.currentMemoryUser = users[0];
-        renderMemories();
-      } catch (e) {
-        $('#memoryUsers').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
-      }
-    }
-    function renderMemories() {
-      const users = Object.keys(state.memories).sort();
-      const search = ($('#memorySearch')?.value || '').toLowerCase();
-      const userList = $('#memoryUsers');
-      userList.innerHTML = users.length
-        ? users.map(u => {
-            const facts = state.memories[u] || [];
-            const active = u === state.currentMemoryUser ? 'active' : '';
-            return `<div class="split-list-item ${active}" onclick="selectMemoryUser('${escapeHtml(u)}')">
-                      <span>${escapeHtml(u)}</span>
-                      <span class="count">${facts.length}</span>
-                    </div>`;
-          }).join('')
-        : `<div class="empty-state"><div class="text">nenhum usuário</div></div>`;
+    _marcio_state.profiles = [];
+    _marcio_state.profileTab = 'person';
+    _marcio_state.currentProfileId = null;
 
-      const detail = $('#memoryFacts');
-      if (!state.currentMemoryUser || !state.memories[state.currentMemoryUser]) {
-        detail.innerHTML = `<div class="empty-state"><div class="icon">🧠</div><div class="text">selecione um usuário</div></div>`;
-        return;
+    async function loadProfiles() {
+      dbg('PROFILES', 'loadProfiles()');
+      const el = $('#profileGrid');
+      if (el) el.innerHTML = '<div class="empty-state"><div class="text">Carregando perfis…</div></div>';
+      try {
+        const r = await apiGet('/api/profiles');
+        _marcio_state.profiles = r.profiles || [];
+        dbg('PROFILES', `loaded ${_marcio_state.profiles.length} profiles`);
+        renderProfiles();
+      } catch (e) {
+        dbgErr('PROFILES', 'loadProfiles failed:', e.message);
+        if (el) el.innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
       }
-      let facts = state.memories[state.currentMemoryUser] || [];
+    }
+
+    function switchProfileTab(tab) {
+      _marcio_state.profileTab = tab;
+      $$('.tab[data-ptab]').forEach(t => t.classList.toggle('active', t.dataset.ptab === tab));
+      renderProfiles();
+    }
+
+    function renderProfiles() {
+      const el = $('#profileGrid');
+      if (!el) return;
+      const search = ($('#profileSearch')?.value || '').toLowerCase();
+      let profiles = _marcio_state.profiles.filter(p => p.type === _marcio_state.profileTab);
       if (search) {
-        facts = facts.filter(f => (typeof f === 'string' ? f : (f.text || f.fact || JSON.stringify(f))).toLowerCase().includes(search));
+        profiles = profiles.filter(p =>
+          p.name.toLowerCase().includes(search) ||
+          p.id.toLowerCase().includes(search) ||
+          (p.aiSummary || '').toLowerCase().includes(search) ||
+          (p.aiShortView || '').toLowerCase().includes(search)
+        );
       }
-      if (!facts.length) {
-        detail.innerHTML = `<div class="empty-state"><div class="icon">📭</div><div class="text">${search ? 'nenhum fato encontrado' : 'sem fatos'}</div></div>`;
+      // Sort: mais interações primeiro
+      profiles.sort((a, b) => (b.interactionCount || 0) - (a.interactionCount || 0));
+
+      if (!profiles.length) {
+        el.innerHTML = `<div class="empty-state"><div class="icon">${_marcio_state.profileTab === 'person' ? '👤' : '👥'}</div><div class="text">${search ? 'nenhum perfil encontrado' : 'nenhum perfil ainda — mande msgs no WhatsApp pra o bot criar perfis automaticamente'}</div></div>`;
         return;
       }
-      detail.innerHTML = `<div class="muted small mb-1">${facts.length} fato(s) para <strong style="color:var(--text)">${escapeHtml(state.currentMemoryUser)}</strong></div>` +
-        facts.map((f, i) => {
-          const text = typeof f === 'string' ? f : (f.text || f.fact || JSON.stringify(f));
-          const source = typeof f === 'object' ? (f.sourceChat || f.source || '') : '';
-          const ts = typeof f === 'object' ? (f.timestamp || f.ts || '') : '';
-          return `<div class="fact-card">
-            <div class="fact-text">${escapeHtml(text)}</div>
-            <div class="fact-meta">
-              ${source ? `<span>📍 ${escapeHtml(source)}</span>` : ''}
-              ${ts ? `<span>🕒 ${escapeHtml(formatDate(ts))}</span>` : ''}
-              <span>#${i}</span>
+
+      el.innerHTML = profiles.map(p => {
+        const typeIcon = p.type === 'group' ? '👥' : '👤';
+        const typeLabel = p.type === 'group' ? 'grupo' : 'pessoa';
+        const avatar = p.photoUrl
+          ? `<img src="${escapeHtml(p.photoUrl)}" alt="" onerror="this.parentElement.innerHTML='${typeIcon}'">`
+          : typeIcon;
+        const tags = (p.aiShortView || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 6);
+        const tagsHtml = tags.map(t => `<span class="profile-tag">${escapeHtml(t)}</span>`).join('');
+        const traitsCount = Object.keys(p.traits || {}).length;
+        const lastUpdate = p.lastAIUpdate ? timeAgo(new Date(p.lastAIUpdate)) : 'nunca';
+
+        return `<div class="profile-card" onclick="openProfileModal('${escapeHtml(p.id)}')">
+          <div class="profile-card-header">
+            <div class="profile-avatar">${avatar}</div>
+            <div style="flex:1;min-width:0;">
+              <div class="profile-name">${escapeHtml(p.name)}</div>
+              <div class="profile-id">${escapeHtml(p.id)}</div>
+              <span class="profile-type-badge ${p.type}">${typeLabel}</span>
             </div>
-            <div class="fact-actions">
-              <button class="ghost sm" onclick="editFact('${escapeHtml(state.currentMemoryUser)}', ${i})">✏️ Editar</button>
-              <button class="danger sm" onclick="deleteFact('${escapeHtml(state.currentMemoryUser)}', ${i})">🗑 Deletar</button>
-            </div>
-          </div>`;
-        }).join('');
+          </div>
+          <div class="profile-stats">
+            <span class="profile-stat">💬 <strong>${p.interactionCount || 0}</strong> interações</span>
+            <span class="profile-stat">📊 <strong>${traitsCount}</strong> dados</span>
+            <span class="profile-stat">🤖 ${lastUpdate}</span>
+          </div>
+          ${p.aiSummary ? `<div class="profile-summary">${escapeHtml(p.aiSummary)}</div>` : ''}
+          ${tagsHtml ? `<div class="profile-tags">${tagsHtml}</div>` : ''}
+        </div>`;
+      }).join('');
     }
-    function selectMemoryUser(u) {
-      state.currentMemoryUser = u;
-      renderMemories();
-    }
-    function openAddFactModal() {
-      const users = Object.keys(state.memories).sort();
-      const opts = users.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+
+    function openProfileModal(id) {
+      const profile = _marcio_state.profiles.find(p => p.id === id);
+      if (!profile) { toast('perfil não encontrado', 'error'); return; }
+      _marcio_state.currentProfileId = id;
+
+      const traitsHtml = Object.entries(profile.traits || {})
+        .map(([k, v], i) => `
+          <div class="form-row" style="display:flex;gap:8px;align-items:center;">
+            <input type="text" class="trait-key" value="${escapeHtml(k)}" placeholder="chave" style="flex:1;">
+            <input type="text" class="trait-val" value="${escapeHtml(String(v))}" placeholder="valor" style="flex:2;">
+            <button class="danger sm" onclick="this.parentElement.remove()">✕</button>
+          </div>
+        `).join('');
+
       openModal(`
         <div class="modal-header">
-          <div class="modal-title">➕ Adicionar Fato</div>
+          <div class="modal-title">${profile.type === 'group' ? '👥' : '👤'} ${escapeHtml(profile.name)}</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+          <div class="muted small mb-1">ID: <code>${escapeHtml(profile.id)}</code></div>
+          <div class="muted small mb-1">Tipo: <strong>${profile.type === 'group' ? 'grupo' : 'pessoa'}</strong></div>
+          <div class="muted small mb-1">Interações: <strong>${profile.interactionCount || 0}</strong></div>
+          <div class="muted small mb-1">Última atualização IA: ${profile.lastAIUpdate ? escapeHtml(formatDate(profile.lastAIUpdate)) : 'nunca'}</div>
+          ${profile.photoUrl ? `<div class="mb-2"><img src="${escapeHtml(profile.photoUrl)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'"></div>` : ''}
+
+          <div class="form-row">
+            <label>📝 Resumo da IA</label>
+            <textarea id="profileSummary" rows="3" placeholder="Resumo que a IA gerou...">${escapeHtml(profile.aiSummary || '')}</textarea>
+          </div>
+
+          <div class="form-row">
+            <label>🏷️ Tags (palavras-chave, separadas por vírgula)</label>
+            <input type="text" id="profileShortView" value="${escapeHtml(profile.aiShortView || '')}" placeholder="ex: gamer, esquerda, tímido">
+          </div>
+
+          <div class="form-row">
+            <label>🔧 Traits (dados estruturados)</label>
+            <div id="traitsList">${traitsHtml || '<div class="muted small">nenhuma trait</div>'}</div>
+            <button class="ghost sm mt-1" onclick="addTraitRow()">+ Adicionar trait</button>
+          </div>
+
+          <div class="form-row">
+            <label>🗒️ Notas livres</label>
+            <textarea id="profileNotes" rows="3" placeholder="Notas adicionais...">${escapeHtml(profile.rawNotes || '')}</textarea>
+          </div>
+
+          <div class="form-row">
+            <label>🔗 IDs alternativos (aliases)</label>
+            <div class="muted small mb-1">IDs que referenciam a mesma pessoa (ex: @lid de grupo ↔ @c.us de PV). O bot auto-linka por nome+foto, mas você pode adicionar manualmente.</div>
+            <div id="aliasesList">${(profile.aliases || []).map(a => `<div class="alias-row" style="display:flex;gap:8px;align-items:center;margin-top:4px;"><code style="flex:1;font-size:11px;word-break:break-all;">${escapeHtml(a)}</code><button class="danger sm" onclick="removeAlias('${escapeHtml(id)}','${escapeHtml(a)}')">✕</button></div>`).join('') || '<div class="muted small">nenhum alias</div>'}</div>
+            <div style="display:flex;gap:8px;margin-top:6px;">
+              <input type="text" id="newAliasId" placeholder="ID alternativo (ex: 55119...@c.us)" style="flex:1;font-size:11px;">
+              <button class="ghost sm" onclick="addAlias('${escapeHtml(id)}')">+ Linkar</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="success" onclick="saveProfile('${escapeHtml(id)}')">💾 Salvar</button>
+          <button class="primary" onclick="refreshProfile('${escapeHtml(id)}')">🤖 Atualizar via IA</button>
+          <button class="danger" onclick="deleteProfile('${escapeHtml(id)}')">🗑️ Deletar</button>
+          <button class="ghost" onclick="closeModal()">Cancelar</button>
+        </div>
+      `);
+    }
+
+    function addTraitRow() {
+      const list = $('#traitsList');
+      const row = document.createElement('div');
+      row.className = 'form-row';
+      row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:6px;';
+      row.innerHTML = `
+        <input type="text" class="trait-key" placeholder="chave" style="flex:1;">
+        <input type="text" class="trait-val" placeholder="valor" style="flex:2;">
+        <button class="danger sm" onclick="this.parentElement.remove()">✕</button>
+      `;
+      list.appendChild(row);
+    }
+
+    async function saveProfile(id) {
+      const summary = $('#profileSummary')?.value || '';
+      const shortView = $('#profileShortView')?.value || '';
+      const notes = $('#profileNotes')?.value || '';
+      const traits = {};
+      $$('#traitsList .form-row').forEach(row => {
+        const key = row.querySelector('.trait-key')?.value?.trim();
+        const val = row.querySelector('.trait-val')?.value?.trim();
+        if (key && val) traits[key] = val;
+      });
+
+      try {
+        await fetch(API_BASE + '/api/profiles/' + encodeURIComponent(id), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aiSummary: summary, aiShortView: shortView, traits, rawNotes: notes }),
+        });
+        toast('Perfil salvo ✓', 'success');
+        closeModal();
+        await loadProfiles();
+      } catch (e) {
+        toast('Erro ao salvar: ' + e.message, 'error', 5000);
+      }
+    }
+
+    async function refreshProfile(id) {
+      toast('Pedindo pra IA atualizar…', 'info', 5000);
+      try {
+        const r = await fetch(API_BASE + '/api/profiles/' + encodeURIComponent(id) + '/refresh', { method: 'POST' });
+        const data = await r.json();
+        if (data.ok) {
+          toast('Perfil atualizado pela IA ✓', 'success');
+          closeModal();
+          await loadProfiles();
+          // Reabre o modal com o perfil atualizado
+          setTimeout(() => openProfileModal(id), 300);
+        } else {
+          toast('IA não conseguiu atualizar: ' + (data.error || 'sem msgs suficientes'), 'warn', 6000);
+        }
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error', 5000);
+      }
+    }
+
+    async function deleteProfile(id) {
+      if (!confirm('Deletar este perfil permanentemente?')) return;
+      try {
+        await apiDelete('/api/profiles/' + encodeURIComponent(id));
+        toast('Perfil deletado ✓', 'success');
+        closeModal();
+        await loadProfiles();
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error', 5000);
+      }
+    }
+
+    function openAddProfileModal() {
+      openModal(`
+        <div class="modal-header">
+          <div class="modal-title">➕ Novo perfil</div>
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
           <div class="form-row">
-            <label>Usuário</label>
-            <input type="text" id="newFactUser" list="userList" placeholder="nome do usuário" value="${escapeHtml(state.currentMemoryUser || '')}">
-            <datalist id="userList">${opts}</datalist>
+            <label>ID (WhatsApp ID: 55119...@c.us ou groupId@g.us)</label>
+            <input type="text" id="newProfileId" placeholder="5511989744468@c.us">
           </div>
           <div class="form-row">
-            <label>Fato</label>
-            <textarea id="newFactText" rows="4" placeholder="ex: gosta de futebol, trabalha com TI"></textarea>
+            <label>Tipo</label>
+            <select id="newProfileType">
+              <option value="person">👤 Pessoa</option>
+              <option value="group">👥 Grupo</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Nome</label>
+            <input type="text" id="newProfileName" placeholder="Nome do contato ou grupo">
+          </div>
+          <div class="form-row">
+            <label>Resumo (opcional)</label>
+            <textarea id="newProfileSummary" rows="2" placeholder="Descrição inicial..."></textarea>
           </div>
         </div>
         <div class="modal-footer">
           <button class="ghost" onclick="closeModal()">Cancelar</button>
-          <button class="primary" onclick="submitAddFact()">Adicionar</button>
+          <button class="primary" onclick="submitNewProfile()">Criar</button>
         </div>
       `);
     }
-    async function submitAddFact() {
-      const user = $('#newFactUser').value.trim();
-      const text = $('#newFactText').value.trim();
-      if (!user || !text) { toast('preencha usuário e fato', 'warn'); return; }
+
+    async function submitNewProfile() {
+      const id = $('#newProfileId')?.value?.trim();
+      const type = $('#newProfileType')?.value || 'person';
+      const name = $('#newProfileName')?.value?.trim();
+      const summary = $('#newProfileSummary')?.value?.trim() || '';
+      if (!id || !name) { toast('ID e nome obrigatórios', 'warn'); return; }
       try {
-        await apiPost(`/api/memories/${encodeURIComponent(user)}`, { text });
-        toast('Fato adicionado ✓', 'success');
+        await fetch(API_BASE + '/api/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, type, name, aiSummary: summary }),
+        });
+        toast('Perfil criado ✓', 'success');
         closeModal();
-        await loadMemories();
-      } catch (e) { toast(e.message, 'error', 5000); }
+        await loadProfiles();
+      } catch (e) { toast('Erro: ' + e.message, 'error', 5000); }
     }
-    function editFact(user, idx) {
-      const facts = state.memories[user] || [];
-      const f = facts[idx];
-      if (!f) return;
-      const text = typeof f === 'string' ? f : (f.text || f.fact || JSON.stringify(f));
-      openModal(`
-        <div class="modal-header">
-          <div class="modal-title">✏️ Editar Fato</div>
-          <button class="modal-close" onclick="closeModal()">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-row">
-            <label>Usuário</label>
-            <input type="text" value="${escapeHtml(user)}" disabled>
-          </div>
-          <div class="form-row">
-            <label>Fato (índice ${idx})</label>
-            <textarea id="editFactText" rows="4">${escapeHtml(text)}</textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="ghost" onclick="closeModal()">Cancelar</button>
-          <button class="primary" onclick="submitEditFact('${escapeHtml(user)}', ${idx})">Salvar</button>
-        </div>
-      `);
-    }
-    async function submitEditFact(user, idx) {
-      const text = $('#editFactText').value.trim();
-      if (!text) { toast('texto vazio', 'warn'); return; }
+
+    async function migrateMemories() {
+      if (!confirm('Migrar memories.json antigo pra o novo sistema de perfis?\n\nIsso vai criar perfis para cada usuário no memories.json, tentando resolver o nome para WhatsApp ID.')) return;
+      toast('Migrando…', 'info', 5000);
       try {
-        // Delete old + add new (since edit endpoint may not exist)
-        await apiDelete(`/api/memories/${encodeURIComponent(user)}/${idx}`);
-        await apiPost(`/api/memories/${encodeURIComponent(user)}`, { text });
-        toast('Fato atualizado ✓', 'success');
-        closeModal();
-        await loadMemories();
-      } catch (e) { toast(e.message, 'error', 5000); }
+        const r = await fetch(API_BASE + '/api/profiles/migrate', { method: 'POST' });
+        const data = await r.json();
+        if (data.ok) {
+          toast(`Migração ✓ — ${data.migrated} migrado(s), ${data.skipped} pulado(s)`, 'success', 8000);
+          if (data.errors?.length) {
+            toast(`${data.errors.length} erro(s): ${data.errors.slice(0, 2).join('; ')}...`, 'warn', 8000);
+          }
+          await loadProfiles();
+        } else {
+          toast('Erro na migração: ' + (data.error || '?'), 'error', 6000);
+        }
+      } catch (e) { toast('Erro: ' + e.message, 'error', 5000); }
     }
-    async function deleteFact(user, idx) {
-      if (!confirm(`Deletar fato #${idx} de ${user}?`)) return;
+
+    async function mineProfiles() {
+      if (!confirm('Minerar conversas passadas pra criar/atualizar perfis?\n\nIsso vai ler o decision-log + history-log e criar perfis para todos os senders encontrados, disparando update IA.')) return;
+      toast('Minerando…', 'info', 5000);
       try {
-        await apiDelete(`/api/memories/${encodeURIComponent(user)}/${idx}`);
-        toast('Fato deletado ✓', 'success');
-        await loadMemories();
-      } catch (e) { toast(e.message, 'error', 5000); }
+        const r = await fetch(API_BASE + '/api/profiles/mine', { method: 'POST' });
+        const data = await r.json();
+        if (data.ok) {
+          toast('Mineração iniciada ✓ — aguarde ~30s e recarregue', 'success', 8000);
+          setTimeout(() => loadProfiles(), 35000);
+        } else {
+          toast('Erro: ' + (data.error || '?'), 'error', 6000);
+        }
+      } catch (e) { toast('Erro: ' + e.message, 'error', 5000); }
+    }
+
+    async function addAlias(profileId) {
+      const aliasId = $('#newAliasId')?.value?.trim();
+      if (!aliasId) { toast('digite um ID', 'warn'); return; }
+      try {
+        const r = await fetch(API_BASE + '/api/profiles/link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ canonicalId: profileId, aliasId, reason: 'manual via painel' }),
+        });
+        const data = await r.json();
+        if (data.ok) {
+          toast('ID linkado ✓', 'success');
+          await loadProfiles();
+          setTimeout(() => openProfileModal(profileId), 200);
+        } else {
+          toast('Erro: ' + (data.error || '?'), 'error', 5000);
+        }
+      } catch (e) { toast('Erro: ' + e.message, 'error', 5000); }
+    }
+
+    async function removeAlias(profileId, aliasId) {
+      if (!confirm(`Remover alias ${aliasId} deste perfil?`)) return;
+      // Para remover um alias, fazemos um PUT com a lista atualizada (sem o alias)
+      const profile = _marcio_state.profiles.find(p => p.id === profileId);
+      if (!profile) return;
+      const newAliases = (profile.aliases || []).filter(a => a !== aliasId);
+      try {
+        await fetch(API_BASE + '/api/profiles/' + encodeURIComponent(profileId), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aliases: newAliases }),
+        });
+        toast('Alias removido ✓', 'success');
+        await loadProfiles();
+        setTimeout(() => openProfileModal(profileId), 200);
+      } catch (e) { toast('Erro: ' + e.message, 'error', 5000); }
     }
 
     // ================================================================
     // STICKERS
     // ================================================================
+    _marcio_state.stickerTab = 'all';
+
+    function switchStickerTab(tab) {
+      _marcio_state.stickerTab = tab;
+      $$('.tab[data-stab]').forEach(t => t.classList.toggle('active', t.dataset.stab === tab));
+      renderStickers();
+    }
+
     async function loadStickers() {
       try {
         const r = await apiGet('/api/stickers');
-        state.stickers = Array.isArray(r) ? r : (r.stickers || []);
+        _marcio_state.stickers = Array.isArray(r) ? r : (r.stickers || []);
         renderStickers();
       } catch (e) {
-        $('#stickerGrid').innerHTML = `<div class="empty-state"><div class="icon">🎭</div><div class="text">❌ ${escapeHtml(e.message)}<br><span class="muted">endpoint /api/stickers ainda não existe</span></div></div>`;
+        $('#stickerGrid').innerHTML = `<div class="empty-state"><div class="icon">🎭</div><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
       }
     }
     function renderStickers() {
       const grid = $('#stickerGrid');
-      if (!state.stickers.length) {
-        grid.innerHTML = `<div class="empty-state"><div class="icon">🎭</div><div class="text">nenhuma figurinha</div></div>`;
+      let stickers = _marcio_state.stickers;
+
+      // Filtra por tab
+      if (_marcio_state.stickerTab === 'fav') {
+        stickers = stickers.filter(s => s.favorite);
+      } else if (_marcio_state.stickerTab === 'named') {
+        stickers = stickers.filter(s => s.name);
+      }
+
+      if (!stickers.length) {
+        grid.innerHTML = `<div class="empty-state"><div class="icon">🎭</div><div class="text">nenhuma figurinha ${_marcio_state.stickerTab === 'fav' ? 'favorita' : _marcio_state.stickerTab === 'named' ? 'nomeada' : ''}</div></div>`;
         return;
       }
-      grid.innerHTML = state.stickers.map(s => {
+      grid.innerHTML = stickers.map(s => {
         const img = s.thumbnail || s.data || s.base64 || '';
         const name = s.name || '';
         const fav = s.favorite ? '⭐' : '';
@@ -2590,7 +3188,7 @@
       }).join('');
     }
     function openStickerModal(filename) {
-      const s = state.stickers.find(x => x.filename === filename);
+      const s = _marcio_state.stickers.find(x => x.filename === filename);
       if (!s) return;
       const img = s.thumbnail || s.data || s.base64 || '';
       openModal(`
@@ -2628,7 +3226,7 @@
       } catch (e) { toast(e.message, 'error', 5000); }
     }
     async function toggleStickerFav(filename) {
-      const s = state.stickers.find(x => x.filename === filename);
+      const s = _marcio_state.stickers.find(x => x.filename === filename);
       const fav = s ? !s.favorite : true;
       try {
         await apiPost(`/api/stickers/${encodeURIComponent(filename)}/favorite`, { favorite: fav });
@@ -2646,6 +3244,19 @@
         await loadStickers();
       } catch (e) { toast(e.message, 'error', 5000); }
     }
+    async function mergeDuplicates() {
+      if (!confirm('Procurar e mesclar figurinhas duplicadas?\nIsto vai comparar o conteúdo de TODAS as figurinhas e deletar as repetidas (mantendo nome/favorita).')) return;
+      toast('Procurando duplicatas… ⏳', 'info', 30000);
+      try {
+        const r = await apiPost('/api/stickers/merge-duplicates', {});
+        if (r.ok) {
+          toast(`✅ ${r.groups} grupo(s) mesclado(s), ${r.deleted} arquivo(s) deletado(s)`, 'success', 8000);
+          await loadStickers();
+        } else {
+          toast('❌ ' + (r.error || 'erro'), 'error', 5000);
+        }
+      } catch (e) { toast(e.message, 'error', 5000); }
+    }
     async function dedupStickers() {
       if (!confirm('Rodar dedup de figurinhas? (/fig dedup)')) return;
       quickCmd('/fig dedup');
@@ -2658,7 +3269,7 @@
     async function loadChats() {
       try {
         const r = await apiGet('/api/chats');
-        state.chats = Array.isArray(r) ? r : (r.chats || []);
+        _marcio_state.chats = Array.isArray(r) ? r : (r.chats || []);
         renderChats();
       } catch (e) {
         $('#chatList').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
@@ -2666,11 +3277,11 @@
     }
     function renderChats() {
       const list = $('#chatList');
-      if (!state.chats.length) {
+      if (!_marcio_state.chats.length) {
         list.innerHTML = `<div class="empty-state"><div class="icon">👥</div><div class="text">nenhum chat ativo</div></div>`;
         return;
       }
-      list.innerHTML = state.chats.map(c => {
+      list.innerHTML = _marcio_state.chats.map(c => {
         const displayName = c.name && c.name !== c.chatId ? c.name : chatLabel(c.chatId);
         const groupIcon = c.isGroup ? '👥' : '💬';
         const lastActive = c.lastActivity ? timeAgo(new Date(c.lastActivity)) : '';
@@ -2692,8 +3303,8 @@
       }).join('');
     }
     async function openChat(chatId) {
-      state.currentChatId = chatId;
-      state.activeChatId = chatId;
+      _marcio_state.currentChatId = chatId;
+      _marcio_state.activeChatId = chatId;
       // Busca dados do chat (inclui nome, entrosão, iaEnabled, muted)
       let entrosao = 1;
       let iaEnabled = true;
@@ -2714,11 +3325,12 @@
       const groupIcon = isGroup ? '👥' : '💬';
       openModal(`
         <div class="modal-header">
-          <div class="modal-title">${groupIcon} ${escapeHtml(chatName)}</div>
+          <div class="modal-title">${groupIcon} ${escapeHtml(chatName)}${muted ? ' 🤐' : ''}</div>
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
           <div class="muted small mb-2">${escapeHtml(chatId)}</div>
+          ${muted ? '<div class="badge bad mb-2" style="display:inline-flex;">🤐 bot mutado democraticamente</div><br>' : ''}
           <div class="row-flex mb-2">
             <span class="muted small">IA neste chat: <strong>${iaEnabled ? '✅ ON' : '🛑 OFF'}</strong></span>
             <button class="success sm" onclick="setIa(true)">ON</button>
@@ -2799,21 +3411,277 @@
       }
     }
     async function setIa(enabled) {
-      if (!state.currentChatId) return;
+      if (!_marcio_state.currentChatId) return;
       try {
-        await apiPost(`/api/ia/${encodeURIComponent(state.currentChatId)}`, { enabled });
+        await apiPost(`/api/ia/${encodeURIComponent(_marcio_state.currentChatId)}`, { enabled });
         toast(`IA ${enabled ? 'ligada' : 'desligada'} ✓`, 'success');
         loadChats();
+        // Re-abre o modal do chat pra refletir o novo status (IA on/off)
+        // best-effort — se o modal não tá aberto, openChat faz nada.
+        openChat(_marcio_state.currentChatId);
       } catch (e) { toast(e.message, 'error', 5000); }
     }
     async function saveEntrosao() {
       const lvl = parseInt($('#entrosaoSlider').value, 10);
-      const chatId = state.activeChatId;
+      const chatId = _marcio_state.activeChatId;
       if (!chatId) { toast('Nenhum chat selecionado', 'warn'); return; }
       try {
         await apiPost(`/api/chat-settings/${encodeURIComponent(chatId)}`, { entrosao: lvl });
         toast(`Entrosão definida como ${lvl} ${lvl === 0 ? '(quieto)' : lvl === 1 ? '(normal)' : '(2x)'}`, 'success');
       } catch (e) { toast('Erro ao salvar entrosão: ' + e.message, 'error', 5000); }
+    }
+
+    // === AUTO-REFRESH chat settings (via WS 'chat-settings-update') ===
+    // Quando alguém muda settings via comando (!mute, /ia off, etc), o backend
+    // faz broadcast e o painel re-fetcha o chat aberto + a lista lateral.
+    let _chatSettingsRefreshTimer = null;
+    let _chatSettingsRefreshPending = new Set();
+    function scheduleChatSettingsRefresh(chatId) {
+      if (!chatId) return;
+      _chatSettingsRefreshPending.add(chatId);
+      if (_chatSettingsRefreshTimer) clearTimeout(_chatSettingsRefreshTimer);
+      _chatSettingsRefreshTimer = setTimeout(() => {
+        _chatSettingsRefreshTimer = null;
+        const chats = Array.from(_chatSettingsRefreshPending);
+        _chatSettingsRefreshPending.clear();
+        dbg('CHATS', `chat-settings-update: ${chats.length} chat(s) atualizados`);
+        // 1. Atualiza lista lateral (badges de IA/muted/entrosão)
+        // Só se o usuário estiver na seção chats — evita request desnecessário.
+        if (_marcio_state.currentSection === 'chats') {
+          loadChats();
+        }
+        // 2. Se o chat afetado tá com modal aberto, re-abre pra refletir novo status
+        if (_marcio_state.currentChatId && chats.includes(_marcio_state.currentChatId)) {
+          dbg('CHATS', `re-renderizando modal do chat ${_marcio_state.currentChatId}`);
+          // Re-abre sem fechar o modal — openChat faz fetch dos dados novos.
+          // Pequeno delay pra deixar o loadChats() terminar primeiro.
+          setTimeout(() => {
+            if (_marcio_state.currentChatId) {
+              openChat(_marcio_state.currentChatId);
+            }
+          }, 100);
+        }
+      }, 500);  // 500ms debounce — mais rápido que conversas (settings mudam pouco)
+    }
+
+    // ================================================================
+    // CONVERSATIONS (clone do WhatsApp com decision-log)
+    // ================================================================
+    _marcio_state.conversations = [];
+    _marcio_state.activeConvChatId = null;
+
+    // Variáveis de auto-refresh debounced (declaradas ANTES de loadConversations
+    // porque loadConversations referencia _convRefreshPending no seu body).
+    let _convRefreshTimer = null;
+    let _convRefreshPending = new Set();  // chatIds que dispararam refresh
+
+    async function loadConversations() {
+      dbg('CONV', 'loadConversations() called');
+      try {
+        const r = await apiGet('/api/conversations');
+        _marcio_state.conversations = r.conversations || [];
+        dbg('CONV', `loaded ${_marcio_state.conversations.length} conversations, total msgs: ${_marcio_state.conversations.reduce((s, c) => s + c.messages.length, 0)}`);
+        if (_marcio_state.conversations.length > 0) {
+          dbg('CONV', 'first conv:', { chatId: _marcio_state.conversations[0].chatId, chatName: _marcio_state.conversations[0].chatName, msgCount: _marcio_state.conversations[0].messages.length });
+        }
+        renderConvChatList();
+        // Se tinha um chat aberto e a msg nova é pra ESSE chat,
+        // re-renderiza as msgs do chat aberto (mantém o scroll se não tava no fim).
+        if (_marcio_state.activeConvChatId) {
+          const stillExists = _marcio_state.conversations.some(c => c.chatId === _marcio_state.activeConvChatId);
+          if (stillExists) {
+            // Só re-renderiza se a msg nova é pro chat que o usuário tá olhando
+            const wasForActiveChat = _convRefreshPending.has(_marcio_state.activeConvChatId);
+            if (wasForActiveChat) {
+              // Captura a posição do scroll ANTES do re-render
+              const el = $('#convMessages');
+              const prevScrollTop = el ? el.scrollTop : 0;
+              const prevScrollHeight = el ? el.scrollHeight : 0;
+              const wasNearBottom = el ? (el.scrollHeight - el.scrollTop - el.clientHeight < 80) : true;
+              // Re-renderiza
+              openConversation(_marcio_state.activeConvChatId);
+              // Se NÃO tava no final, restaura o scroll antigo (não incomoda o usuário)
+              // Se TAVA no final, deixa o auto-scroll do openConversation (já foi pro fim).
+              if (el && !wasNearBottom) {
+                requestAnimationFrame(() => {
+                  try {
+                    el.scrollTop = prevScrollTop;
+                  } catch { /* ignora */ }
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        dbgErr('CONV', 'loadConversations failed:', e.message);
+        $('#convChatList').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
+        $('#convMessages').innerHTML = '';
+      }
+    }
+
+    // === AUTO-REFRESH DEBOUNCED ===
+    // Quando chegam msgs novas (via WS 'conversation-update'), agenda um
+    // reload em 1.5s. Se vieram várias seguidas, só roda 1x (debounce).
+    // Só recarrega se o usuário estiver na seção Conversas — evita request
+    // desnecessário se o usuário tá em outra seção.
+    function scheduleConvRefresh(chatId) {
+      if (!chatId) return;
+      if (_marcio_state.currentSection !== 'conversations') {
+        // Usuário não tá em Conversas — não agenda reload, não acumula lixo.
+        dbg('CONV', `scheduleConvRefresh: skip (section=${_marcio_state.currentSection})`);
+        return;
+      }
+      _convRefreshPending.add(chatId);
+      if (_convRefreshTimer) clearTimeout(_convRefreshTimer);
+      _convRefreshTimer = setTimeout(() => {
+        _convRefreshTimer = null;
+        const chats = Array.from(_convRefreshPending);
+        // Não limpa _convRefreshPending aqui — loadConversations precisa
+        // checar se o chat ativo estava nos pendentes (pra saber se re-renderiza).
+        // loadConversations limpa no final (.then abaixo).
+        dbg('CONV', `auto-refresh debounced: ${chats.length} chat(s) updated`);
+        loadConversations().then(() => {
+          _convRefreshPending.clear();
+        });
+      }, 1500);  // 1.5s de debounce — junta várias msgs em 1 reload só
+    }
+
+    async function backfillConversations(force) {
+      const isForce = force === true;
+      dbg('CONV', 'backfillConversations() called' + (isForce ? ' (force=true)' : ''));
+      try {
+        toast(isForce ? 'Re-buscando histórico (force)…' : 'Buscando histórico do WhatsApp…', 'info', 5000);
+        await apiPost('/api/conversations/backfill' + (isForce ? '?force=true' : ''), {});
+        toast(isForce
+          ? 'Re-backfill FORÇADO — aguarde ~30s e clique ↻ (historyLog foi limpo)'
+          : 'Backfill iniciado — aguarde ~30s e clique ↻', 'success', 6000);
+        // Auto-recarrega após 35s
+        setTimeout(() => {
+          dbg('CONV', 'auto-reload after backfill');
+          loadConversations();
+        }, 35000);
+      } catch (e) {
+        dbgErr('CONV', 'backfill failed:', e.message);
+        toast('Backfill falhou: ' + e.message, 'error', 6000);
+      }
+    }
+
+    function renderConvChatList() {
+      const list = $('#convChatList');
+      if (!_marcio_state.conversations.length) {
+        list.innerHTML = `<div class="empty-state"><div class="icon">💬</div><div class="text">nenhuma conversa</div></div>`;
+        dbg('CONV', 'renderConvChatList: empty');
+        return;
+      }
+      dbg('CONV', `renderConvChatList: ${_marcio_state.conversations.length} chats`);
+      list.innerHTML = _marcio_state.conversations.map(c => {
+        const icon = c.isGroup ? '👥' : '💬';
+        const lastMsg = c.messages[c.messages.length - 1];
+        const lastTime = lastMsg ? timeAgo(new Date(lastMsg.timestamp)) : '';
+        const pending = c.messages.filter(m => m.decision === 'pending').length;
+        const responded = c.messages.filter(m => m.decision === 'responded').length;
+        const skipped = c.messages.filter(m => m.decision === 'skip').length;
+        const backfill = c.messages.filter(m => m.decision === 'backfill').length;
+        const received = c.messages.filter(m => m.decision === 'received').length;
+        const audios = c.messages.filter(m => m.isAudio === true).length;
+        const isActive = _marcio_state.activeConvChatId === c.chatId;
+        // Avatar: foto do chat, ou ícone
+        const avatar = c.photoUrl
+          ? `<img src="${escapeHtml(c.photoUrl)}" alt="" onerror="this.parentElement.innerHTML='${icon}'">`
+          : icon;
+        return `<div class="chat-item${isActive ? ' chat-item-active' : ''}" onclick="openConversation('${escapeHtml(c.chatId)}')">
+          <div class="chat-avatar">${avatar}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="chat-id">${escapeHtml(c.chatName)}</div>
+            <div class="chat-sub">${c.messages.length} msgs · ${lastTime}</div>
+          </div>
+          <div class="chat-meta">
+            ${audios ? `<span class="chat-badge audio" title="${audios} mensagem(s) de áudio">🎵 ${audios}</span>` : ''}
+            ${pending ? `<span class="chat-badge bad">${pending} pend</span>` : ''}
+            ${responded ? `<span class="chat-badge good">${responded} resp</span>` : ''}
+            ${received ? `<span class="chat-badge neutral" title="${received} msg(s) recebida(s) em tempo real (sem decisão do bot)">📨 ${received}</span>` : ''}
+            ${skipped ? `<span class="chat-badge neutral">${skipped} skip</span>` : ''}
+            ${backfill ? `<span class="chat-badge neutral" title="${backfill} msg(s) do histórico antigo (backfill)">📜 ${backfill}</span>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function openConversation(chatId) {
+      dbg('CONV', `openConversation(${chatId})`);
+      _marcio_state.activeConvChatId = chatId;
+      // Re-rendera a lista pra destacar o chat ativo
+      renderConvChatList();
+      const conv = _marcio_state.conversations.find(c => c.chatId === chatId);
+      if (!conv) {
+        dbgErr('CONV', `openConversation: chatId ${chatId} not found`);
+        $('#convMessages').innerHTML = '<div class="empty-state"><div class="text">conversa não encontrada</div></div>';
+        return;
+      }
+      dbg('CONV', `openConversation: conv has ${conv.messages.length} messages`);
+      const el = $('#convMessages');
+      if (!conv.messages.length) {
+        el.innerHTML = '<div class="empty-state"><div class="text">sem mensagens</div></div>';
+        return;
+      }
+
+      // Build mapa de msgId → texto pra mostrar quotes
+      const msgMap = new Map();
+      conv.messages.forEach(m => { if (m.msgId) msgMap.set(m.msgId, m); });
+
+      try {
+        el.innerHTML = conv.messages.map(m => {
+          const isBot = m.fromMe === true || m.senderName === '' || m.senderName === 'Robô do PT 🤖' || m.senderName === 'Márcio Pinto' || m.senderName === 'Márcio';
+          const senderDisplay = isBot ? 'Márcio 🤖' : (m.senderName && m.senderName !== '?' ? m.senderName : 'Desconhecido');
+
+          const decisionBadge = m.decision === 'responded'
+            ? '<span class="conv-msg-badge good">✅ respondido</span>'
+            : m.decision === 'skip'
+            ? '<span class="conv-msg-badge neutral">⏭️ pulado</span>'
+            : m.decision === 'pending'
+            ? '<span class="conv-msg-badge bad">⏳ pendente</span>'
+            : m.decision === 'backfill'
+            ? '<span class="conv-msg-badge faded">📜 histórico</span>'
+            : m.decision === 'received'
+            ? '<span class="conv-msg-badge neutral">📨 recebida</span>'
+            : '';
+
+          // Badge de áudio — aparece se a msg era um áudio (transcrito ou não)
+          const audioBadge = m.isAudio === true
+            ? '<span class="conv-msg-badge audio" title="Essa mensagem era um áudio (transcrito)">🎵 áudio</span>'
+            : '';
+
+          const time = new Date(m.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+          const senderColor = isBot ? 'var(--accent)' : 'var(--text)';
+
+          // Se a msg cita outra, mostra quote
+          let quoteHtml = '';
+          if (m.quotedMsgId) {
+            const quoted = msgMap.get(m.quotedMsgId);
+            if (quoted) {
+              const quotedSender = quoted.fromMe ? 'Márcio' : (quoted.senderName || 'alguém');
+              quoteHtml = `<div class="conv-msg-quote">${escapeHtml(quotedSender)}: ${escapeHtml((quoted.text || '').slice(0, 80))}${quoted.text && quoted.text.length > 80 ? '...' : ''}</div>`;
+            }
+          }
+
+          return `<div class="conv-msg ${isBot ? 'bot' : 'user'}">
+            <div class="conv-msg-header">
+              <span class="conv-msg-sender" style="color:${senderColor};">${escapeHtml(senderDisplay)}</span>
+              <span class="conv-msg-time">${time}</span>
+              ${audioBadge}
+              ${decisionBadge}
+            </div>
+            ${quoteHtml}
+            <div class="conv-msg-text${m.isAudio ? ' conv-msg-text-audio' : ''}">${escapeHtml(m.text)}</div>
+          </div>`;
+        }).join('');
+        // Scroll pro final
+        el.scrollTop = el.scrollHeight;
+        dbg('CONV', `openConversation: rendered ${conv.messages.length} messages`);
+      } catch (renderErr) {
+        dbgErr('CONV', 'openConversation: render error:', renderErr.message, renderErr.stack);
+        el.innerHTML = `<div class="empty-state"><div class="text">❌ erro ao renderizar: ${escapeHtml(renderErr.message)}</div></div>`;
+      }
     }
 
     // ================================================================
@@ -2856,85 +3724,10 @@
     }
 
     // ================================================================
-    // TWITTER
-    // ================================================================
-    async function loadTwitter() {
-      try {
-        const r = await apiGet('/api/twitter/status');
-        const el = $('#twitterStatus');
-        const enabled = r.enabled;
-        state.twitterEnabled = !!enabled;
-        const pending = Array.isArray(r.pendingTweets) ? r.pendingTweets : [];
-        const pendingCount = r.pendingCount ?? (typeof r.pendingTweets === 'number' ? r.pendingTweets : pending.length);
-        el.innerHTML = `
-          <div class="stats-grid mb-2">
-            <div class="stat-card"><div class="stat-label">Ativo</div><div class="stat-value small">${enabled ? '<span class="badge good">on</span>' : '<span class="badge bad">off</span>'}</div></div>
-            <div class="stat-card"><div class="stat-label">Approval mode</div><div class="stat-value small">${escapeHtml(r.approvalMode || '—')}</div></div>
-            <div class="stat-card"><div class="stat-label">Pendentes</div><div class="stat-value small">${pendingCount}</div></div>
-          </div>
-          <div class="row-flex">
-            <button class="${enabled ? 'danger' : 'success'}" onclick="toggleTwitter()">${enabled ? '⏸ Desligar' : '▶ Ligar'}</button>
-            <button class="primary" onclick="generateTweetPanel()">📤 Gerar tweet</button>
-          </div>
-          ${pending.length ? `<div class="mt-2"><strong>Pendentes:</strong>${pending.map(t => `<div class="fact-card"><div class="fact-text">${escapeHtml(t.text || t.content || JSON.stringify(t))}</div></div>`).join('')}</div>` : ''}
-        `;
-      } catch (e) {
-        $('#twitterStatus').innerHTML = `<div class="empty-state"><div class="icon">🐦</div><div class="text">❌ ${escapeHtml(e.message)}<br><span class="muted">endpoint /api/twitter/status ainda não existe</span></div></div>`;
-      }
-    }
-    async function toggleTwitter() {
-      const nextEnabled = !state.twitterEnabled;
-      try { await apiPost('/api/twitter/toggle', { enabled: nextEnabled }); toast(`Twitter ${nextEnabled ? 'ativado' : 'desativado'} ✓`, 'success'); loadTwitter(); }
-      catch (e) { toast(e.message, 'error', 5000); }
-    }
-
-    async function generateTweetPanel() {
-      toast('Gerando tweet… ⏳', 'info', 10000);
-      try {
-        const r = await apiPost('/api/twitter/generate', {});
-        if (!r.ok) {
-          toast(r.error || 'Não consegui gerar tweet', 'error', 5000);
-          return;
-        }
-        // Mostra o tweet num modal pra confirmar
-        openModal(`
-          <div class="modal-header">
-            <div class="modal-title">🐦 Tweet gerado</div>
-            <button class="modal-close" onclick="closeModal()">✕</button>
-          </div>
-          <div class="modal-body">
-            <div class="fact-card" style="padding:16px;font-size:15px;line-height:1.5;">
-              ${escapeHtml(r.tweet)}
-            </div>
-            ${r.hasImage ? '<div class="muted small mt-2">🖼️ Tweet inclui imagem</div>' : ''}
-            <div class="row-flex mt-3">
-              <button class="primary" onclick="confirmTweetPost(${JSON.stringify(r.tweet).replace(/"/g, '&quot;')})">📤 Postar</button>
-              <button class="ghost" onclick="generateTweetPanel()">🔄 Gerar outro</button>
-              <button class="danger" onclick="closeModal()">Cancelar</button>
-            </div>
-          </div>
-        `);
-      } catch (e) { toast(e.message, 'error', 5000); }
-    }
-
-    async function confirmTweetPost(text) {
-      try {
-        const r = await apiPost('/api/twitter/post-direct', { text });
-        if (r.ok) {
-          toast('✅ Tweet postado!', 'success');
-          closeModal();
-          loadTwitter();
-        } else {
-          toast('❌ Erro ao postar: ' + (r.result || 'desconhecido'), 'error', 5000);
-        }
-      } catch (e) { toast(e.message, 'error', 5000); }
-    }
-
-    // ================================================================
     // OPS & BANNED
     // ================================================================
     function switchOpsTab(tab) {
-      state.opsTab = tab;
+      _marcio_state.opsTab = tab;
       $$('.tab[data-ops-tab]').forEach(t => t.classList.toggle('active', t.dataset.opsTab === tab));
       renderOps();
     }
@@ -2944,7 +3737,7 @@
           apiGet('/api/ops').catch(() => []),
           apiGet('/api/banned').catch(() => []),
         ]);
-        state.opsData = {
+        _marcio_state.opsData = {
           ops: Array.isArray(ops) ? ops : (ops.items || []),
           banned: Array.isArray(banned) ? banned : (banned.items || []),
         };
@@ -2955,8 +3748,8 @@
     }
     function renderOps() {
       const el = $('#opsTabContent');
-      const tab = state.opsTab;
-      const items = state.opsData[tab] || [];
+      const tab = _marcio_state.opsTab;
+      const items = _marcio_state.opsData[tab] || [];
       const kind = tab === 'ops' ? 'Op' : 'Banido';
       const icon = tab === 'ops' ? '👑' : '🚫';
       el.innerHTML = `
@@ -2986,7 +3779,7 @@
     async function addOpsItem() {
       const id = $('#opsNewId').value.trim();
       if (!id) return;
-      const path = state.opsTab === 'ops' ? '/api/ops' : '/api/banned';
+      const path = _marcio_state.opsTab === 'ops' ? '/api/ops' : '/api/banned';
       try {
         await apiPost(path, { id });
         toast('Adicionado ✓', 'success');
@@ -2994,7 +3787,7 @@
       } catch (e) { toast(e.message, 'error', 5000); }
     }
     async function removeOpsItem(id) {
-      const path = state.opsTab === 'ops' ? '/api/ops' : '/api/banned';
+      const path = _marcio_state.opsTab === 'ops' ? '/api/ops' : '/api/banned';
       try {
         await apiDelete(`${path}/${encodeURIComponent(id)}`);
         toast('Removido ✓', 'success');
@@ -3005,7 +3798,7 @@
     // ================================================================
     // PROMPT
     // ================================================================
-    let originalPrompt = '';
+    var originalPrompt = '';
     async function loadPrompt() {
       try {
         const r = await apiGet('/api/system-prompt');
@@ -3039,8 +3832,8 @@
     async function loadAiConfig() {
       try {
         const r = await apiGet('/api/ai-config');
-        state.aiConfig = r;
-        state.aiFallbacks = r.fallbackModels || [];
+        _marcio_state.aiConfig = r;
+        _marcio_state.aiFallbacks = r.fallbackModels || [];
         $('#aiModel').value = r.model || '';
         $('#aiApiUrl').value = r.apiUrl || r.apiURL || '';
         $('#aiApiKey').value = r.apiKey || '';
@@ -3050,36 +3843,46 @@
         $('#aiTempVal').textContent = temp;
         $('#aiTempVal2').textContent = temp;
         renderFallbacks();
+        // === Campos de transcrição de áudio ===
+        const at = r.audioTranscription || {};
+        $('#aiAudioEnabled').checked = at.enabled !== false;  // default true se undefined
+        $('#aiAudioPrimary').value = at.primaryModel || 'gemini-3.5-flash-lite';
+        $('#aiAudioFallback').value = at.fallbackModel || 'gemini-3.1-flash-lite';
         $('#aiConfigStatus').textContent = 'config carregada ✓';
       } catch (e) {
         $('#aiConfigStatus').textContent = '❌ ' + e.message + ' — endpoint /api/ai-config ainda não existe';
       }
     }
     function renderFallbacks() {
-      $('#aiFallbacks').innerHTML = state.aiFallbacks.map((m, i) =>
+      $('#aiFallbacks').innerHTML = _marcio_state.aiFallbacks.map((m, i) =>
         `<span class="pill">${escapeHtml(m)}<span class="x" onclick="removeFallback(${i})">✕</span></span>`
       ).join('') || '<span class="muted small">nenhum fallback</span>';
     }
     function addFallback() {
       const v = $('#aiNewFallback').value.trim();
       if (!v) return;
-      if (state.aiFallbacks.includes(v)) { toast('já existe', 'warn'); return; }
-      state.aiFallbacks.push(v);
+      if (_marcio_state.aiFallbacks.includes(v)) { toast('já existe', 'warn'); return; }
+      _marcio_state.aiFallbacks.push(v);
       $('#aiNewFallback').value = '';
       renderFallbacks();
     }
     function removeFallback(idx) {
-      state.aiFallbacks.splice(idx, 1);
+      _marcio_state.aiFallbacks.splice(idx, 1);
       renderFallbacks();
     }
     async function saveAiConfig() {
       const cfg = {
         model: $('#aiModel').value.trim(),
-        fallbackModels: state.aiFallbacks,
+        fallbackModels: _marcio_state.aiFallbacks,
         apiUrl: $('#aiApiUrl').value.trim(),
         apiKey: $('#aiApiKey').value,
         maxTokens: parseInt($('#aiMaxTokens').value, 10) || undefined,
         temperature: parseFloat($('#aiTemperature').value),
+        audioTranscription: {
+          enabled: $('#aiAudioEnabled').checked,
+          primaryModel: $('#aiAudioPrimary').value.trim() || 'gemini-3.5-flash-lite',
+          fallbackModel: $('#aiAudioFallback').value.trim() || 'gemini-3.1-flash-lite',
+        },
       };
       try {
         await apiPost('/api/ai-config', cfg);
@@ -3147,58 +3950,469 @@
     }
 
     // ================================================================
-    // BACKUP
+    // COMMANDS — ativa/desativa e muda permissão (op↔public)
     // ================================================================
-    async function downloadBackup() {
+    _marcio_state.commands = [];
+
+    async function loadCommands() {
+      dbg('CMD', 'loadCommands() called');
       try {
-        toast('Gerando backup…', 'info');
-        const r = await fetch('/api/backup');
+        const r = await apiGet('/api/commands');
+        _marcio_state.commands = r.commands || [];
+        dbg('CMD', `loaded ${_marcio_state.commands.length} commands`);
+        renderCommands();
+      } catch (e) {
+        dbgErr('CMD', 'loadCommands failed:', e.message);
+        $('#commandsList').innerHTML = `<div class="empty-state"><div class="text">❌ ${escapeHtml(e.message)}</div></div>`;
+      }
+    }
+
+    function renderCommands() {
+      const list = $('#commandsList');
+      if (!_marcio_state.commands.length) {
+        list.innerHTML = `<div class="empty-state"><div class="text">nenhum comando registrado</div></div>`;
+        return;
+      }
+      // Ordena: locked (admin) primeiro, depois por nome
+      const sorted = [..._marcio_state.commands].sort((a, b) => {
+        if (a.locked !== b.locked) return a.locked ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      list.innerHTML = sorted.map(c => {
+        const name = escapeHtml(c.name);
+        const aliases = (c.aliases || []).map(escapeHtml).join(', ');
+        const help = escapeHtml(c.help || '');
+        const isLocked = !!c.locked;
+        const isDisabled = !!c.disabled;
+        const isOp = !!c.effectiveOpOnly;
+
+        // Badges de status
+        const badges = [];
+        if (isLocked) badges.push('<span class="badge badge-warn" title="Comando travado (admin) — sempre só-op + só-PV">🔒 admin</span>');
+        if (c.pvOnly) badges.push('<span class="badge badge-info" title="Só funciona no PV do bot">📱 pvOnly</span>');
+        if (isDisabled) badges.push('<span class="badge badge-bad" title="Desativado via painel">⏸️ off</span>');
+        else badges.push('<span class="badge badge-good" title="Ativo">✓ on</span>');
+        if (isOp) badges.push('<span class="badge badge-info" title="Só ops podem usar">⭐ op</span>');
+        else badges.push('<span class="badge badge-good" title="Qualquer um pode usar">🌐 público</span>');
+
+        // Controles (só se NÃO é locked)
+        const controls = isLocked
+          ? '<span class="muted small">travado (admin)</span>'
+          : `<div class="row-flex" style="gap:8px;flex-wrap:wrap;">
+              <label class="checkbox-row" title="Ativo/desativado">
+                <input type="checkbox" ${isDisabled ? '' : 'checked'} onchange="toggleCommandDisabled('${escapeHtml(c.name)}', this.checked)">
+                <span class="small">ativo</span>
+              </label>
+              <select class="cmd-perm-select" onchange="setCommandPermission('${escapeHtml(c.name)}', this.value)" title="Permissão necessária">
+                <option value="public" ${!isOp ? 'selected' : ''}>🌐 público</option>
+                <option value="op" ${isOp ? 'selected' : ''}>⭐ só op</option>
+              </select>
+              ${c.override ? `<button class="ghost sm" onclick="resetCommandOverride('${escapeHtml(c.name)}')" title="Voltar pro default do código">↺ reset</button>` : ''}
+            </div>`;
+
+        return `<div class="fact-card${isLocked ? ' cmd-locked' : ''}">
+          <div class="row-between" style="align-items:flex-start;gap:12px;">
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+                <strong>${name}</strong>
+                ${aliases ? `<span class="muted small">(${aliases})</span>` : ''}
+              </div>
+              ${help ? `<div class="muted small" style="margin-bottom:8px;">${help}</div>` : ''}
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${badges.join('')}</div>
+              ${controls}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function toggleCommandDisabled(token, isEnabled) {
+      // isEnabled=true significa que o checkbox foi marcado → comando deve ficar ATIVO
+      // (override.disabled = false). Se false → override.disabled = true.
+      const disabled = !isEnabled;
+      dbg('CMD', `toggleCommandDisabled(${token}) → disabled=${disabled}`);
+      try {
+        await apiPost(`/api/commands/${encodeURIComponent(token)}`, { disabled });
+        toast(`${token} ${disabled ? 'desativado ⏸️' : 'ativado ✓'}`, 'success');
+        // Atualiza estado local sem re-fetch (mais rápido)
+        const cmd = _marcio_state.commands.find(c => c.name === token);
+        if (cmd) {
+          cmd.disabled = disabled;
+          if (!cmd.override) cmd.override = {};
+          cmd.override.disabled = disabled;
+        }
+        renderCommands();
+      } catch (e) {
+        dbgErr('CMD', 'toggleCommandDisabled failed:', e.message);
+        toast(`Erro: ${e.message}`, 'error', 5000);
+        // Reverte checkbox
+        await loadCommands();
+      }
+    }
+
+    async function setCommandPermission(token, value) {
+      // value = 'op' ou 'public'
+      const opOnly = value === 'op';
+      dbg('CMD', `setCommandPermission(${token}) → opOnly=${opOnly}`);
+      try {
+        await apiPost(`/api/commands/${encodeURIComponent(token)}`, { opOnly });
+        toast(`${token} agora é ${opOnly ? 'só-op ⭐' : 'público 🌐'}`, 'success');
+        // Atualiza estado local
+        const cmd = _marcio_state.commands.find(c => c.name === token);
+        if (cmd) {
+          cmd.effectiveOpOnly = opOnly;
+          if (!cmd.override) cmd.override = {};
+          cmd.override.opOnly = opOnly;
+        }
+        renderCommands();
+      } catch (e) {
+        dbgErr('CMD', 'setCommandPermission failed:', e.message);
+        toast(`Erro: ${e.message}`, 'error', 5000);
+        await loadCommands();
+      }
+    }
+
+    async function resetCommandOverride(token) {
+      if (!confirm(`Resetar override de ${token}? Volta pro default do código.`)) return;
+      dbg('CMD', `resetCommandOverride(${token})`);
+      try {
+        await apiDelete(`/api/commands/${encodeURIComponent(token)}`);
+        toast(`${token} resetado ✓`, 'success');
+        await loadCommands();
+      } catch (e) {
+        dbgErr('CMD', 'resetCommandOverride failed:', e.message);
+        toast(`Erro: ${e.message}`, 'error', 5000);
+      }
+    }
+
+    // ================================================================
+    // BACKUP — sistema seletivo (export/import granular)
+    // ================================================================
+    _marcio_state.backupComponents = [];
+
+    function humanizeBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+    }
+
+    async function loadBackupComponents() {
+      dbg('BACKUP', 'loadBackupComponents()');
+      const el = $('#backupComponentsList');
+      if (!el) return;
+      el.innerHTML = '<div class="muted small">Carregando componentes…</div>';
+      try {
+        const r = await apiGet('/api/export/components');
+        _marcio_state.backupComponents = r.components || [];
+        dbg('BACKUP', `loaded ${_marcio_state.backupComponents.length} components`);
+        renderBackupComponents();
+      } catch (e) {
+        dbgErr('BACKUP', 'loadBackupComponents failed:', e.message);
+        el.innerHTML = `<div class="muted small">❌ ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderBackupComponents() {
+      const el = $('#backupComponentsList');
+      if (!el) return;
+      if (!_marcio_state.backupComponents.length) {
+        el.innerHTML = '<div class="muted small">nenhum componente disponível</div>';
+        return;
+      }
+      el.innerHTML = _marcio_state.backupComponents.map(c => {
+        const dim = c.available ? '' : 'opacity:0.4;';
+        const countTxt = c.count > 0 ? `${c.count} ${c.id === 'system-prompt' ? 'arquivo' : 'itens'}` : 'vazio';
+        const sizeTxt = c.sizeBytes > 0 ? humanizeBytes(c.sizeBytes) : '—';
+        return `<div style="background:var(--bg-glass-light);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;${dim}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-size:18px;">${c.icon}</span>
+            <span style="font-weight:600;">${escapeHtml(c.label)}</span>
+          </div>
+          <div class="muted small">${escapeHtml(c.description)}</div>
+          <div class="muted" style="font-size:10px;margin-top:4px;">${countTxt} · ${sizeTxt}${c.available ? '' : ' · indisponível'}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function openExportModal() {
+      if (!_marcio_state.backupComponents.length) {
+        toast('Carregando componentes… tente novamente', 'warn');
+        loadBackupComponents();
+        return;
+      }
+      const checks = _marcio_state.backupComponents.map(c => `
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--bg-glass-light);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;${c.available ? '' : 'opacity:0.4;'}">
+          <input type="checkbox" class="export-check" value="${escapeHtml(c.id)}" ${c.available ? 'checked' : 'disabled'} style="margin-top:3px;">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:16px;">${c.icon}</span>
+              <span style="font-weight:600;">${escapeHtml(c.label)}</span>
+            </div>
+            <div class="muted small">${escapeHtml(c.description)}</div>
+            <div class="muted" style="font-size:10px;">${c.count} itens · ${humanizeBytes(c.sizeBytes)}</div>
+          </div>
+        </label>
+      `).join('');
+      openModal(`
+        <div class="modal-header">
+          <div class="modal-title">⬇ Exportar dados</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="muted small mb-2">Selecione o que quer exportar. Tudo será salvo num único arquivo <code>.json</code>.</div>
+          <div style="margin-bottom:8px;">
+            <button class="ghost sm" onclick="selectAllExport(true)">☑ Todos</button>
+            <button class="ghost sm" onclick="selectAllExport(false)">☐ Nenhum</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;">
+            ${checks}
+          </div>
+          <div class="row-flex mt-3">
+            <button class="success" onclick="doExport()">⬇ Baixar backup</button>
+            <button class="ghost" onclick="closeModal()">Cancelar</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function selectAllExport(on) {
+      $$('.export-check').forEach(c => { if (!c.disabled) c.checked = on; });
+    }
+
+    async function doExport() {
+      const selected = $$('.export-check').filter(c => c.checked).map(c => c.value);
+      if (!selected.length) { toast('Selecione pelo menos 1 componente', 'warn'); return; }
+      dbg('BACKUP', 'exporting:', selected);
+      toast(`Exportando ${selected.length} componente(s)…`, 'info');
+      try {
+        const r = await fetch(API_BASE + '/api/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ components: selected }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ error: r.status }));
+          throw new Error(err.error || `export falhou: ${r.status}`);
+        }
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `marcio-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast(`Backup ✓ — ${selected.length} componente(s)`, 'success', 6000);
+        closeModal();
+      } catch (e) {
+        dbgErr('BACKUP', 'export failed:', e.message);
+        toast('Export falhou: ' + e.message, 'error', 6000);
+      }
+    }
+
+    function openImportModal() {
+      const input = `<input type="file" id="importFileInput" accept=".json" style="display:none" onchange="loadImportFile(event)">`;
+      openModal(`
+        <div class="modal-header">
+          <div class="modal-title">⬆ Importar dados</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="muted small mb-2">Selecione um arquivo de backup <code>.json</code> gerado pelo Márcio.</div>
+          ${input}
+          <div id="importPreview" style="min-height:60px;"></div>
+        </div>
+      `);
+      setTimeout(() => document.getElementById('importFileInput').click(), 100);
+    }
+
+    var pendingImportPkg = null;
+
+    async function loadImportFile(ev) {
+      const file = ev.target.files[0];
+      if (!file) { closeModal(); return; }
+      const preview = $('#importPreview');
+      preview.innerHTML = '<div class="muted small">Lendo arquivo…</div>';
+      try {
+        const text = await file.text();
+        const pkg = JSON.parse(text);
+        pendingImportPkg = pkg;
+        dbg('BACKUP', 'import file loaded:', { format: pkg.format, version: pkg.version, components: pkg.components || (pkg.files ? Object.keys(pkg.files) : []) });
+
+        // Detecta formato
+        const isLegacy = pkg.files && !pkg.data;
+        const comps = isLegacy ? Object.keys(pkg.files) : (pkg.components || Object.keys(pkg.data || {}));
+
+        if (!comps.length) {
+          preview.innerHTML = '<div class="muted small">❌ arquivo não tem componentes reconhecíveis</div>';
+          return;
+        }
+
+        const created = pkg.createdAt ? new Date(pkg.createdAt).toLocaleString('pt-BR') : '—';
+        const checks = comps.map(c => {
+          // Tenta achar o label/icon na lista de componentes conhecidos
+          const known = _marcio_state.backupComponents.find(k => k.id === c);
+          const icon = known?.icon || '📦';
+          const label = known?.label || c;
+          const desc = known?.description || '';
+          return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--bg-glass-light);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;">
+            <input type="checkbox" class="import-check" value="${escapeHtml(c)}" checked style="margin-top:3px;">
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:16px;">${icon}</span>
+                <span style="font-weight:600;">${escapeHtml(label)}</span>
+              </div>
+              ${desc ? `<div class="muted small">${escapeHtml(desc)}</div>` : ''}
+            </div>
+          </label>`;
+        }).join('');
+
+        preview.innerHTML = `
+          <div class="muted small mb-1">📦 Arquivo: <strong>${escapeHtml(file.name)}</strong></div>
+          <div class="muted small mb-1">📅 Criado em: ${escapeHtml(created)}</div>
+          <div class="muted small mb-1">📋 Formato: ${escapeHtml(pkg.format || (isLegacy ? 'legacy-v1' : 'marcio-backup'))} v${pkg.version || 1}</div>
+          <div class="muted small mb-2">Selecione o que restaurar (cada item vai SOBRESCREVER o atual):</div>
+          <div style="margin-bottom:8px;">
+            <button class="ghost sm" onclick="selectAllImport(true)">☑ Todos</button>
+            <button class="ghost sm" onclick="selectAllImport(false)">☐ Nenhum</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow-y:auto;">
+            ${checks}
+          </div>
+          <div class="row-flex mt-3">
+            <button class="warning" onclick="doImport()">⬆ Restaurar selecionados</button>
+            <button class="ghost" onclick="closeModal()">Cancelar</button>
+          </div>
+        `;
+      } catch (e) {
+        dbgErr('BACKUP', 'loadImportFile failed:', e.message);
+        preview.innerHTML = `<div class="muted small">❌ erro ao ler arquivo: ${escapeHtml(e.message)}</div>`;
+      }
+      ev.target.value = '';
+    }
+
+    function selectAllImport(on) {
+      $$('.import-check').forEach(c => { c.checked = on; });
+    }
+
+    async function doImport() {
+      if (!pendingImportPkg) { toast('Nenhum arquivo carregado', 'warn'); return; }
+      const selected = $$('.import-check').filter(c => c.checked).map(c => c.value);
+      if (!selected.length) { toast('Selecione pelo menos 1 componente', 'warn'); return; }
+      if (!confirm(`Restaurar ${selected.length} componente(s)?\n\n⚠️ Isso vai SOBRESCREVER os dados atuais selecionados. Recomendado: exporte o atual antes.`)) return;
+
+      dbg('BACKUP', 'importing:', selected);
+      toast(`Importando ${selected.length} componente(s)…`, 'info');
+      try {
+        // Envia o pacote + filtro de componentes via query string
+        const form = new FormData();
+        form.append('file', new Blob([JSON.stringify(pendingImportPkg)], { type: 'application/json' }), 'backup.json');
+        const compsQuery = encodeURIComponent(selected.join(','));
+        const r = await fetch(API_BASE + `/api/import?components=${compsQuery}`, { method: 'POST', body: form });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ error: r.status }));
+          throw new Error(err.error || `import falhou: ${r.status}`);
+        }
+        const data = await r.json();
+        const msg = `Import ✓ — ${data.applied?.length || 0} componente(s): ${(data.applied || []).join(', ')}`;
+        toast(msg, 'success', 8000);
+        if (data.errors?.length) {
+          toast('Avisos: ' + data.errors.join('; ').slice(0, 100), 'warn', 8000);
+        }
+        closeModal();
+        pendingImportPkg = null;
+        // Recarrega componentes pra refletir novo estado
+        loadBackupComponents();
+        // Recarrega memórias se estiver na seção
+        if (_marcio_state.currentSection === 'memories') {
+          try { await loadMemories(); } catch { /* ignora */ }
+        }
+      } catch (e) {
+        dbgErr('BACKUP', 'import failed:', e.message);
+        toast('Import falhou: ' + e.message, 'error', 6000);
+      }
+    }
+
+    // Legacy compat (mantém funções antigas chamando as novas)
+    async function downloadBackup() {
+      // Exporta tudo
+      if (!_marcio_state.backupComponents.length) { await loadBackupComponents(); }
+      const all = _marcio_state.backupComponents.filter(c => c.available).map(c => c.id);
+      if (!all.length) { toast('Nenhum componente disponível', 'warn'); return; }
+      toast('Gerando backup completo…', 'info');
+      try {
+        const r = await fetch(API_BASE + '/api/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ components: all }),
+        });
         if (!r.ok) throw new Error(`backup falhou: ${r.status}`);
         const blob = await r.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `marcio-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `marcio-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        toast('Backup ✓', 'success');
-      } catch (e) {
-        toast('Backup falhou: ' + e.message + ' — endpoint /api/backup ainda não existe', 'error', 6000);
-      }
+        toast('Backup completo ✓', 'success');
+      } catch (e) { toast('Backup falhou: ' + e.message, 'error', 6000); }
     }
     async function uploadRestore(ev) {
       const file = ev.target.files[0];
       if (!file) return;
-      if (!confirm(`Restaurar de ${file.name}? Isso vai sobrescrever os dados atuais.`)) {
-        ev.target.value = '';
-        return;
-      }
+      if (!confirm(`Restaurar ${file.name}?\n\n⚠️ Isso vai SOBRESCREVER os dados atuais.`)) { ev.target.value = ''; return; }
       try {
         const form = new FormData();
         form.append('file', file);
-        const r = await fetch('/api/restore', { method: 'POST', body: form });
-        if (!r.ok) throw new Error(`restore falhou: ${r.status}`);
-        toast('Restore ✓ — reinicie o bot para aplicar', 'success', 6000);
-      } catch (e) {
-        toast('Restore falhou: ' + e.message + ' — endpoint /api/restore ainda não existe', 'error', 6000);
-      }
+        toast('Restaurando…', 'info');
+        const r = await fetch(API_BASE + '/api/import', { method: 'POST', body: form });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ error: r.status }));
+          throw new Error(err.error || `restore falhou: ${r.status}`);
+        }
+        const data = await r.json();
+        toast(`Restore ✓ — ${data.applied?.length || 0} componente(s). Reinicie o bot.`, 'success', 8000);
+        loadBackupComponents();
+      } catch (e) { toast('Restore falhou: ' + e.message, 'error', 6000); }
       ev.target.value = '';
     }
     async function exportMemories() {
+      // Exporta só memórias
+      toast('Exportando memórias…', 'info');
       try {
-        const r = await fetch('/api/memories/export');
+        const r = await fetch(API_BASE + '/api/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ components: ['memories'] }),
+        });
         if (!r.ok) throw new Error(`export falhou: ${r.status}`);
         const blob = await r.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `marcio-memories-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `marcio-memories-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
         a.click();
         URL.revokeObjectURL(url);
         toast('Memórias exportadas ✓', 'success');
-      } catch (e) {
-        toast('Export falhou: ' + e.message + ' — endpoint /api/memories/export ainda não existe', 'error', 6000);
-      }
+      } catch (e) { toast('Export falhou: ' + e.message, 'error', 6000); }
+    }
+    async function importMemories(ev) {
+      const file = ev.target.files[0];
+      if (!file) return;
+      if (!confirm(`Importar memórias de ${file.name}?\n\n⚠️ Vai SUBSTITUIR todas as memórias atuais.`)) { ev.target.value = ''; return; }
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        toast('Importando memórias…', 'info');
+        const r = await fetch(API_BASE + '/api/import?components=memories', { method: 'POST', body: form });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ error: r.status }));
+          throw new Error(err.error || `import falhou: ${r.status}`);
+        }
+        const data = await r.json();
+        toast(`Memórias importadas ✓`, 'success', 8000);
+        if (_marcio_state.currentSection === 'memories') { try { await loadMemories(); } catch { /* ignora */ } }
+      } catch (e) { toast('Import falhou: ' + e.message, 'error', 6000); }
+      ev.target.value = '';
     }
 
     // ================================================================
@@ -3215,7 +4429,7 @@
       }
       try {
         if (status) status.textContent = 'Verificando…';
-        const { check } = await import('https://cdn.jsdelivr.net/npm/@tauri-apps/plugin-updater@2/dist-js/index.min.js');
+        const { check } = await import('/js/tauri-updater.min.js');
         const update = await check();
         if (update) {
           if (status) status.textContent = `Nova versão: ${update.version} — ${update.body?.slice(0, 100) || ''}`;
@@ -3328,29 +4542,36 @@
     // INIT
     // ================================================================
     function init() {
-      // Initial loads
-      loadStats();
-      // Start polling stats every 10s (backup)
-      state.statsInterval = setInterval(loadStats, 10000);
-      // Start bot status polling every 30s (when on bot section)
-      state.botStatusInterval = setInterval(() => {
-        if (state.currentSection === 'bot') loadBotStatus();
-      }, 30000);
-      // Connect WebSocket
-      connectWs();
-      // Load logs as fallback (in case WS takes a moment to connect)
-      loadLogsFallback();
-      // Keyboard shortcuts
-      document.addEventListener('keydown', handleKeyboard);
-      // Show dashboard
-      showSection('dashboard');
+      console.log('[MARCIO] init() start');
+      try {
+        // Initial loads
+        loadStats();
+        // Start polling stats every 10s (backup)
+        _marcio_state.statsInterval = setInterval(loadStats, 10000);
+        // Start bot status polling every 30s (when on bot section)
+        _marcio_state.botStatusInterval = setInterval(() => {
+          if (_marcio_state.currentSection === 'bot') loadBotStatus();
+        }, 30000);
+        // Connect WebSocket
+        connectWs();
+        // Load logs as fallback (in case WS takes a moment to connect)
+        loadLogsFallback();
+        // Keyboard shortcuts
+        document.addEventListener('keydown', handleKeyboard);
+        // Show dashboard
+        showSection('dashboard');
+        console.log('[MARCIO] init() complete');
+      } catch (e) {
+        console.error('[MARCIO] init() FATAL:', e);
+        __showErrorBanner('init() fatal: ' + e.message, e.stack);
+      }
     }
 
     // === Logs fallback — busca as últimas 100 linhas via HTTP ===
     async function loadLogsFallback() {
       try {
         const r = await apiGet('/api/logs');
-        if (r.lines && r.lines.length > 0 && state.logLines.length === 0) {
+        if (r.lines && r.lines.length > 0 && _marcio_state.logLines.length === 0) {
           // Só carrega se o WS ainda não mandou nada (evita duplicar)
           r.lines.forEach(line => {
             // Parse: [time] [TAG] message
@@ -3359,7 +4580,7 @@
               const time = match[1].split(' ')[1] || match[1];
               const tag = match[2];
               const message = match[3];
-              state.logLines.push({ tag, message, time, cls: classifyLogTag(tag) });
+              _marcio_state.logLines.push({ tag, message, time, cls: classifyLogTag(tag) });
             }
           });
           renderLogLines();
@@ -3407,26 +4628,101 @@
     }
 
     // Expose to window for inline onclick handlers
-    Object.assign(window, {
-      showSection, toggleSidebar, loadStats, quickAction, loadChartHistory,
-      clearLog, toggleAutoScroll, renderLogLines,
-      sendCommand, quickCmd, handleConsoleKey,
-      loadBotStatus, botAction, loadQr,
-      loadMemories, selectMemoryUser, openAddFactModal, submitAddFact,
-      editFact, submitEditFact, deleteFact,
-      loadStickers, openStickerModal, saveStickerName, toggleStickerFav, deleteSticker, dedupStickers,
-      loadChats, openChat, switchChatTab, setIa, saveEntrosao,
-      loadEvents, cancelEvent,
-      loadTwitter, toggleTwitter, generateTweetPanel, confirmTweetPost,
-      switchOpsTab, loadOps, addOpsItem, removeOpsItem,
-      loadPrompt, savePrompt, resetPrompt,
-      loadAiConfig, addFallback, removeFallback, saveAiConfig, testAi,
-      loadDirectives, addDirective, deleteDirective,
-      downloadBackup, uploadRestore, exportMemories,
-      loadMaintenance, toggleMaintenance, toggleAutostart, loadAutostartStatus, testNotification,
-      checkForUpdates,
-      closeModal,
-    });
+    // Usa typeof (safe, não lança ReferenceError) em vez de eval (CSP pode bloquear)
+    var _fns = {
+      showSection: () => typeof showSection !== 'undefined' ? showSection : null,
+      toggleSidebar: () => typeof toggleSidebar !== 'undefined' ? toggleSidebar : null,
+      loadStats: () => typeof loadStats !== 'undefined' ? loadStats : null,
+      quickAction: () => typeof quickAction !== 'undefined' ? quickAction : null,
+      loadChartHistory: () => typeof loadChartHistory !== 'undefined' ? loadChartHistory : null,
+      clearLog: () => typeof clearLog !== 'undefined' ? clearLog : null,
+      toggleAutoScroll: () => typeof toggleAutoScroll !== 'undefined' ? toggleAutoScroll : null,
+      renderLogLines: () => typeof renderLogLines !== 'undefined' ? renderLogLines : null,
+      sendCommand: () => typeof sendCommand !== 'undefined' ? sendCommand : null,
+      quickCmd: () => typeof quickCmd !== 'undefined' ? quickCmd : null,
+      handleConsoleKey: () => typeof handleConsoleKey !== 'undefined' ? handleConsoleKey : null,
+      loadBotStatus: () => typeof loadBotStatus !== 'undefined' ? loadBotStatus : null,
+      botAction: () => typeof botAction !== 'undefined' ? botAction : null,
+      loadQr: () => typeof loadQr !== 'undefined' ? loadQr : null,
+      loadProfiles: () => typeof loadProfiles !== 'undefined' ? loadProfiles : null,
+      switchProfileTab: () => typeof switchProfileTab !== 'undefined' ? switchProfileTab : null,
+      renderProfiles: () => typeof renderProfiles !== 'undefined' ? renderProfiles : null,
+      openProfileModal: () => typeof openProfileModal !== 'undefined' ? openProfileModal : null,
+      addTraitRow: () => typeof addTraitRow !== 'undefined' ? addTraitRow : null,
+      saveProfile: () => typeof saveProfile !== 'undefined' ? saveProfile : null,
+      refreshProfile: () => typeof refreshProfile !== 'undefined' ? refreshProfile : null,
+      deleteProfile: () => typeof deleteProfile !== 'undefined' ? deleteProfile : null,
+      openAddProfileModal: () => typeof openAddProfileModal !== 'undefined' ? openAddProfileModal : null,
+      submitNewProfile: () => typeof submitNewProfile !== 'undefined' ? submitNewProfile : null,
+      migrateMemories: () => typeof migrateMemories !== 'undefined' ? migrateMemories : null,
+      mineProfiles: () => typeof mineProfiles !== 'undefined' ? mineProfiles : null,
+      addAlias: () => typeof addAlias !== 'undefined' ? addAlias : null,
+      removeAlias: () => typeof removeAlias !== 'undefined' ? removeAlias : null,
+      loadStickers: () => typeof loadStickers !== 'undefined' ? loadStickers : null,
+      openStickerModal: () => typeof openStickerModal !== 'undefined' ? openStickerModal : null,
+      saveStickerName: () => typeof saveStickerName !== 'undefined' ? saveStickerName : null,
+      toggleStickerFav: () => typeof toggleStickerFav !== 'undefined' ? toggleStickerFav : null,
+      deleteSticker: () => typeof deleteSticker !== 'undefined' ? deleteSticker : null,
+      dedupStickers: () => typeof dedupStickers !== 'undefined' ? dedupStickers : null,
+      switchStickerTab: () => typeof switchStickerTab !== 'undefined' ? switchStickerTab : null,
+      mergeDuplicates: () => typeof mergeDuplicates !== 'undefined' ? mergeDuplicates : null,
+      loadChats: () => typeof loadChats !== 'undefined' ? loadChats : null,
+      openChat: () => typeof openChat !== 'undefined' ? openChat : null,
+      switchChatTab: () => typeof switchChatTab !== 'undefined' ? switchChatTab : null,
+      setIa: () => typeof setIa !== 'undefined' ? setIa : null,
+      saveEntrosao: () => typeof saveEntrosao !== 'undefined' ? saveEntrosao : null,
+      scheduleChatSettingsRefresh: () => typeof scheduleChatSettingsRefresh !== 'undefined' ? scheduleChatSettingsRefresh : null,
+      loadEvents: () => typeof loadEvents !== 'undefined' ? loadEvents : null,
+      cancelEvent: () => typeof cancelEvent !== 'undefined' ? cancelEvent : null,
+      loadConversations: () => typeof loadConversations !== 'undefined' ? loadConversations : null,
+      openConversation: () => typeof openConversation !== 'undefined' ? openConversation : null,
+      backfillConversations: () => typeof backfillConversations !== 'undefined' ? backfillConversations : null,
+      scheduleConvRefresh: () => typeof scheduleConvRefresh !== 'undefined' ? scheduleConvRefresh : null,
+      switchOpsTab: () => typeof switchOpsTab !== 'undefined' ? switchOpsTab : null,
+      loadOps: () => typeof loadOps !== 'undefined' ? loadOps : null,
+      addOpsItem: () => typeof addOpsItem !== 'undefined' ? addOpsItem : null,
+      removeOpsItem: () => typeof removeOpsItem !== 'undefined' ? removeOpsItem : null,
+      loadPrompt: () => typeof loadPrompt !== 'undefined' ? loadPrompt : null,
+      savePrompt: () => typeof savePrompt !== 'undefined' ? savePrompt : null,
+      resetPrompt: () => typeof resetPrompt !== 'undefined' ? resetPrompt : null,
+      loadAiConfig: () => typeof loadAiConfig !== 'undefined' ? loadAiConfig : null,
+      addFallback: () => typeof addFallback !== 'undefined' ? addFallback : null,
+      removeFallback: () => typeof removeFallback !== 'undefined' ? removeFallback : null,
+      saveAiConfig: () => typeof saveAiConfig !== 'undefined' ? saveAiConfig : null,
+      testAi: () => typeof testAi !== 'undefined' ? testAi : null,
+      loadDirectives: () => typeof loadDirectives !== 'undefined' ? loadDirectives : null,
+      addDirective: () => typeof addDirective !== 'undefined' ? addDirective : null,
+      deleteDirective: () => typeof deleteDirective !== 'undefined' ? deleteDirective : null,
+      loadCommands: () => typeof loadCommands !== 'undefined' ? loadCommands : null,
+      toggleCommandDisabled: () => typeof toggleCommandDisabled !== 'undefined' ? toggleCommandDisabled : null,
+      setCommandPermission: () => typeof setCommandPermission !== 'undefined' ? setCommandPermission : null,
+      resetCommandOverride: () => typeof resetCommandOverride !== 'undefined' ? resetCommandOverride : null,
+      downloadBackup: () => typeof downloadBackup !== 'undefined' ? downloadBackup : null,
+      uploadRestore: () => typeof uploadRestore !== 'undefined' ? uploadRestore : null,
+      exportMemories: () => typeof exportMemories !== 'undefined' ? exportMemories : null,
+      importMemories: () => typeof importMemories !== 'undefined' ? importMemories : null,
+      loadBackupComponents: () => typeof loadBackupComponents !== 'undefined' ? loadBackupComponents : null,
+      openExportModal: () => typeof openExportModal !== 'undefined' ? openExportModal : null,
+      openImportModal: () => typeof openImportModal !== 'undefined' ? openImportModal : null,
+      selectAllExport: () => typeof selectAllExport !== 'undefined' ? selectAllExport : null,
+      selectAllImport: () => typeof selectAllImport !== 'undefined' ? selectAllImport : null,
+      doExport: () => typeof doExport !== 'undefined' ? doExport : null,
+      doImport: () => typeof doImport !== 'undefined' ? doImport : null,
+      loadImportFile: () => typeof loadImportFile !== 'undefined' ? loadImportFile : null,
+      loadMaintenance: () => typeof loadMaintenance !== 'undefined' ? loadMaintenance : null,
+      toggleMaintenance: () => typeof toggleMaintenance !== 'undefined' ? toggleMaintenance : null,
+      toggleAutostart: () => typeof toggleAutostart !== 'undefined' ? toggleAutostart : null,
+      loadAutostartStatus: () => typeof loadAutostartStatus !== 'undefined' ? loadAutostartStatus : null,
+      testNotification: () => typeof testNotification !== 'undefined' ? testNotification : null,
+      checkForUpdates: () => typeof checkForUpdates !== 'undefined' ? checkForUpdates : null,
+      closeModal: () => typeof closeModal !== 'undefined' ? closeModal : null,
+    };
+    var _ok = 0, _fail = 0;
+    for (const [name, getter] of Object.entries(_fns)) {
+      try { const fn = getter(); if (fn) { window[name] = fn; _ok++; } else _fail++; }
+      catch (e) { _fail++; console.error('[MARCIO] expose fail:', name, e.message); }
+    }
+    console.log(`[MARCIO] window exports: ${_ok} ok, ${_fail} failed. showSection=${typeof window.showSection}`);
   </script>
 </body>
 </html>

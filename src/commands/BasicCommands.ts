@@ -184,7 +184,7 @@ export class BasicCommands implements CommandModule {
       '',
       '_OP:_',
       '/ia on|off / /fig / /educa / /deseduca / /educacao',
-      '/memoria / /perfil / /estilo / /twitter',
+      '/memoria / /perfil / /estilo',
       '/ban / /unban / /banidos / /op / /deop / /ops',
       '/admin (PV do bot)',
     ].join('\n');
@@ -577,7 +577,9 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
         await this.app.notify(chatId, '🛑 IA off (global)');
         this.app.log('IA', `IA desativada globalmente.`);
       } else {
-        this.app.brain.aiDisabledChats.add(chatId);
+        // Persiste via chatSettings (atualiza brain.aiDisabledChats + broadcast
+        // pro painel + salva em chat-settings.json — sobrevive a restarts).
+        this.app.chatSettings.setAiEnabled(chatId, false);
         await this.app.react(msg, EMOJI.SUCCESS);
         await this.app.notify(chatId, '🛑 IA off');
         this.app.log('IA', `IA desativada no chat ${chatId}.`);
@@ -589,12 +591,19 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     if (subcommand === 'on') {
       if (isGlobal) {
         if (this.app.aiConfig) this.app.aiConfig.enabled = true;
-        this.app.brain.aiDisabledChats.clear();  // limpa também as desativações por chat
+        // Limpa TODOS os chats com IA off — reativa em todos.
+        // Precisa persistir cada um (setAiEnabled também limpa brain.aiDisabledChats).
+        for (const cid of this.app.chatSettings.allChatIds()) {
+          if (!this.app.chatSettings.get(cid).aiEnabled) {
+            this.app.chatSettings.setAiEnabled(cid, true);
+          }
+        }
+        this.app.brain.aiDisabledChats.clear();  // safety net (caso tenha em memória sem persistir)
         await this.app.react(msg, EMOJI.SUCCESS);
         await this.app.notify(chatId, '✅ IA on (global)');
         this.app.log('IA', `IA reativada globalmente.`);
       } else {
-        this.app.brain.aiDisabledChats.delete(chatId);
+        this.app.chatSettings.setAiEnabled(chatId, true);
         await this.app.react(msg, EMOJI.SUCCESS);
         await this.app.notify(chatId, '✅ IA on');
         this.app.log('IA', `IA reativada no chat ${chatId}.`);

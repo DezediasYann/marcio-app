@@ -28,6 +28,7 @@ declare module 'whatsapp-web.js' {
     getChatById(chatId: string): Promise<Chat>;
     getContactById(contactId: string): Promise<Contact>;
     getMessageById(messageId: string): Promise<Message>;
+    setProfilePicture(media: any): Promise<boolean>;
     info: { wid: { _serialized: string; user: string }; pushname: string };
   }
 

@@ -124,6 +124,7 @@ export class ChatSettings {
     } else {
       this.app.brain.aiDisabledChats.add(chatId);
     }
+    this.broadcastUpdate(chatId);
   }
 
   setEntrosao(chatId: string, level: number): void {
@@ -131,6 +132,7 @@ export class ChatSettings {
     const safe = Math.max(0, Math.min(2, Math.floor(level) || 1));
     this.update(chatId, { entrosao: safe });
     this.app.brain.chatEntrosaoLevel.set(chatId, safe);
+    this.broadcastUpdate(chatId);
   }
 
   setMuted(chatId: string, muted: boolean): void {
@@ -140,5 +142,19 @@ export class ChatSettings {
     } else {
       this.app.brain.democraticallyMutedChats.delete(chatId);
     }
+    this.broadcastUpdate(chatId);
+  }
+
+  /**
+   * Notifica o painel (via WebSocket) que as settings de um chat mudaram.
+   * O frontend escuta 'chat-settings-update' e re-fetcha o chat aberto.
+   * Best-effort: se control não existir (bot ainda em boot), ignora.
+   */
+  private broadcastUpdate(chatId: string): void {
+    try {
+      if (this.app.control) {
+        this.app.control.broadcast('chat-settings-update', { chatId, settings: this.get(chatId) });
+      }
+    } catch { /* ignora — broadcast é best-effort */ }
   }
 }

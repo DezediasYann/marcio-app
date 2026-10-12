@@ -234,6 +234,12 @@ interface RuntimeAIConfig {
   maxTokens: number;
   temperature: number;
   provider: string | null;  // 'gemini', 'openai', ou null (auto-detect)
+  /** Seção de transcrição de áudio (lida pelo AudioTranscriber). */
+  audioTranscription?: {
+    enabled: boolean;
+    primaryModel: string;
+    fallbackModel: string;
+  };
 }
 
 interface GeminiResult {
@@ -303,6 +309,17 @@ export class MarcioBrain {
         const content = fs.readFileSync(filePath, 'utf8').trim();
         if (content) {
           const parsed = JSON.parse(content);
+          // Lê seção audioTranscription (se existir — senão AudioTranscriber usa defaults)
+          const audioRaw = parsed.audioTranscription;
+          const audioTranscription = (audioRaw && typeof audioRaw === 'object') ? {
+            enabled: typeof audioRaw.enabled === 'boolean' ? audioRaw.enabled : true,
+            primaryModel: typeof audioRaw.primaryModel === 'string' && audioRaw.primaryModel.trim()
+              ? audioRaw.primaryModel.trim()
+              : 'gemini-3.5-flash-lite',
+            fallbackModel: typeof audioRaw.fallbackModel === 'string' && audioRaw.fallbackModel.trim()
+              ? audioRaw.fallbackModel.trim()
+              : 'gemini-3.1-flash-lite',
+          } : undefined;
           this.aiConfigCache = {
             model: parsed.model || 'gemini-2.0-flash-lite',
             fallbackModel: parsed.fallbackModel || null,
@@ -312,6 +329,7 @@ export class MarcioBrain {
             maxTokens: parsed.maxTokens || AI_DEFAULTS.maxTokens,
             temperature: parsed.temperature !== undefined ? parsed.temperature : AI_DEFAULTS.temperature,
             provider: parsed.provider || null,
+            audioTranscription,
           };
           this.aiConfigCacheTime = now;
           return this.aiConfigCache;
@@ -331,6 +349,7 @@ export class MarcioBrain {
       maxTokens: AI_DEFAULTS.maxTokens,
       temperature: AI_DEFAULTS.temperature,
       provider: null,
+      audioTranscription: undefined,  // AudioTranscriber vai usar defaults
     };
     this.aiConfigCacheTime = now;
     return this.aiConfigCache;
@@ -530,6 +549,14 @@ export class MarcioBrain {
       messages.push({ role: 'system', content: memoriesText });
     }
 
+    // ProfileBook — perfis IA de pessoas + grupo (cross-chat)
+    if (this.app.profileBook) {
+      const profileText = this.app.profileBook.buildText(chatId, uniqueSenders);
+      if (profileText) {
+        messages.push({ role: 'system', content: profileText });
+      }
+    }
+
     // Hint de chamada direta
     if (isDirect) {
       messages.push({
@@ -554,6 +581,14 @@ export class MarcioBrain {
           list.map((d: any) => `- ${d.text}`).join('\n');
         messages.push({ role: 'system', content: shortReminder });
       }
+    }
+
+    // === AUTOCONSCIÊNCIA — injeta info sobre si mesmo ===
+    // O Márcio sabe o que é, como foi construído, que modelo usa, e que
+    // ações pode executar sobre si mesmo via marcadores [ACAO: ...].
+    const selfAwareness = this.buildSelfAwareness(chatId);
+    if (selfAwareness) {
+      messages.push({ role: 'system', content: selfAwareness });
     }
 
     // Estima tokens
@@ -710,7 +745,19 @@ export class MarcioBrain {
     }
 
     // Remove [MEMORIA: ...] da resposta final
-    const finalCleaned = cleaned.replace(/\[MEMORIA:\s*[^\]]+\]/gi, '').replace(/\s{2,}/g, ' ').trim();
+    let finalCleaned = cleaned.replace(/\[MEMORIA:\s*[^\]]+\]/gi, '').replace(/\s{2,}/g, ' ').trim();
+
+    // === EXECUTA AÇÕES DE AUTOCONSCIÊNCIA [ACAO: ...] ===
+    const { text: textAfterActions, actions } = await this.executeSelfActions(finalCleaned, chatId);
+    finalCleaned = textAfterActions;
+
+    // Se as ações produziram output, anexa no final da resposta
+    if (actions.length > 0) {
+      const actionsText = actions.map(a => `_${a}_`).join('\n');
+      finalCleaned = finalCleaned + (finalCleaned ? '\n' : '') + actionsText;
+      this.app.debug('SELF', `${actions.length} ação(ões) executada(s): ${actions.join('; ')}`);
+    }
+
     return finalCleaned;
   }
 
@@ -730,6 +777,358 @@ export class MarcioBrain {
    *
    * PRESERVA marcadores do bot: [FIGURINHA], [SILENCIO], [BREAK], [MEMORIA:]
    */
+  // ===========================================================================
+  // AUTOCONSCIÊNCIA — o Márcio sabe sobre si mesmo e pode agir
+  // ===========================================================================
+
+  /**
+   * Constrói o texto de autoconsciência que é injetado no prompt.
+   * Diz ao Márcio: o que ele é, como foi construído, que modelo usa,
+   * quantas memórias tem, e que ações pode executar sobre si mesmo.
+   */
+  private buildSelfAwareness(chatId: string): string {
+    const aiConfig = this.getAIConfig();
+    const allModels = this.getAllFallbackModels();
+    const primaryModel = aiConfig.model;
+    const fallbackModels = allModels.slice(1);
+    const memoryCount = this.app.memory.allUsers().reduce((sum, u) => sum + this.app.memory.forUser(u).length, 0);
+    const userCount = this.app.memory.allUsers().length;
+    const chatCount = this.app.context.activeChatIds().length;
+    const stickerCount = this.app.stickers.listNamed().length;
+    const directiveCount = this.app.directives.all().length;
+    const uptime = Math.floor((Date.now() - this.app.startTime) / 60000);
+    const lastModel = this.lastUsedModel || primaryModel;
+
+    const lines = [
+      '=== AUTOCONSCIÊNCIA (sobre você mesmo) ===',
+      `Você é o Márcio Pinto, um bot de WhatsApp com IA.`,
+      `Você roda em Node.js + TypeScript, embrulhado num app desktop Tauri/Rust.`,
+      `Você foi construído por Yann usando programação orientada a objetos (24 classes, ~13000 linhas de código).`,
+      `Seu "cérebro" (MarcioBrain) usa o modelo Gemini "${primaryModel}"${fallbackModels.length > 0 ? ` com fallback para: ${fallbackModels.join(', ')}` : ''}.`,
+      `Modelo que respondeu última vez: "${lastModel}".`,
+      `Requests de IA hoje: ${this.aiRequestCount}.`,
+      `Uptime: ${uptime} min.`,
+      `Memórias: ${memoryCount} fatos sobre ${userCount} pessoa(s).`,
+      `Chats ativos: ${chatCount}.`,
+      `Figurinhas nomeadas: ${stickerCount}.`,
+      `Diretivas ativas: ${directiveCount}.`,
+      `Entrosão atual deste chat: ${this.chatEntrosaoLevel.get(chatId) ?? 1}.`,
+      `Debug: ${this.app.debugEnabled ? (this.app.debugFullEnabled ? 'full' : 'on') : 'off'}.`,
+      '',
+      'AÇÕES SOBRE SI MESMO (use marcadores na sua resposta, o bot executa):',
+      '• [ACAO: foto] — troca sua foto de perfil (pega uma imagem do contexto ou do vault)',
+      '• [ACAO: modelo] — mostra info sobre seu modelo de IA atual',
+      '• [ACAO: status] — mostra seu status completo (uptime, requests, memórias, etc.)',
+      '• [ACAO: debug] — liga/desliga modo debug',
+      '• [ACAO: entrosao N] — ajusta seu nível de entrosão (0=quieto, 1=normal, 2=2x)',
+      '• [ACAO: memoria] — mostra quantas memórias você tem e sobre quem',
+      '',
+      'AÇÕES SOBRE O MUNDO (interage com outros chats):',
+      '• [ACAO: avisar|texto] — manda "texto" em TODOS os chats ativos recentes (últimos 30min)',
+      '• [ACAO: pv|nome da pessoa|mensagem] — manda "mensagem" no PV de "nome da pessoa"',
+      '• [ACAO: grupo|nome do grupo|mensagem] — manda "mensagem" no grupo "nome do grupo"',
+      '',
+      'IMPORTANTE: as mensagens que você manda NÃO levam prefixo "Robô do PT".',
+      'VOCÊ escreve a mensagem natural, como o Márcio falaria.',
+      'Ao mandar no PV de alguém, inclua o CONTEXTO: quem pediu, de onde (grupo ou PV), e o que dizer.',
+      'Ex.: alguém no grupo "Penis" pede pra avisar o Yann → você manda no PV do Yann: "opa, o Ítalo lá no grupo Penis pediu pra te falar que tu fede"',
+      'Se o sorteio ou ação é no MESMO grupo, use [ACAO: pv|grupo|mensagem] pra mandar no grupo atual.',
+      '',
+      'Use essas ações quando fizer sentido NATURAL na conversa.',
+      'Ex.: "Márcio avisa todo mundo que vou reiniciar" → responda + [ACAO: avisar|gente vou reiniciar, volto já]',
+      'Ex.: "Manda pro Carlos dizendo que o jogo é amanhã" → [ACAO: pv|Carlos|opa, o Ítalo no grupo Penis pediu pra te avisar que o jogo é amanhã]',
+      'Ex.: "Sorteia alguém do grupo pro pão gozado" → [ACAO: pv|grupo|@fulano, você foi sorteado, a pedido do Ítalo, pro pão gozado]',
+      'Os marcadores são SEMPRE removidos da resposta final — o usuário não vê.',
+    ];
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Procura e executa marcadores [ACAO: ...] na resposta da IA.
+   * Remove o marcador do texto e executa a ação correspondente.
+   *
+   * @returns { text: string (sem o marcador), actions: string[] (ações executadas) }
+   */
+  private async executeSelfActions(content: string, chatId: string): Promise<{ text: string; actions: string[] }> {
+    const actions: string[] = [];
+    let text = content;
+
+    // Regex: [ACAO: algo] ou [ACAO: algo arg]
+    const actionRegex = /\[ACAO:\s*([^\]]+)\]/gi;
+    let match;
+    const found = new Set<string>();
+
+    while ((match = actionRegex.exec(content)) !== null) {
+      const full = match[0];
+      const actionStr = match[1].trim();
+
+      // Parse: ações simples usam espaço, ações complexas usam pipe |
+      // Pipe format: "pv|Carlos D.|o jogo é amanhã"
+      let action: string;
+      let pipeArgs: string[] = [];
+      let spaceArgs: string[] = [];
+
+      if (actionStr.includes('|')) {
+        // Pipe-separated: action|arg1|arg2|...
+        const parts = actionStr.split('|').map(s => s.trim());
+        action = parts[0].toLowerCase();
+        pipeArgs = parts.slice(1);
+      } else {
+        // Space-separated: action arg1 arg2...
+        const parts = actionStr.split(/\s+/);
+        action = parts[0].toLowerCase();
+        spaceArgs = parts.slice(1);
+      }
+
+      // Evita executar a mesma ação 2x
+      if (found.has(actionStr)) {
+        text = text.replace(full, '').trim();
+        continue;
+      }
+      found.add(actionStr);
+
+      this.app.debug('SELF', `ação executada: ${action}${pipeArgs.length ? ' | ' + pipeArgs.join(' | ') : spaceArgs.length ? ' ' + spaceArgs.join(' ') : ''}`);
+
+      try {
+        switch (action) {
+          case 'foto': {
+            // Tenta pegar a última imagem do contexto
+            const ctx = this.app.context.getRecent(chatId);
+            const lastImage = [...ctx].reverse().find(m => m.imageData && m.imageMimetype);
+            if (lastImage?.imageData) {
+              // MessageMedia.fromBuffer não existe nessa versão do whatsapp-web.js.
+              // Usa o construtor direto com base64 + mimetype.
+              const media = new MessageMedia(
+                lastImage.imageMimetype || 'image/jpeg',
+                lastImage.imageData,
+                'profile-pic.jpg'
+              );
+              await this.app.whatsapp.client.setProfilePicture(media);
+              actions.push('✅ foto de perfil trocada');
+              this.app.log('SELF', 'IA trocou própria foto de perfil (do contexto)');
+            } else {
+              actions.push('❌ nenhuma imagem disponível pra trocar foto');
+            }
+            break;
+          }
+          case 'modelo': {
+            const cfg = this.getAIConfig();
+            const models = this.getAllFallbackModels();
+            actions.push(`Modelo: ${cfg.model} | Fallbacks: ${models.slice(1).join(', ') || 'nenhum'} | Último usado: ${this.lastUsedModel || cfg.model}`);
+            break;
+          }
+          case 'status': {
+            const memCount = this.app.memory.allUsers().reduce((s, u) => s + this.app.memory.forUser(u).length, 0);
+            const up = Math.floor((Date.now() - this.app.startTime) / 60000);
+            actions.push(`Status: ${up}min uptime | ${this.aiRequestCount} reqs IA | ${memCount} memórias | ${this.app.context.activeChatIds().length} chats | ${this.app.stickers.listNamed().length} figurinhas | debug: ${this.app.debugEnabled ? 'on' : 'off'}`);
+            break;
+          }
+          case 'debug': {
+            this.app.debugEnabled = !this.app.debugEnabled;
+            actions.push(`debug ${this.app.debugEnabled ? 'ligado' : 'desligado'}`);
+            this.app.log('SELF', `IA alternou debug pra ${this.app.debugEnabled ? 'on' : 'off'}`);
+            break;
+          }
+          case 'entrosao': {
+            const level = parseInt(spaceArgs[0]) || 1;
+            const safe = Math.max(0, Math.min(2, level));
+            this.app.chatSettings.setEntrosao(chatId, safe);
+            actions.push(`entrosão ajustada pra ${safe}`);
+            this.app.log('SELF', `IA ajustou própria entrosão pra ${safe} em ${chatId}`);
+            break;
+          }
+          case 'memoria': {
+            const users = this.app.memory.allUsers();
+            const total = users.reduce((s, u) => s + this.app.memory.forUser(u).length, 0);
+            const userList = users.map(u => `${u} (${this.app.memory.forUser(u).length})`).join(', ');
+            actions.push(`${total} memórias sobre ${users.length} pessoa(s): ${userList}`);
+            break;
+          }
+          case 'avisar': {
+            // Broadcast: manda mensagem em todos os chats ativos recentes (últimos 30min)
+            // SEM prefixo "Robô do PT" — a IA já escreveu a mensagem natural
+            const msg = pipeArgs.join('|').trim() || spaceArgs.join(' ').trim();
+            if (!msg) {
+              actions.push('❌ texto do aviso vazio');
+              break;
+            }
+            const now = Date.now();
+            const windowMs = 30 * 60 * 1000; // 30 min
+            const chats = await this.app.whatsapp.client.getChats();
+            let sent = 0;
+            for (const chat of chats) {
+              const cid = chat.id?._serialized;
+              if (cid === chatId) continue;
+              if (this.aiDisabledChats.has(cid)) continue;
+              if (this.democraticallyMutedChats.has(cid)) continue;
+              const lastTs = chat.lastMessage?.timestamp || chat.timestamp || 0;
+              if (lastTs > 0 && (now - lastTs * 1000) < windowMs) {
+                try {
+                  await this.app.whatsapp.client.sendMessage(cid, msg);
+                  sent++;
+                } catch (e) {
+                  this.app.debug('SELF', `erro ao avisar em ${cid}: ${(e as Error).message}`);
+                }
+              }
+            }
+            actions.push(`✅ aviso enviado pra ${sent} chat(s) ativos`);
+            this.app.log('SELF', `IA fez broadcast: "${msg}" → ${sent} chats`);
+            break;
+          }
+          case 'pv': {
+            // Manda mensagem no PV de alguém pelo nome
+            // SEM prefixo — a IA já escreveu a mensagem natural com contexto
+            // (quem pediu, de onde, o que dizer)
+            // Se pipeArgs[0] = "grupo", manda como @menção no grupo atual em vez de PV
+            const targetName = pipeArgs[0] || '';
+            const msg = pipeArgs.slice(1).join('|').trim();
+            if (!targetName || !msg) {
+              actions.push('❌ use: pv|nome|mensagem');
+              break;
+            }
+
+            // Se o alvo é "grupo", manda @menção no grupo atual
+            if (targetName.toLowerCase() === 'grupo' || targetName.toLowerCase() === 'here' || targetName.toLowerCase() === 'aqui') {
+              // Manda no chat atual com menção — precisa achar o contato pelo nome
+              // pra pegar o ID pra mencionar
+              const mentionedName = msg.split('|')[0]?.trim() || '';
+              const actualMsg = msg.split('|').slice(1).join('|').trim() || msg;
+
+              // Tenta achar o contato no grupo atual pra mencionar
+              try {
+                const chat = await this.app.whatsapp.client.getChatById(chatId);
+                if (chat && chat.isGroup && chat.participants) {
+                  // Como participants só tem ID, vamos mandar sem @menção técnica
+                  // mas com o nome no texto (a IA já colocou "@fulano")
+                  await this.app.whatsapp.client.sendMessage(chatId, actualMsg);
+                  actions.push(`✅ mensagem mandada no grupo`);
+                  this.app.log('SELF', `IA mandou no grupo ${chatId}: "${actualMsg}"`);
+                } else {
+                  await this.app.whatsapp.client.sendMessage(chatId, msg);
+                  actions.push(`✅ mensagem mandada no grupo`);
+                }
+              } catch (e) {
+                await this.app.whatsapp.client.sendMessage(chatId, msg);
+                actions.push(`✅ mensagem mandada no grupo`);
+              }
+              break;
+            }
+
+            // === RESOLUÇÃO VIA PROFILEBOOK ===
+            // 1. Tenta ProfileBook.resolveByName (funciona com @lid de grupos + aliases)
+            // 2. Se achar, pega o @c.us ID (do próprio perfil ou de alias)
+            // 3. Se só tem @lid (sem @c.us), avisa que não tem o PV
+            // 4. Se múltiplos matches, pede disambiguação
+            // 5. Fallback: busca em getChats() (PVs já abertos)
+
+            let resolvedCusId: string | undefined;
+            let resolvedName: string | undefined;
+
+            if (this.app.profileBook) {
+              const matches = this.app.profileBook.resolveByName(targetName);
+              if (matches.length === 1) {
+                // Match único — usa
+                const profile = matches[0].profile;
+                resolvedName = profile.name;
+                resolvedCusId = this.app.profileBook.getCusId(profile);
+                if (!resolvedCusId) {
+                  // Tem perfil mas só @lid — não dá pra mandar PV
+                  actions.push(`❌ conheço ${profile.name} (do grupo) mas não tenho o número dele. Pede pra ele me chamar no PV primeiro, ou manda o número.`);
+                  this.app.debug('SELF', `pv: ${targetName} → perfil encontrado (${profile.id}) mas sem @c.us`);
+                  break;
+                }
+              } else if (matches.length > 1) {
+                // Múltiplos matches — pede disambiguação
+                const names = matches.slice(0, 4).map(m => m.profile.name).join(', ');
+                actions.push(`❌ conheço várias pessoas chamadas "${targetName}": ${names}. Qual delas? (manda o número ou o nome completo)`);
+                this.app.debug('SELF', `pv: ${targetName} → ${matches.length} matches (disambiguação necessária)`);
+                break;
+              }
+            }
+
+            // Se resolveu via ProfileBook, manda
+            if (resolvedCusId) {
+              try {
+                await this.app.whatsapp.client.sendMessage(resolvedCusId, msg);
+                actions.push(`✅ mensagem enviada pra ${resolvedName}`);
+                this.app.log('SELF', `IA mandou PV pra ${resolvedName} (${resolvedCusId}) via ProfileBook: "${msg}"`);
+                break;
+              } catch (e) {
+                this.app.debug('SELF', `erro ao mandar PV via ProfileBook pra ${resolvedCusId}: ${(e as Error).message} — tentando fallback`);
+              }
+            }
+
+            // Fallback: busca em getChats() (PVs já abertos)
+            const chats = await this.app.whatsapp.client.getChats();
+            const normalized = targetName.toLowerCase().trim();
+            const match = chats.find((c: any) => {
+              if (c.isGroup) return false;
+              const cid = c.id?._serialized || '';
+              if (cid === 'status@broadcast') return false;
+              if (cid.includes('@newsletter')) return false;
+              const name = (c.name || c.formattedTitle || '').toLowerCase().trim();
+              if (!name || name.length < 2) return false;
+              return name.includes(normalized) || normalized.includes(name);
+            });
+            if (match) {
+              const cid = match.id?._serialized;
+              await this.app.whatsapp.client.sendMessage(cid, msg);
+              actions.push(`✅ mensagem enviada pra ${match.name || cid}`);
+              this.app.log('SELF', `IA mandou PV pra ${match.name} (${cid}) via getChats fallback: "${msg}"`);
+            } else {
+              actions.push(`❌ não conheço ninguém chamado "${targetName}". Manda o número (com DDD) que eu mando.`);
+            }
+            break;
+          }
+          case 'grupo': {
+            // Manda mensagem num grupo pelo nome
+            // SEM prefixo — a IA já escreveu a mensagem natural
+            const targetName = pipeArgs[0] || '';
+            const msg = pipeArgs.slice(1).join('|').trim();
+            if (!targetName || !msg) {
+              actions.push('❌ use: grupo|nome|mensagem');
+              break;
+            }
+            const chats = await this.app.whatsapp.client.getChats();
+            const normalized = targetName.toLowerCase().trim();
+            const match = chats.find((c: any) => {
+              if (!c.isGroup) return false;
+              const cid = c.id?._serialized || '';
+              if (cid.includes('@newsletter')) return false;
+              const name = (c.name || c.formattedTitle || '').toLowerCase().trim();
+              if (!name || name.length < 2) return false;
+              return name.includes(normalized) || normalized.includes(name);
+            });
+            if (match) {
+              const cid = match.id?._serialized;
+              // SEM prefixo — a IA já escreveu a mensagem natural
+              await this.app.whatsapp.client.sendMessage(cid, msg);
+              actions.push(`✅ mensagem enviada no grupo ${match.name || cid}`);
+              this.app.log('SELF', `IA mandou msg no grupo ${match.name} (${cid}): "${msg}"`);
+            } else {
+              actions.push(`❌ não achei grupo chamado "${targetName}"`);
+            }
+            break;
+          }
+          default:
+            actions.push(`ação desconhecida: ${action}`);
+        }
+      } catch (e) {
+        actions.push(`❌ erro: ${(e as Error).message}`);
+        this.app.debug('SELF', `erro ao executar ação ${action}: ${(e as Error).message}`);
+      }
+
+      // Remove o marcador do texto
+      text = text.replace(full, '').trim();
+    }
+
+    // Limpa espaços extras deixados pela remoção
+    text = text.replace(/\s{2,}/g, ' ').trim();
+
+    return { text, actions };
+  }
+
   cleanResponse(content: string): string {
     let text = content;
 
@@ -856,21 +1255,26 @@ export class MarcioBrain {
 
     let firstSent = false;
     const sentTexts: string[] = [];
+    let firstSentMsgId: string | undefined;
 
     for (const block of blocks) {
       try {
+        let sent: any;
         if (quotedMessageId && !firstSent) {
           try {
-            await this.app.whatsapp.client.sendMessage(chatId, block, { quotedMessageId });
+            sent = await this.app.whatsapp.client.sendMessage(chatId, block, { quotedMessageId });
           } catch {
-            await this.app.whatsapp.client.sendMessage(chatId, block);
+            sent = await this.app.whatsapp.client.sendMessage(chatId, block);
           }
           firstSent = true;
         } else {
-          await this.app.whatsapp.client.sendMessage(chatId, block);
+          sent = await this.app.whatsapp.client.sendMessage(chatId, block);
           if (blocks.length > 1) {
             await new Promise(r => setTimeout(r, 300 + Math.random() * 400));
           }
+        }
+        if (!firstSentMsgId && sent?.id?._serialized) {
+          firstSentMsgId = sent.id._serialized;
         }
         sentTexts.push(block);
       } catch (e) {
@@ -879,6 +1283,7 @@ export class MarcioBrain {
     }
 
     this.app.debug('AI-SEND', `enviou ${sentTexts.length} mensagem(ns) em sequência`);
+    // Retorna o texto enviado. Se precisar do msgId, usar sendResponseWithId.
     return sentTexts.join('\n\n');
   }
 
@@ -912,6 +1317,9 @@ export class MarcioBrain {
 
     const senderName = this.app.context.getCachedSenderName(msg);
     const isSticker = msg.hasMedia && msg.type === 'sticker';
+    // Detecta áudio: msg de áudio do WhatsApp é type='ptt' (push-to-talk) ou 'audio'.
+    // Não tem body — mas talvez a gente queira transcrever e responder.
+    const isAudio = this.app.audioTranscriber?.isAudioMessage(msg) ?? false;
 
     // === Detecção de menção ===
     let isDirect = false;
@@ -989,8 +1397,9 @@ export class MarcioBrain {
       }
     }
 
-    // Se não é figurinha/menção e body muito curto, ignora
-    if (!isSticker && !isMention && (!msg.body || msg.body.trim().length < 3)) return;
+    // Se não é figurinha/menção/áudio e body muito curto, ignora
+    // (Áudio não tem body mas pode ter sido marcado como isAudio — continua o fluxo)
+    if (!isSticker && !isMention && !isAudio && (!msg.body || msg.body.trim().length < 3)) return;
 
     // Reply a mensagem do bot
     if (!isDirect && msg.hasQuotedMsg) {
@@ -1032,40 +1441,51 @@ export class MarcioBrain {
       if (Date.now() - last < AI_DEFAULTS.cooldownMs) {
         // Cooldown ativo — candidata pra retroativo
         if (this.app.retroactive && msg.id?._serialized) {
-          this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, msg.body ?? '', 'pending');
+          this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, msg.body ?? (isAudio ? '[áudio]' : ''), 'pending');
         }
         return;
       }
 
-      const lower = (msg.body || '').toLowerCase();
       let chance = AI_DEFAULTS.autoResponseChance;
       const triggers: string[] = [];
 
-      // Perguntas
-      if (/\?$/.test(msg.body.trim()) || /\b(algu[eé]m|quem|o que|q q|oq|cad[eé]|onde|quando|por que|pq|qual)\b/.test(lower)) {
-        chance = Math.max(chance, AI_DEFAULTS.autoResponseChanceQuestion);
-        triggers.push('pergunta');
-      }
-      // Drama
-      if (/\b(k+kk+k+|mds|mdss|gente|socorro|carai|caramba|n[aã]o acredito|vish|oxe|visse)\b/i.test(lower) ||
-          /[A-Z]{6,}/.test(msg.body)) {
-        chance = Math.max(chance, AI_DEFAULTS.autoResponseChanceDrama);
-        triggers.push('drama');
-      }
-      // Política
-      if (/\b(pt|lula|bolsonaro|bozo|elei[çc][ãa]o|esquerda|direita|pol[ií]tica|governo|presidente)\b/i.test(lower)) {
-        chance = Math.max(chance, AI_DEFAULTS.autoResponseChancePolitics);
-        triggers.push('politica');
-      }
-      // Fofoca
-      if (/\b(sabe|ouviu|viu|t[oó] chocad|olha s[oó]|rapaz|meu|n[aã]o vai acreditar|fofoc)\b/i.test(lower)) {
-        chance = Math.max(chance, AI_DEFAULTS.autoResponseChanceGossip);
-        triggers.push('fofoca');
-      }
-      // Longa
-      if (msg.body.length > 100) {
-        chance = Math.max(chance, AI_DEFAULTS.autoResponseChance * 2);
-        triggers.push('longa');
+      // Triggers só fazem sentido pra texto (áudio não tem body pra avaliar).
+      // Pra áudio em grupo: usa só chance base × entrosão — sem triggers de conteúdo.
+      if (!isAudio) {
+        const lower = (msg.body || '').toLowerCase();
+
+        // Perguntas
+        if (/\?$/.test(msg.body.trim()) || /\b(algu[eé]m|quem|o que|q q|oq|cad[eé]|onde|quando|por que|pq|qual)\b/.test(lower)) {
+          chance = Math.max(chance, AI_DEFAULTS.autoResponseChanceQuestion);
+          triggers.push('pergunta');
+        }
+        // Drama
+        if (/\b(k+kk+k+|mds|mdss|gente|socorro|carai|caramba|n[aã]o acredito|vish|oxe|visse)\b/i.test(lower) ||
+            /[A-Z]{6,}/.test(msg.body)) {
+          chance = Math.max(chance, AI_DEFAULTS.autoResponseChanceDrama);
+          triggers.push('drama');
+        }
+        // Política
+        if (/\b(pt|lula|bolsonaro|bozo|elei[çc][ãa]o|esquerda|direita|pol[ií]tica|governo|presidente)\b/i.test(lower)) {
+          chance = Math.max(chance, AI_DEFAULTS.autoResponseChancePolitics);
+          triggers.push('politica');
+        }
+        // Fofoca
+        if (/\b(sabe|ouviu|viu|t[oó] chocad|olha s[oó]|rapaz|meu|n[aã]o vai acreditar|fofoc)\b/i.test(lower)) {
+          chance = Math.max(chance, AI_DEFAULTS.autoResponseChanceGossip);
+          triggers.push('fofoca');
+        }
+        // Longa
+        if (msg.body.length > 100) {
+          chance = Math.max(chance, AI_DEFAULTS.autoResponseChance * 2);
+          triggers.push('longa');
+        }
+      } else {
+        // Áudio: usa chance base — sem triggers de conteúdo.
+        // Justificativa: não temos como avaliar o que o áudio diz sem transcrever.
+        // Só vai transcrever se a chance base passar (4% × entrosão) — raro em grupo,
+        // comum em PV (isDirect=true, pula esse bloco).
+        triggers.push('audio');
       }
 
       // Multiplicador de entrosão
@@ -1074,13 +1494,14 @@ export class MarcioBrain {
       if (chance > 1.0) chance = 1.0;
 
       if (triggers.length > 0) {
-        this.app.debug('AI-TRIGGER', `triggers: ${triggers.join(', ')} | chance: ${(chance * 100).toFixed(0)}% | entrosao: ${entrosaoLevel.toFixed(2)} | msg: "${msg.body.slice(0, 50)}..."`);
+        const preview = isAudio ? '[áudio]' : (msg.body || '').slice(0, 50);
+        this.app.debug('AI-TRIGGER', `triggers: ${triggers.join(', ')} | chance: ${(chance * 100).toFixed(0)}% | entrosao: ${entrosaoLevel.toFixed(2)} | msg: "${preview}..."`);
       }
 
       if (Math.random() > chance) {
         // Chance não atingida — candidata pra retroativo
         if (this.app.retroactive && msg.id?._serialized) {
-          this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, msg.body ?? '', 'pending');
+          this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, msg.body ?? (isAudio ? '[áudio]' : ''), 'pending');
         }
         return;
       }
@@ -1111,6 +1532,75 @@ export class MarcioBrain {
     };
 
     try {
+      // === Áudio: transcreve ANTES de gerar a resposta ===
+      // Já passou da decisão de chance — bot decidiu responder.
+      // Agora precisa do texto do áudio pra IA poder responder ao conteúdo.
+      let audioTranscription: string | null = null;
+      if (isAudio && this.app.audioTranscriber) {
+        this.app.log('AUDIO', `transcrevendo áudio de ${senderName || '?'} em ${chatId}…`);
+        try {
+          audioTranscription = await this.app.audioTranscriber.transcribe(msg);
+        } catch (e) {
+          this.app.debug('AUDIO', `erro na transcrição: ${(e as Error).message}`);
+          audioTranscription = null;
+        }
+
+        if (!audioTranscription) {
+          // Falhou nos 2 modelos (rate limit ou erro) → reage 🔇 e desiste.
+          this.app.log('AUDIO', `❌ transcrição falhou — reagindo 🔇 e ficando quieto`);
+          try { await msg.react('🔇'); } catch { /* ignora */ }
+          // Marca como pending no decision-log (retroativo pode reconsiderar depois).
+          if (this.app.retroactive && msg.id?._serialized) {
+            this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, '[áudio não transcrito]', 'pending');
+          }
+          return;
+        }
+
+        // Transcrição OK — injeta no contexto como se fosse uma msg de texto,
+        // MAS com prefixo `[🎵 áudio]:` pra IA saber que veio de áudio (não texto digitado).
+        // Isso ajuda a IA a entender contexto: "ah, essa pessoa mandou áudio, não escreveu".
+        this.app.debug('AUDIO', `transcrição: "${audioTranscription.slice(0, 80)}…"`);
+        const audioContextText = `[🎵 áudio]: ${audioTranscription}`;
+        try {
+          await this.app.context.captureMessage(msg, chatId, audioContextText);
+        } catch (e) {
+          this.app.debug('AUDIO', `erro ao capturar transcrição no contexto: ${(e as Error).message}`);
+        }
+        // Também registra no historyLog do Retroactive (pro painel Conversas mostrar).
+        // Usa o texto cru (sem prefixo) + isAudio=true → painel mostra badge separado do texto.
+        if (this.app.retroactive && msg.id?._serialized) {
+          try {
+            this.app.retroactive.recordIncomingMessage(
+              chatId,
+              msg.id._serialized,
+              senderName,
+              audioTranscription,  // texto sem prefixo (painel mostra badge separado)
+              Date.now(),
+              false,  // fromMe=false (foi o usuário que mandou o áudio)
+              undefined,
+              true,  // isAudio=true → painel mostra badge "🎵 áudio"
+            );
+          } catch { /* ignora */ }
+        }
+        // Também marca isAudio=true no decisionLog entry (se já tinha uma entry criada
+        // pelo markDecision('pending') antes da decisão de responder).
+        try {
+          if (this.app.retroactive) {
+            const entries = (this.app.retroactive as any).decisionLog?.get(chatId) as any[] | undefined;
+            if (entries) {
+              const existingEntry = entries.find((e: any) => e.msgId === msg.id?._serialized);
+              if (existingEntry && !existingEntry.isAudio) {
+                existingEntry.isAudio = true;
+              }
+            }
+          }
+        } catch { /* ignora — best-effort */ }
+        // Atualiza senderName no profileBook (transcrição pode ter gatilhos de memória)
+        try {
+          await this.app.memory.maybeExtract(chatId, senderName, audioTranscription);
+        } catch { /* ignora — extração de memória é best-effort */ }
+      }
+
       // Carrega histórico na 1ª vez
       await this.app.context.loadChatHistory(msg, chatId);
 
@@ -1152,16 +1642,41 @@ export class MarcioBrain {
 
       // Envia a resposta
       const quotedId = isDirect && msg.id && msg.id._serialized ? msg.id._serialized : null;
-      const sentText = await this.sendResponse(chatId, reply, quotedId ?? undefined);
+      const sentMsg = await this.sendResponse(chatId, reply, quotedId ?? undefined);
+      const sentText = typeof sentMsg === 'string' ? sentMsg : '';
 
       stopTyping();
       this.lastAutoResponse.set(chatId, Date.now());
       if (sentText) this.app.context.captureBotResponse(chatId, sentText);
       this.app.debug('AI', `auto-resposta enviada em ${chatId} (direta=${isDirect})`);
 
-      // Decisão final: respondido
+      // Registra a resposta do bot no decision-log (pra o painel Conversas mostrar)
       if (this.app.retroactive && msg.id?._serialized) {
-        this.app.retroactive.markDecision(chatId, msg.id._serialized, '', msg.body ?? '', 'responded');
+        const botResponseMsgId = (sentMsg as any)?.id?._serialized || undefined;
+        this.app.retroactive.recordBotResponse(
+          chatId,
+          msg.id._serialized,
+          sentText || reply,
+          botResponseMsgId,
+          quotedId || undefined,
+        );
+        // Também registra no historyLog (em tempo real) — painel persiste
+        // mesmo após o decisionLog limpar entries >2h
+        if (botResponseMsgId) {
+          this.app.retroactive.recordIncomingMessage(
+            chatId,
+            botResponseMsgId,
+            '',  // bot — senderName vazio é o padrão
+            sentText || reply,
+            Date.now(),
+            true,  // fromMe = true (foi o bot que mandou)
+            msg.id._serialized,  // cita a msg original
+          );
+          // Notifica o painel pra fazer auto-refresh
+          if (this.app.control) {
+            this.app.control.broadcast('conversation-update', { chatId, msgId: botResponseMsgId, fromMe: true });
+          }
+        }
       }
     } catch (error) {
       stopTyping();

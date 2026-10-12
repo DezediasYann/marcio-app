@@ -20,6 +20,8 @@ logs/
 src-tauri/target/
 src-tauri/Cargo.lock
 src-tauri/gen/
+src-tauri/dist/
+src-tauri/data/
 
 # OS
 .DS_Store

@@ -282,6 +282,24 @@ export class ControlPanel {
         return this.serveIndex(res);
       }
 
+      // GET /favicon.ico — favicon inline (data URI) pra evitar 404
+      if (method === 'GET' && (pathname === '/favicon.ico' || pathname === '/favicon.png')) {
+        const ico = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAhGVYSWZNTQAqAAAACAAFARIAAwAAAAEAAQAAARoABQAAAAEAAABKARsABQAAAAEAAABSASgAAwAAAAEAAgAAh2kABAAAAAEAAABaAAAAAAAAAEgAAAABAAAASAAAAAEAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAEKADAAQAAAABAAAAEAAAAAAoD2dXAAAACXBIWXMAABYlAAAWJQFJUiTwAAABWWlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOkRFQjUxMzIyMEM5RTlEMTFCRUZBOTlDQ0I1QzY4MzQwIiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOkRFQjUxMzIzMEM5RTlEMTFCRUZBOTlDQ0I1QzY4MzQwIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6REVCNTEzMjAwQzlFOUQxMUJFRkE5OUNDQjVDNjgzNDAiIHN0UmVmOmRvY3VtZW50SUQ9InhtcC5kaWQ6REVCNTEzMjEwQzlFOUQxMUJFRkE5OUNDQjVDNjgzNDAiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InciPz4dIrJsAAAAFklEQVQ4y2Nk+M9gZmBgYGD4zwB5TwCX8wIAE8MC1s3wfWgAAAAASUVORK5CYII=', 'base64');
+        res.writeHead(200, {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=86400',
+          'Content-Length': ico.length,
+        });
+        res.end(ico);
+        return;
+      }
+
+      // GET /chart.min.js, /js/*, /css/* — static files do publicDir
+      // (Chart.js local, evita CDN bloqueado por Tracking Prevention do Edge)
+      if (method === 'GET' && (pathname === '/chart.min.js' || pathname.startsWith('/js/') || pathname.startsWith('/css/'))) {
+        return this.serveStaticFile(pathname, res);
+      }
+
       // GET /api/stats
       if (method === 'GET' && pathname === '/api/stats') {
         return this.json(res, this.buildStats());
@@ -542,6 +560,48 @@ export class ControlPanel {
         return;
       }
 
+      // POST /api/memories/import  (upload JSON — substitui todas as memórias)
+      // Aceita:
+      //  - application/json direto: body = { "userName": [ {fact, sourceChat, timestamp}, ... ] }
+      //  - multipart/form-data com campo "file" contendo o JSON acima
+      //  - JSON com envelope { files: { "memories.json": base64 } } (vindo do /api/backup)
+      // Em todos os casos, extrai o objeto de memórias e chama memory.replace().
+      if (method === 'POST' && pathname === '/api/memories/import') {
+        try {
+          const parsed = await this.readRestoreBody(req);
+          if (!parsed || typeof parsed !== 'object') {
+            return this.json(res, { ok: false, error: 'JSON inválido' }, 400);
+          }
+          // Caso 1: envelope de backup { files: { "memories.json": base64, ... } }
+          let memData: unknown = parsed;
+          if (parsed.files && typeof parsed.files === 'object' && !Array.isArray(parsed.files)) {
+            const files = parsed.files as Record<string, string>;
+            // Procura memories.json (case-insensitive) no envelope
+            const memKey = Object.keys(files).find(k => k.toLowerCase() === 'memories.json');
+            if (!memKey) {
+              return this.json(res, { ok: false, error: 'backup não contém memories.json' }, 400);
+            }
+            try {
+              const b64 = files[memKey];
+              memData = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+            } catch (e) {
+              return this.json(res, { ok: false, error: `memories.json corrompido no backup: ${(e as Error).message}` }, 400);
+            }
+          }
+          // Chama memory.replace() com validação rigorosa
+          let stats: { users: number; facts: number };
+          try {
+            stats = this.app.memory.replace(memData);
+          } catch (e) {
+            return this.json(res, { ok: false, error: (e as Error).message }, 400);
+          }
+          this.app.log('PANEL', `memórias importadas via painel — ${stats.users} usuário(s), ${stats.facts} fato(s)`);
+          return this.json(res, { ok: true, ...stats });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
       // POST /api/memories/:user  { fact: string } (UI legada envia { text })
       if (method === 'POST' && pathname.startsWith('/api/memories/')) {
         const user = decodeURIComponent(pathname.slice('/api/memories/'.length));
@@ -592,6 +652,133 @@ export class ControlPanel {
       }
 
       // ======================================================================
+      // PROFILEBOOK (perfis IA — pessoas + grupos)
+      // ======================================================================
+
+      // GET /api/profiles — lista todos os perfis
+      if (method === 'GET' && pathname === '/api/profiles') {
+        const profiles = this.app.profileBook.all();
+        return this.json(res, { profiles });
+      }
+
+      // GET /api/profiles/:id — um perfil
+      if (method === 'GET' && pathname.startsWith('/api/profiles/') && !pathname.includes('/refresh')) {
+        const id = decodeURIComponent(pathname.slice('/api/profiles/'.length));
+        const profile = this.app.profileBook.get(id);
+        if (!profile) return this.json(res, { error: 'perfil não encontrado' }, 404);
+        return this.json(res, { profile });
+      }
+
+      // POST /api/profiles — cria novo perfil manualmente
+      if (method === 'POST' && pathname === '/api/profiles') {
+        try {
+          const body = await this.readJsonBody(req);
+          const { id, type, name, traits, aiSummary, rawNotes } = body || {};
+          if (!id || !name) return this.json(res, { ok: false, error: 'id e name obrigatórios' }, 400);
+          const profile = this.app.profileBook.create(
+            String(id),
+            (type === 'group' ? 'group' : 'person'),
+            String(name),
+            traits,
+            aiSummary,
+            rawNotes,
+          );
+          return this.json(res, { ok: true, profile });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/profiles/migrate — migra memories.json antigo
+      if (method === 'POST' && pathname === '/api/profiles/migrate') {
+        try {
+          const result = await this.app.profileBook.migrateFromOldMemories();
+          return this.json(res, { ok: true, ...result });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/profiles/mine — minera decision-log + history-log pra criar perfis
+      if (method === 'POST' && pathname === '/api/profiles/mine') {
+        try {
+          this.app.log('PANEL', 'mineração de perfis disparada via painel');
+          // Roda em background — responde imediatamente
+          this.app.profileBook.mineFromDecisionLog().catch(e => {
+            this.app.debug('PANEL', `mineração falhou: ${(e as Error).message}`);
+          });
+          return this.json(res, { ok: true, message: 'mineração iniciada em background — aguarde ~30s e recarregue' });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/profiles/link — linka dois IDs manualmente (alias)
+      // Body: { canonicalId, aliasId, reason? }
+      if (method === 'POST' && pathname === '/api/profiles/link') {
+        try {
+          const body = await this.readJsonBody(req);
+          const { canonicalId, aliasId, reason } = body || {};
+          if (!canonicalId || !aliasId) {
+            return this.json(res, { ok: false, error: 'canonicalId e aliasId obrigatórios' }, 400);
+          }
+          const ok = this.app.profileBook.linkIds(
+            String(canonicalId),
+            String(aliasId),
+            reason ? String(reason) : 'manual link via painel',
+          );
+          return this.json(res, { ok, profile: this.app.profileBook.get(String(canonicalId)) });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/profiles/resolve — resolve nome → perfis (pra debug/testar)
+      // Body: { name }
+      if (method === 'POST' && pathname === '/api/profiles/resolve') {
+        try {
+          const body = await this.readJsonBody(req);
+          const name = String(body?.name || '').trim();
+          if (!name) return this.json(res, { ok: false, error: 'name obrigatório' }, 400);
+          const matches = this.app.profileBook.resolveByName(name);
+          return this.json(res, { ok: true, matches: matches.map(m => ({ profile: m.profile, confidence: m.confidence })) });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/profiles/:id/refresh — força atualização IA
+      if (method === 'POST' && pathname.endsWith('/refresh') && pathname.startsWith('/api/profiles/')) {
+        const id = decodeURIComponent(pathname.slice('/api/profiles/'.length, -'/refresh'.length));
+        try {
+          const ok = await this.app.profileBook.updateProfileWithAI(id);
+          return this.json(res, { ok, profile: this.app.profileBook.get(id) });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // PUT /api/profiles/:id — update manual (full replace dos campos)
+      if (method === 'PUT' && pathname.startsWith('/api/profiles/')) {
+        const id = decodeURIComponent(pathname.slice('/api/profiles/'.length));
+        try {
+          const body = await this.readJsonBody(req);
+          const profile = this.app.profileBook.updateManually(id, body || {});
+          if (!profile) return this.json(res, { ok: false, error: 'perfil não encontrado' }, 404);
+          return this.json(res, { ok: true, profile });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // DELETE /api/profiles/:id
+      if (method === 'DELETE' && pathname.startsWith('/api/profiles/')) {
+        const id = decodeURIComponent(pathname.slice('/api/profiles/'.length));
+        const removed = this.app.profileBook.remove(id);
+        return this.json(res, { ok: removed });
+      }
+
+      // ======================================================================
       // STICKERS  (GET /api/stickers, POST /:filename/name|favorite,
       //            DELETE /:filename)
       // ======================================================================
@@ -599,6 +786,77 @@ export class ControlPanel {
       // GET /api/stickers
       if (method === 'GET' && pathname === '/api/stickers') {
         return this.json(res, { stickers: this.buildStickerList() });
+      }
+
+      // POST /api/stickers/merge-duplicates — encontra figurinhas com mesmo conteúdo (hash) e une
+      if (method === 'POST' && pathname === '/api/stickers/merge-duplicates') {
+        try {
+          const vaultDir = this.app.dataPath('stickers-vault');
+          const meta = this.app.stickers.loadMeta();
+          let files: string[] = [];
+          try {
+            files = fs.readdirSync(vaultDir).filter(f => /\.(webp|png|jpg|jpeg)$/.test(f));
+          } catch {
+            return this.json(res, { ok: false, error: 'vault não encontrado' });
+          }
+
+          // Agrupa por hash
+          const hashMap = new Map<string, string[]>(); // hash → [filename, ...]
+          for (const filename of files) {
+            try {
+              const buf = fs.readFileSync(path.join(vaultDir, filename));
+              const crypto = require('node:crypto');
+              const hash = crypto.createHash('sha256').update(buf).digest('hex');
+              if (!hashMap.has(hash)) hashMap.set(hash, []);
+              hashMap.get(hash)!.push(filename);
+            } catch { /* ignora */ }
+          }
+
+          // Pra cada grupo com 2+ arquivos, mantém o primeiro e deleta os outros
+          // (transfere metadados: nome + favorita pro que fica)
+          let merged = 0;
+          let deleted = 0;
+          for (const [hash, filenames] of hashMap) {
+            if (filenames.length < 2) continue;
+
+            // Escolhe o "sobrevivente": prefere o que tem nome ou favorita
+            let survivor = filenames[0];
+            for (const f of filenames) {
+              const m = meta[f];
+              if (m && (m.name || m.favorite)) {
+                survivor = f;
+                break;
+              }
+            }
+
+            // Transfere metadados dos outros pro sobrevivente
+            for (const f of filenames) {
+              if (f === survivor) continue;
+              const m = meta[f];
+              if (m) {
+                if (m.name && !meta[survivor]?.name) {
+                  this.app.stickers.setMeta(survivor, { name: m.name });
+                }
+                if (m.favorite && !meta[survivor]?.favorite) {
+                  this.app.stickers.setMeta(survivor, { favorite: true });
+                }
+                // Remove meta do arquivo que vai ser deletado
+                this.app.stickers.removeMeta(f);
+              }
+              // Deleta o arquivo duplicado
+              try {
+                fs.unlinkSync(path.join(vaultDir, f));
+                deleted++;
+              } catch { /* ignora */ }
+            }
+            merged++;
+          }
+
+          this.app.log('PANEL', `merge-duplicates: ${merged} grupo(s) processado(s), ${deleted} arquivo(s) deletado(s)`);
+          return this.json(res, { ok: true, groups: merged, deleted });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
       }
 
       // POST /api/stickers/:filename/name  { name: string }
@@ -652,6 +910,169 @@ export class ControlPanel {
       }
 
       // ======================================================================
+      // CONVERSATIONS (GET /api/conversations) — clone do WhatsApp com decision-log
+      // ======================================================================
+
+      // GET /api/conversations — retorna msgs agrupadas por chat (decision-log + history backfill)
+      if (method === 'GET' && pathname === '/api/conversations') {
+        try {
+          // Usa getConversations(100) que mescla decision-log (tempo real)
+          // + historyLog (backfill de msgs antigas do WhatsApp).
+          const convs = this.app.retroactive.getConversations(100);
+
+          // Busca nomes dos chats via WhatsApp (pode falhar se WA desconectado)
+          let chatNameMap = new Map<string, string>();
+          let chatPhotoMap = new Map<string, string>();
+          try {
+            const chats = await this.app.whatsapp.client.getChats();
+            for (const c of chats as any[]) {
+              const cid = c.id?._serialized || '';
+              if (cid) chatNameMap.set(cid, c.name || c.formattedTitle || cid);
+              // Tenta pegar foto do chat
+              try {
+                const picUrl = await c.getProfilePicUrl();
+                if (picUrl) chatPhotoMap.set(cid, picUrl);
+              } catch { /* ignora */ }
+            }
+          } catch (e) {
+            this.app.debug('PANEL', `conversations: getChats falhou (${(e as Error).message}) — usando chatId como nome`);
+          }
+
+          // Também busca fotos/nomes do ProfileBook (pode ter dados melhores)
+          const profileBookData = this.app.profileBook.load();
+
+          const result = convs.map(conv => {
+            const profile = profileBookData[conv.chatId];
+            const chatName = profile?.name || chatNameMap.get(conv.chatId) || conv.chatId;
+            const photoUrl = profile?.photoUrl || chatPhotoMap.get(conv.chatId);
+            return {
+              chatId: conv.chatId,
+              chatName,
+              isGroup: conv.chatId.endsWith('@g.us'),
+              photoUrl,
+              messages: conv.messages,
+            };
+          });
+
+          this.app.debug('PANEL', `conversations: ${result.length} chat(s), ${result.reduce((s, c) => s + c.messages.length, 0)} msg(s) total`);
+
+          return this.json(res, { conversations: result });
+        } catch (e) {
+          this.app.debug('PANEL', `conversations erro: ${(e as Error).message}`);
+          return this.json(res, { error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/conversations/backfill — re-dispara o backfill de histórico manualmente
+      // Query/body param `force=true` pula a guarda de idempotência e re-busca tudo.
+      if (method === 'POST' && pathname === '/api/conversations/backfill') {
+        try {
+          // Lê "force" de query string (?force=true) ou body JSON ({ force: true })
+          const query = url.searchParams;
+          let force = query.get('force') === 'true' || query.get('force') === '1';
+          if (!force) {
+            // Tenta ler do body (POST pode enviar JSON)
+            const body = await this.readJsonBody(req);
+            if (body && typeof body.force === 'boolean') {
+              force = body.force === true;
+            } else if (body && typeof body.force === 'string') {
+              force = body.force === 'true' || body.force === '1';
+            }
+          }
+
+          this.app.log('PANEL', `backfill manualmente disparado via painel${force ? ' (force=true)' : ''}`);
+          // Roda em background — responde imediatamente com "iniciado"
+          this.app.retroactive.backfillHistory(30, 100, force).catch(e => {
+            this.app.debug('PANEL', `backfill manual falhou: ${(e as Error).message}`);
+          });
+          const msg = force
+            ? 'backfill FORÇADO iniciado — aguarde ~30s e recarregue (historyLog foi limpo e re-buscado)'
+            : 'backfill iniciado em background — aguarde ~30s e recarregue';
+          return this.json(res, { ok: true, message: msg, force });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // ======================================================================
+      // COMMANDS  (GET /api/commands, POST /api/commands/:token, DELETE /api/commands/:token)
+      // Permite ao painel ativar/desativar comandos e mudar opOnly↔public.
+      // Comandos "locked" (admin: /admin, /op, /deop, /ops, /ban, /unban, /banidos)
+      // não podem ser mexidos — setOverride/clearOverride retornam false.
+      // ======================================================================
+
+      // GET /api/commands  — lista todos os comandos com status de override + locked
+      if (method === 'GET' && pathname === '/api/commands') {
+        try {
+          const list = this.app.commands.allWithStatus().map(c => ({
+            name: c.name,
+            aliases: c.aliases,
+            help: c.help || '',
+            opOnly: !!c.opOnly,  // original do código
+            pvOnly: !!c.pvOnly,  // original do código
+            locked: c.locked,  // admin commands — não dá pra mexer
+            disabled: c.isDisabled,  // desativado via override?
+            effectiveOpOnly: c.effectiveOpOnly,  // opOnly efetivo (com override)
+            override: c.override,  // override aplicado (se houver)
+          }));
+          return this.json(res, { commands: list });
+        } catch (e) {
+          return this.json(res, { error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/commands/:token  { disabled?: boolean, opOnly?: boolean }
+      // Seta override. Se comando é locked, retorna 403.
+      if (method === 'POST' && pathname.startsWith('/api/commands/')) {
+        const token = decodeURIComponent(pathname.slice('/api/commands/'.length));
+        if (!token) return this.json(res, { ok: false, error: 'token ausente' }, 400);
+        const body = await this.readJsonBody(req);
+        try {
+          const override: any = {};
+          if (typeof body?.disabled === 'boolean') override.disabled = body.disabled;
+          if (typeof body?.opOnly === 'boolean') override.opOnly = body.opOnly;
+
+          if (Object.keys(override).length === 0) {
+            return this.json(res, { ok: false, error: 'nenhum campo pra setar (disabled ou opOnly)' }, 400);
+          }
+
+          const ok = this.app.commands.setOverride(token, override);
+          if (!ok) {
+            // Comando não existe OU é locked (admin)
+            const def = this.app.commands.lookup(token);
+            if (!def) {
+              return this.json(res, { ok: false, error: 'comando não existe' }, 404);
+            }
+            return this.json(res, { ok: false, error: 'comando travado (admin) — não pode ser mexido' }, 403);
+          }
+          this.app.log('PANEL', `override de comando ${token} setado: ${JSON.stringify(override)}`);
+          return this.json(res, { ok: true });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // DELETE /api/commands/:token  — remove override, volta pro default do código
+      if (method === 'DELETE' && pathname.startsWith('/api/commands/')) {
+        const token = decodeURIComponent(pathname.slice('/api/commands/'.length));
+        if (!token) return this.json(res, { ok: false, error: 'token ausente' }, 400);
+        try {
+          const ok = this.app.commands.clearOverride(token);
+          if (!ok) {
+            const def = this.app.commands.lookup(token);
+            if (!def) {
+              return this.json(res, { ok: false, error: 'comando não existe' }, 404);
+            }
+            return this.json(res, { ok: false, error: 'comando travado (admin) — não pode ser mexido' }, 403);
+          }
+          this.app.log('PANEL', `override de comando ${token} removido — volta pro default`);
+          return this.json(res, { ok: true });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // ======================================================================
       // EVENTS  (GET /api/events)
       // ======================================================================
 
@@ -681,96 +1102,6 @@ export class ControlPanel {
       }
 
       // ======================================================================
-      // TWITTER
-      // ======================================================================
-
-      // GET /api/twitter/status → status do Twitter
-      if (method === 'GET' && pathname === '/api/twitter/status') {
-        try {
-          if (!this.app.twitter) {
-            return this.json(res, { enabled: false, error: 'Twitter não inicializado' });
-          }
-          const cfg = this.app.twitter.getConfig();
-          return this.json(res, {
-            enabled: cfg.enabled,
-            approvalMode: cfg.approvalMode,
-            replyToMentions: cfg.replyToMentions,
-            postIntervalHours: cfg.postIntervalHours,
-            pendingTweets: Array.from(this.app.twitter.pendingTweets.entries()).map(([chatId, t]) => ({
-              chatId,
-              text: t.text || '',
-              hasImage: !!t.imageData,
-            })),
-            pendingCount: this.app.twitter.pendingTweets.size,
-          });
-        } catch (e) {
-          return this.json(res, { error: (e as Error).message }, 500);
-        }
-      }
-
-      // POST /api/twitter/toggle { enabled }
-      if (method === 'POST' && pathname === '/api/twitter/toggle') {
-        try {
-          if (!this.app.twitter) {
-            return this.json(res, { error: 'Twitter não inicializado' }, 400);
-          }
-          const body = await this.readJsonBody(req);
-          const cfg = this.app.twitter.getConfig();
-          cfg.enabled = !!body.enabled;
-          this.app.twitter.saveConfig(cfg);
-          this.app.log('PANEL', `Twitter ${body.enabled ? 'ativado' : 'desativado'} via painel`);
-          return this.json(res, { ok: true, enabled: cfg.enabled });
-        } catch (e) {
-          return this.json(res, { error: (e as Error).message }, 500);
-        }
-      }
-
-      // POST /api/twitter/post — força geração + post agora (fluxo antigo: manda pro WhatsApp)
-      if (method === 'POST' && pathname === '/api/twitter/post') {
-        try {
-          if (!this.app.twitter) {
-            return this.json(res, { error: 'Twitter não inicializado' }, 400);
-          }
-          this.app.twitter.generateAndPostTweet();
-          return this.json(res, { ok: true, message: 'Tweet gerado — se approvalMode, aguarde aprovação no PV' });
-        } catch (e) {
-          return this.json(res, { error: (e as Error).message }, 500);
-        }
-      }
-
-      // POST /api/twitter/generate — gera tweet e retorna pro painel (sem mandar pro WhatsApp)
-      if (method === 'POST' && pathname === '/api/twitter/generate') {
-        try {
-          if (!this.app.twitter) {
-            return this.json(res, { error: 'Twitter não inicializado' }, 400);
-          }
-          const tweet = await this.app.twitter.generateForPanel();
-          if (!tweet) {
-            return this.json(res, { ok: false, error: 'Não consegui gerar tweet (sem contexto de grupo disponível?)' });
-          }
-          return this.json(res, { ok: true, tweet: tweet.text, hasImage: tweet.hasImage });
-        } catch (e) {
-          return this.json(res, { error: (e as Error).message }, 500);
-        }
-      }
-
-      // POST /api/twitter/post-direct — posta direto (sem aprovação no WhatsApp)
-      if (method === 'POST' && pathname === '/api/twitter/post-direct') {
-        try {
-          if (!this.app.twitter) {
-            return this.json(res, { error: 'Twitter não inicializado' }, 400);
-          }
-          const body = await this.readJsonBody(req);
-          if (!body?.text) {
-            return this.json(res, { error: 'text ausente' }, 400);
-          }
-          const result = await this.app.twitter.postDirect(String(body.text));
-          return this.json(res, { ok: result === 'posted', result });
-        } catch (e) {
-          return this.json(res, { error: (e as Error).message }, 500);
-        }
-      }
-
       // ======================================================================
       // OPS & BANNED
       // ======================================================================
@@ -869,7 +1200,8 @@ export class ControlPanel {
         return this.json(res, this.app.brain.getAIConfig());
       }
 
-      // POST /api/ai-config  { model, fallbackModels, apiUrl, apiKey, maxTokens, temperature }
+      // POST /api/ai-config  { model, fallbackModels, apiUrl, apiKey, maxTokens, temperature, audioTranscription }
+      // audioTranscription: { enabled, primaryModel, fallbackModel } — opcional
       if (method === 'POST' && pathname === '/api/ai-config') {
         const body = await this.readJsonBody(req);
         try {
@@ -890,10 +1222,29 @@ export class ControlPanel {
           if (body?.temperature != null && !isNaN(Number(body.temperature))) {
             next.temperature = Number(body.temperature);
           }
+          // === Seção audioTranscription (transcrição de áudios do WhatsApp) ===
+          if (body?.audioTranscription && typeof body.audioTranscription === 'object') {
+            const at = body.audioTranscription;
+            const current = existing.audioTranscription || {};
+            next.audioTranscription = {
+              enabled: typeof at.enabled === 'boolean' ? at.enabled : (current.enabled ?? true),
+              primaryModel: typeof at.primaryModel === 'string' && at.primaryModel.trim()
+                ? at.primaryModel.trim()
+                : (current.primaryModel || 'gemini-3.5-flash-lite'),
+              fallbackModel: typeof at.fallbackModel === 'string' && at.fallbackModel.trim()
+                ? at.fallbackModel.trim()
+                : (current.fallbackModel || 'gemini-3.1-flash-lite'),
+            };
+          }
           fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf8');
           // Invalida cache do Brain — próxima chamada de getAIConfig() re-lê.
           this.app.brain.aiConfigCacheTime = 0;
-          this.app.log('PANEL', `AI config atualizada via painel — model=${next.model} fallbacks=${(next.fallbackModels || []).length}`);
+          // Invalida também o cache do AudioTranscriber (se instanciado)
+          if (this.app.audioTranscriber) {
+            this.app.audioTranscriber.invalidateConfigCache();
+          }
+          const audioLog = next.audioTranscription ? ` audio=${next.audioTranscription.enabled ? 'on' : 'off'}(${next.audioTranscription.primaryModel})` : '';
+          this.app.log('PANEL', `AI config atualizada via painel — model=${next.model} fallbacks=${(next.fallbackModels || []).length}${audioLog}`);
           return this.json(res, { ok: true });
         } catch (e) {
           return this.json(res, { ok: false, error: (e as Error).message }, 500);
@@ -946,10 +1297,85 @@ export class ControlPanel {
       }
 
       // ======================================================================
-      // BACKUP / RESTORE  (GET /api/backup, POST /api/restore)
+      // EXPORT / IMPORT (sistema unificado — escolhe o que exportar/importar)
       // ======================================================================
 
-      // GET /api/backup  — JSON com todos os arquivos de data/ (exceto stickers-vault)
+      // GET /api/export/components — lista componentes disponíveis com info
+      if (method === 'GET' && pathname === '/api/export/components') {
+        try {
+          const components = this.buildExportComponentsList();
+          return this.json(res, { components });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/export — gera backup seletivo
+      // Body: { components: ['memories', 'directives', ...] }
+      // Retorna JSON completo (download direto) no formato .marcio.json
+      if (method === 'POST' && pathname === '/api/export') {
+        try {
+          const body = await this.readJsonBody(req);
+          const requested: string[] = Array.isArray(body?.components) ? body.components : [];
+          if (requested.length === 0) {
+            return this.json(res, { ok: false, error: 'nenhum componente selecionado' }, 400);
+          }
+          const pkg = this.buildExportPackage(requested);
+          if (pkg.errors.length > 0 && pkg.data === null) {
+            return this.json(res, { ok: false, error: 'todos os componentes falharam', details: pkg.errors }, 500);
+          }
+          const fullPkg = {
+            format: 'marcio-backup',
+            version: 2,
+            createdAt: new Date().toISOString(),
+            appVersion: '1.0.0',
+            components: pkg.exported,
+            data: pkg.data || {},
+            errors: pkg.errors,
+          };
+          const bodyStr = JSON.stringify(fullPkg, null, 2);
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Disposition': `attachment; filename="marcio-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json"`,
+            'Cache-Control': 'no-store',
+          });
+          res.end(bodyStr);
+          this.app.log('PANEL', `export: ${pkg.exported.length} componente(s) — ${pkg.exported.join(', ')}`);
+          return;
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/import — restaura backup seletivo
+      // Aceita: JSON direto, multipart/form-data com file, ou envelope antigo {files}
+      // Body implícito: o pacote .marcio.json completo
+      // Query: ?components=memories,directives (opcional — filtra o que restaurar)
+      if (method === 'POST' && pathname === '/api/import') {
+        try {
+          const parsed = await this.readRestoreBody(req);
+          if (!parsed || typeof parsed !== 'object') {
+            return this.json(res, { ok: false, error: 'JSON inválido' }, 400);
+          }
+          // Determina quais componentes restaurar
+          const url2 = new URL(req.url || '/', 'http://localhost');
+          const filterParam = url2.searchParams.get('components');
+          const filter: string[] | null = filterParam
+            ? filterParam.split(',').map(s => s.trim()).filter(Boolean)
+            : null;
+          const result = this.applyImportPackage(parsed, filter);
+          this.app.log('PANEL', `import: ${result.applied.length} componente(s) restaurado(s) — ${result.applied.join(', ') || 'nenhum'}`);
+          return this.json(res, { ok: true, ...result });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // ======================================================================
+      // LEGACY ENDPOINTS (compatibilidade — redirecionam pros novos)
+      // ======================================================================
+
+      // GET /api/backup — legacy: exporta tudo (formato antigo {files})
       if (method === 'GET' && pathname === '/api/backup') {
         try {
           const files = this.collectBackupFiles();
@@ -970,8 +1396,7 @@ export class ControlPanel {
         }
       }
 
-      // POST /api/restore  — JSON { files: {name:base64} } OU multipart/form-data
-      // (UI envia FormData com arquivo de backup baixado anteriormente).
+      // POST /api/restore — legacy: restaura tudo do envelope {files}
       if (method === 'POST' && pathname === '/api/restore') {
         try {
           const parsed = await this.readRestoreBody(req);
@@ -981,7 +1406,6 @@ export class ControlPanel {
           const files: Record<string, string> = parsed.files;
           let count = 0;
           for (const [name, b64] of Object.entries(files)) {
-            // Sanitiza nome — não permite .. ou path absoluto
             if (!name || /[\\/]|\.\./.test(name)) continue;
             const target = this.app.dataPath(name);
             try {
@@ -992,9 +1416,8 @@ export class ControlPanel {
               this.app.debug('PANEL', `restore: falha ao escrever ${name}: ${(e as Error).message}`);
             }
           }
-          // Invalida cache do Brain pra recarregar config restaurada
           this.app.brain.aiConfigCacheTime = 0;
-          this.app.log('PANEL', `restore: ${count} arquivo(s) restaurado(s)`);
+          this.app.log('PANEL', `restore (legacy): ${count} arquivo(s) restaurado(s)`);
           return this.json(res, { ok: true, count });
         } catch (e) {
           return this.json(res, { ok: false, error: (e as Error).message }, 500);
@@ -1019,11 +1442,60 @@ export class ControlPanel {
     const filePath = path.join(this.publicDir, 'index.html');
     try {
       const html = fs.readFileSync(filePath, 'utf8');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      // Cache-Control agressivo: no-store + no-cache + must-revalidate.
+      // Sem isso, o Edge/Tauri WebView2 cacheia o HTML e o usuário roda
+      // versão velha mesmo depois de atualizar o arquivo no disco.
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
       res.end(html);
     } catch (e) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(`index.html não encontrado em ${filePath}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Serve um arquivo estático do publicDir (chart.min.js, /js/*, /css/*).
+   * Path traversal protegido — normaliza e checa que está dentro do publicDir.
+   */
+  private serveStaticFile(pathname: string, res: ServerResponse): void {
+    // Sanitiza pathname — remove leading slash, previne path traversal
+    const clean = pathname.replace(/^\/+/, '').replace(/\.\./g, '').replace(/\\/g, '');
+    if (!clean) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end('invalid path');
+      return;
+    }
+    const filePath = path.join(this.publicDir, clean);
+    // Verifica que está dentro do publicDir (path traversal guard)
+    if (!filePath.startsWith(this.publicDir)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('forbidden');
+      return;
+    }
+    try {
+      const buf = fs.readFileSync(filePath);
+      // Determina Content-Type pela extensão
+      const ext = path.extname(filePath).toLowerCase();
+      const ct = ext === '.js' ? 'application/javascript; charset=utf-8'
+        : ext === '.css' ? 'text/css; charset=utf-8'
+        : ext === '.json' ? 'application/json; charset=utf-8'
+        : ext === '.png' ? 'image/png'
+        : ext === '.svg' ? 'image/svg+xml'
+        : 'application/octet-stream';
+      res.writeHead(200, {
+        'Content-Type': ct,
+        'Cache-Control': 'public, max-age=3600',
+        'Content-Length': buf.length,
+      });
+      res.end(buf);
+    } catch (e) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`arquivo não encontrado: ${clean}: ${(e as Error).message}`);
     }
   }
 
@@ -1309,10 +1781,10 @@ export class ControlPanel {
         // vault dir não existe → sem figurinhas
         return [];
       }
-      // Ordena por nome (timestamp crescente) — mais antigo primeiro.
-      files.sort();
-      // Cap em 50
-      const capped = files.slice(0, 50);
+      // Ordena por nome (timestamp decrescente) — mais recente primeiro.
+      files.sort().reverse();
+      // Cap em 100 (aumentado de 50 pra 100)
+      const capped = files.slice(0, 100);
       return capped.map(filename => {
         let thumbnail: string | null = null;
         try {
@@ -1425,7 +1897,7 @@ export class ControlPanel {
     try {
       const entries = fs.readdirSync(dataDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.isDirectory()) continue;  // pula subdirs (stickers-vault, etc.)
+        if (entry.isDirectory()) continue;
         if (!entry.isFile()) continue;
         const full = path.join(dataDir, entry.name);
         try {
@@ -1439,6 +1911,403 @@ export class ControlPanel {
       this.app.debug('PANEL', `backup: erro ao ler dataDir: ${(e as Error).message}`);
     }
     return out;
+  }
+
+  // ===========================================================================
+  // EXPORT / IMPORT — componentes granulares
+  // ===========================================================================
+
+  /**
+   * Lista os componentes disponíveis para export/import, com info útil
+   * (nome, descrição, contagem/tamanho, se existe).
+   * Cada componente sabe ler seu próprio data file e retornar um resumo.
+   */
+  private buildExportComponentsList(): Array<{
+    id: string;
+    label: string;
+    description: string;
+    icon: string;
+    count: number;
+    sizeBytes: number;
+    available: boolean;
+  }> {
+    const comps: Array<{ id: string; label: string; description: string; icon: string; count: number; sizeBytes: number; available: boolean }> = [];
+
+    // Helper: lê um JSON de data/ e retorna {count, sizeBytes, available}
+    const info = (filename: string, countFn: (data: any) => number): { count: number; sizeBytes: number; available: boolean } => {
+      try {
+        const full = this.app.dataPath(filename);
+        if (!fs.existsSync(full)) return { count: 0, sizeBytes: 0, available: false };
+        const buf = fs.readFileSync(full);
+        let parsed: any;
+        try { parsed = JSON.parse(buf.toString('utf8')); } catch { parsed = null; }
+        const count = parsed ? countFn(parsed) : 0;
+        return { count, sizeBytes: buf.length, available: true };
+      } catch {
+        return { count: 0, sizeBytes: 0, available: false };
+      }
+    };
+
+    // memories
+    {
+      const i = info('memories.json', d => {
+        let n = 0;
+        for (const k of Object.keys(d)) if (Array.isArray(d[k])) n += d[k].length;
+        return n;
+      });
+      comps.push({ id: 'memories', label: 'Memórias', description: 'Fatos permanentes sobre pessoas', icon: '🧠', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // directives
+    {
+      const i = info('directives.json', d => Array.isArray(d) ? d.length : 0);
+      comps.push({ id: 'directives', label: 'Diretivas', description: 'Regras de comportamento da IA', icon: '📜', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // system-prompt
+    {
+      let size = 0, available = false;
+      try {
+        const full = this.app.dataPath('system-prompt.txt');
+        if (fs.existsSync(full)) { size = fs.statSync(full).size; available = true; }
+      } catch { /* ignora */ }
+      comps.push({ id: 'system-prompt', label: 'System Prompt', description: 'Personalidade base do Márcio', icon: '📝', count: 1, sizeBytes: size, available });
+    }
+    // ai-config
+    {
+      const i = info('ai-config.json', () => 1);
+      comps.push({ id: 'ai-config', label: 'Config IA', description: 'Modelo, API key, fallbacks', icon: '🤖', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // ops
+    {
+      const i = info('ops.json', d => Array.isArray(d) ? d.length : 0);
+      comps.push({ id: 'ops', label: 'Operadores', description: 'Lista de ops (permissões)', icon: '👑', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // banned
+    {
+      const i = info('banned.json', d => Array.isArray(d) ? d.length : 0);
+      comps.push({ id: 'banned', label: 'Banidos', description: 'Lista de usuários banidos', icon: '🚫', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // chat-profiles
+    {
+      const i = info('chat-profiles.json', d => Object.keys(d || {}).length);
+      comps.push({ id: 'chat-profiles', label: 'Perfis de chat', description: 'Estilo aprendido por chat', icon: '👥', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // stickers-meta
+    {
+      const i = info('stickers-meta.json', d => Object.keys(d || {}).length);
+      comps.push({ id: 'stickers-meta', label: 'Metadados de figurinhas', description: 'Nomes e favoritas (sem as imagens)', icon: '🎭', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // stickers-vault (imagens — opcional, pesado)
+    {
+      let count = 0, size = 0, available = false;
+      try {
+        const vaultDir = this.app.dataPath('stickers-vault');
+        if (fs.existsSync(vaultDir)) {
+          available = true;
+          const files = fs.readdirSync(vaultDir).filter(f => /\.(webp|png|jpg|jpeg)$/i.test(f));
+          count = files.length;
+          for (const f of files) {
+            try { size += fs.statSync(path.join(vaultDir, f)).size; } catch { /* ignora */ }
+          }
+        }
+      } catch { /* ignora */ }
+      comps.push({ id: 'stickers-vault', label: 'Figurinhas (imagens)', description: 'Arquivos de imagem do vault — pesado', icon: '🖼️', count, sizeBytes: size, available });
+    }
+    // decision-log
+    {
+      const i = info('decision-log.json', d => {
+        let n = 0;
+        for (const k of Object.keys(d)) if (Array.isArray(d[k])) n += d[k].length;
+        return n;
+      });
+      comps.push({ id: 'decision-log', label: 'Log de decisões', description: 'Mensagens processadas (retroativo)', icon: '♻️', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // chat-settings
+    {
+      const i = info('chat-settings.json', d => Object.keys(d || {}).length);
+      comps.push({ id: 'chat-settings', label: 'Settings de chat', description: 'IA on/off e entrosão por chat', icon: '⚙️', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+    // events
+    {
+      const i = info('events.json', d => Array.isArray(d) ? d.length : 0);
+      comps.push({ id: 'events', label: 'Eventos agendados', description: 'Lembretes e eventos futuros', icon: '📅', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
+
+    return comps;
+  }
+
+  /**
+   * Monta o pacote de exportação com os componentes solicitados.
+   * Cada componente vira uma key em `data` com seu conteúdo (JSON parseado
+   * ou string, dependendo do tipo).
+   */
+  private buildExportPackage(requested: string[]): { exported: string[]; data: Record<string, any> | null; errors: string[] } {
+    const data: Record<string, any> = {};
+    const exported: string[] = [];
+    const errors: string[] = [];
+
+    const readJson = (filename: string): any | null => {
+      try {
+        const full = this.app.dataPath(filename);
+        if (!fs.existsSync(full)) return null;
+        return JSON.parse(fs.readFileSync(full, 'utf8'));
+      } catch (e) {
+        errors.push(`${filename}: ${(e as Error).message}`);
+        return null;
+      }
+    };
+    const readText = (filename: string): string | null => {
+      try {
+        const full = this.app.dataPath(filename);
+        if (!fs.existsSync(full)) return null;
+        return fs.readFileSync(full, 'utf8');
+      } catch (e) {
+        errors.push(`${filename}: ${(e as Error).message}`);
+        return null;
+      }
+    };
+
+    for (const comp of requested) {
+      try {
+        switch (comp) {
+          case 'memories': {
+            const d = readJson('memories.json');
+            if (d !== null) { data.memories = d; exported.push(comp); }
+            else errors.push('memories: arquivo não encontrado');
+            break;
+          }
+          case 'directives': {
+            const d = readJson('directives.json');
+            if (d !== null) { data.directives = d; exported.push(comp); }
+            else errors.push('directives: arquivo não encontrado');
+            break;
+          }
+          case 'system-prompt': {
+            const d = readText('system-prompt.txt');
+            if (d !== null) { data['system-prompt'] = d; exported.push(comp); }
+            else errors.push('system-prompt: arquivo não encontrado');
+            break;
+          }
+          case 'ai-config': {
+            const d = readJson('ai-config.json');
+            if (d !== null) { data['ai-config'] = d; exported.push(comp); }
+            else errors.push('ai-config: arquivo não encontrado');
+            break;
+          }
+          case 'ops': {
+            const d = readJson('ops.json');
+            if (d !== null) { data.ops = d; exported.push(comp); }
+            else errors.push('ops: arquivo não encontrado');
+            break;
+          }
+          case 'banned': {
+            const d = readJson('banned.json');
+            if (d !== null) { data.banned = d; exported.push(comp); }
+            else errors.push('banned: arquivo não encontrado');
+            break;
+          }
+          case 'chat-profiles': {
+            const d = readJson('chat-profiles.json');
+            if (d !== null) { data['chat-profiles'] = d; exported.push(comp); }
+            else errors.push('chat-profiles: arquivo não encontrado');
+            break;
+          }
+          case 'stickers-meta': {
+            const d = readJson('stickers-meta.json');
+            if (d !== null) { data['stickers-meta'] = d; exported.push(comp); }
+            else errors.push('stickers-meta: arquivo não encontrado');
+            break;
+          }
+          case 'stickers-vault': {
+            // Lê todas as imagens do vault como { filename: base64 }
+            const vaultDir = this.app.dataPath('stickers-vault');
+            const imgs: Record<string, string> = {};
+            try {
+              const files = fs.readdirSync(vaultDir).filter(f => /\.(webp|png|jpg|jpeg)$/i.test(f));
+              for (const f of files) {
+                try {
+                  const buf = fs.readFileSync(path.join(vaultDir, f));
+                  imgs[f] = buf.toString('base64');
+                } catch { /* ignora individual */ }
+              }
+              if (Object.keys(imgs).length > 0) {
+                data['stickers-vault'] = imgs;
+                exported.push(comp);
+              } else {
+                errors.push('stickers-vault: vault vazio ou não encontrado');
+              }
+            } catch (e) {
+              errors.push(`stickers-vault: ${(e as Error).message}`);
+            }
+            break;
+          }
+          case 'decision-log': {
+            const d = readJson('decision-log.json');
+            if (d !== null) { data['decision-log'] = d; exported.push(comp); }
+            else errors.push('decision-log: arquivo não encontrado');
+            break;
+          }
+          case 'chat-settings': {
+            const d = readJson('chat-settings.json');
+            if (d !== null) { data['chat-settings'] = d; exported.push(comp); }
+            else errors.push('chat-settings: arquivo não encontrado');
+            break;
+          }
+          case 'events': {
+            const d = readJson('events.json');
+            if (d !== null) { data.events = d; exported.push(comp); }
+            else errors.push('events: arquivo não encontrado');
+            break;
+          }
+          default:
+            errors.push(`componente desconhecido: ${comp}`);
+        }
+      } catch (e) {
+        errors.push(`${comp}: ${(e as Error).message}`);
+      }
+    }
+
+    return { exported, data: exported.length > 0 ? data : null, errors };
+  }
+
+  /**
+   * Aplica um pacote de importação (.marcio.json) ao bot.
+   * Se `filter` for informado, só restaura esses componentes (ignora outros).
+   * Cada componente é gravado no data/ correspondente.
+   * Invalida caches relevantes (Brain AI config, Memory, Profile).
+   */
+  private applyImportPackage(pkg: any, filter: string[] | null): { applied: string[]; skipped: string[]; errors: string[] } {
+    const applied: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
+    if (!pkg || typeof pkg !== 'object') {
+      throw new Error('pacote inválido');
+    }
+    // Detecta formato: novo (pkg.data = {...}) ou legado (pkg.files = {name: base64})
+    const isLegacy = pkg.files && typeof pkg.files === 'object' && !pkg.data;
+    const data = isLegacy ? null : (pkg.data || {});
+
+    if (isLegacy) {
+      // Formato legado {files: {name: base64}} — restaura tudo direto
+      const files: Record<string, string> = pkg.files;
+      let count = 0;
+      for (const [name, b64] of Object.entries(files)) {
+        if (!name || /[\\/]|\.\./.test(name)) continue;
+        try {
+          const target = this.app.dataPath(name);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.writeFileSync(target, Buffer.from(b64 as string, 'base64'));
+          count++;
+        } catch (e) {
+          errors.push(`${name}: ${(e as Error).message}`);
+        }
+      }
+      this.app.brain.aiConfigCacheTime = 0;
+      this.app.memory['cache'] = null;  // invalida cache de memórias
+      return { applied: [`legacy (${count} arquivos)`], skipped: [], errors };
+    }
+
+    // Formato novo — restaura componente por componente
+    const allComps = Object.keys(data);
+    const compsToApply = filter ? allComps.filter(c => filter.includes(c)) : allComps;
+
+    const writeJson = (filename: string, content: any): boolean => {
+      try {
+        const target = this.app.dataPath(filename);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, JSON.stringify(content, null, 2), 'utf8');
+        return true;
+      } catch (e) {
+        errors.push(`${filename}: ${(e as Error).message}`);
+        return false;
+      }
+    };
+    const writeText = (filename: string, content: string): boolean => {
+      try {
+        const target = this.app.dataPath(filename);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, content, 'utf8');
+        return true;
+      } catch (e) {
+        errors.push(`${filename}: ${(e as Error).message}`);
+        return false;
+      }
+    };
+
+    for (const comp of compsToApply) {
+      const content = data[comp];
+      if (content === undefined || content === null) {
+        skipped.push(comp);
+        continue;
+      }
+      try {
+        switch (comp) {
+          case 'memories':
+            if (writeJson('memories.json', content)) { applied.push(comp); this.app.memory['cache'] = null; }
+            break;
+          case 'directives':
+            if (writeJson('directives.json', content)) applied.push(comp);
+            break;
+          case 'system-prompt':
+            if (writeText('system-prompt.txt', String(content))) { applied.push(comp); this.app.brain.aiConfigCacheTime = 0; }
+            break;
+          case 'ai-config':
+            if (writeJson('ai-config.json', content)) { applied.push(comp); this.app.brain.aiConfigCacheTime = 0; }
+            break;
+          case 'ops':
+            if (writeJson('ops.json', content)) applied.push(comp);
+            break;
+          case 'banned':
+            if (writeJson('banned.json', content)) applied.push(comp);
+            break;
+          case 'chat-profiles':
+            if (writeJson('chat-profiles.json', content)) applied.push(comp);
+            break;
+          case 'stickers-meta':
+            if (writeJson('stickers-meta.json', content)) applied.push(comp);
+            break;
+          case 'stickers-vault': {
+            // content = { filename: base64 }
+            if (content && typeof content === 'object') {
+              const vaultDir = this.app.dataPath('stickers-vault');
+              fs.mkdirSync(vaultDir, { recursive: true });
+              let n = 0;
+              for (const [fname, b64] of Object.entries(content)) {
+                if (!fname || /[\\/]|\.\./.test(fname)) continue;
+                try {
+                  fs.writeFileSync(path.join(vaultDir, fname), Buffer.from(b64 as string, 'base64'));
+                  n++;
+                } catch (e) {
+                  errors.push(`stickers-vault/${fname}: ${(e as Error).message}`);
+                }
+              }
+              if (n > 0) applied.push(`stickers-vault (${n} imgs)`);
+            }
+            break;
+          }
+          case 'decision-log':
+            if (writeJson('decision-log.json', content)) applied.push(comp);
+            break;
+          case 'chat-settings':
+            if (writeJson('chat-settings.json', content)) applied.push(comp);
+            break;
+          case 'events':
+            if (writeJson('events.json', content)) applied.push(comp);
+            break;
+          default:
+            skipped.push(comp);
+        }
+      } catch (e) {
+        errors.push(`${comp}: ${(e as Error).message}`);
+      }
+    }
+
+    // Invalida cache de memórias se memories foi restaurado
+    if (applied.some(a => a.startsWith('memories'))) {
+      try { (this.app.memory as any).cache = null; } catch { /* ignora */ }
+    }
+
+    return { applied, skipped, errors };
   }
 
   // ===========================================================================

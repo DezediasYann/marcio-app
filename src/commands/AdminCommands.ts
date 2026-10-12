@@ -142,42 +142,48 @@ export class AdminCommands implements CommandModule {
         aliases: ['!op'],
         handler: (msg, chatId) => this.handleOp(msg, chatId),
         opOnly: true,
-        help: 'concede op a um usuário (responda à msg ou /op <número>).',
+        pvOnly: true,
+        help: 'concede op a um usuário (responda à msg ou /op <número>). Só no PV do bot.',
       },
       {
         name: '/deop',
         aliases: ['!deop'],
         handler: (msg, chatId) => this.handleDeop(msg, chatId),
         opOnly: true,
-        help: 'revoga op de um usuário.',
+        pvOnly: true,
+        help: 'revoga op de um usuário. Só no PV do bot.',
       },
       {
         name: '/ops',
         aliases: ['!ops'],
         handler: (msg, chatId) => this.handleListOps(msg, chatId),
         opOnly: true,
-        help: 'lista os operadores atuais.',
+        pvOnly: true,
+        help: 'lista os operadores atuais. Só no PV do bot.',
       },
       {
         name: '/ban',
         aliases: ['!ban'],
         handler: (msg, chatId) => this.handleBan(msg, chatId),
         opOnly: true,
-        help: 'bane um usuário (responda à msg ou /ban <número>).',
+        pvOnly: true,
+        help: 'bane um usuário (responda à msg ou /ban <número>). Só no PV do bot.',
       },
       {
         name: '/unban',
         aliases: ['/desbanir', '!unban', '!desbanir'],
         handler: (msg, chatId) => this.handleUnban(msg, chatId),
         opOnly: true,
-        help: 'desbane um usuário.',
+        pvOnly: true,
+        help: 'desbane um usuário. Só no PV do bot.',
       },
       {
         name: '/banidos',
         aliases: ['!banidos'],
         handler: (msg, chatId) => this.handleListBanned(msg, chatId),
         opOnly: true,
-        help: 'lista os usuários banidos.',
+        pvOnly: true,
+        help: 'lista os usuários banidos. Só no PV do bot.',
       },
     ];
   }
@@ -290,7 +296,6 @@ export class AdminCommands implements CommandModule {
 
   private async adminStatus(msg: Message, chatId: string): Promise<void> {
     const iaGlobal = this.app.aiConfig?.enabled ? '✅' : '🛑';
-    const twitterOn = !!(this.app.twitter);
 
     // Últimos 3 grupos ativos
     let recentGroups: BotGroupItem[] = [];
@@ -302,7 +307,7 @@ export class AdminCommands implements CommandModule {
 
     const lines: string[] = [
       `IA: ${iaGlobal} | off: ${this.app.brain.aiDisabledChats.size} | reqs: ${this.app.brain.aiRequestCount}`,
-      `Debug: ${this.app.debugEnabled ? 'on' : 'off'}${this.app.debugFullEnabled ? ' (full)' : ''} | Twitter: ${twitterOn ? 'on' : 'off'}`,
+      `Debug: ${this.app.debugEnabled ? 'on' : 'off'}${this.app.debugFullEnabled ? ' (full)' : ''}`,
     ];
 
     if (recentGroups.length > 0) {
@@ -729,12 +734,11 @@ export class AdminCommands implements CommandModule {
     const namedStickers = this.app.stickers.listNamed().length;
     const directives = this.app.directives.all().length;
     const chatsWithCtx = this.app.context.activeChatIds().length;
-    const twitterOn = !!(this.app.twitter);
 
     const lines = [
       `IA: ${this.app.brain.aiRequestCount} reqs | ${chatsWithCtx} chats | ${this.app.brain.aiDisabledChats.size} off`,
       `${totalStickers} figurinhas | ${namedStickers} marcadas | ${directives} diretivas | ${this.formatUptime()}`,
-      `Debug: ${this.app.debugEnabled ? 'on' : 'off'}${this.app.debugFullEnabled ? ' (full)' : ''} | Twitter: ${twitterOn ? 'on' : 'off'} | IA: ${this.app.aiConfig?.enabled ? 'on' : 'off'}`,
+      `Debug: ${this.app.debugEnabled ? 'on' : 'off'}${this.app.debugFullEnabled ? ' (full)' : ''} | IA: ${this.app.aiConfig?.enabled ? 'on' : 'off'}`,
     ];
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);

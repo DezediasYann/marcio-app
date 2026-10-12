@@ -777,8 +777,8 @@ export class AssistiveCommands implements CommandModule {
 
   /**
    * Chama a API de IA diretamente (não passa pelo brain.generateResponse —
-   * isso é pra contexto de chat com perfil/diretivas). Réplica do padrão do
-   * TwitterBot.callGeminiForTweet, mas sem suporte a imagens (busca não precisa).
+   * isso é pra contexto de chat com perfil/diretivas). Sem suporte a imagens
+   * (busca não precisa).
    *
    * Suporta:
    *  - Gemini (Google AI Studio): systemInstruction + contents.

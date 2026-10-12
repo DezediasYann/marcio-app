@@ -259,14 +259,14 @@ export class StickerCommands implements CommandModule {
         await this.app.react(msg, EMOJI.SUCCESS);
         return;
       }
-      const parts = named.map(s => {
+      const lines = named.map((s, i) => {
         const marks: string[] = [];
         if (s.name) marks.push(s.name);
         if (s.favorite) marks.push('⭐');
-        return marks.join(' ');
+        return `${i + 1}. ${marks.join(' ')}`;
       });
       const favCount = named.filter(s => s.favorite).length;
-      await this.app.notify(chatId, `${parts.join(' | ')} | fav: ${favCount}`);
+      await this.app.notify(chatId, `${lines.join('\n')}\n\n${named.length} figurinha(s) | ${favCount} favorita(s)`);
       await this.app.react(msg, EMOJI.SUCCESS);
       return;
     }

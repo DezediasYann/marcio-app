@@ -10,8 +10,7 @@
  *  2. Filtro de msg antiga (timestamp < startup - 10s)
  *  3. Sticker: handleIncoming (salva no vault + ondas/guerras) — ANTES do body check
  *  4. Captura no contexto (texto, figurinha, imagem, quoted, URLs)
- *  5. Twitter approval (se pendingTweets.has(chatId) e body = postar/descartar)
- *  6. Comando? (! ou /):
+ *  5. Comando? (! ou /):
  *     - Atalho // → /admin
  *     - Lookup no registry
  *     - Permission gates (banido, opOnly, pvOnly)
@@ -22,7 +21,6 @@
  *  - this.app.whatsapp — isOwnMessage
  *  - this.app.stickers — handleIncoming
  *  - this.app.context — captureMessage
- *  - this.app.twitter — maybeHandleApproval (Fase 3.5, opcional)
  *  - this.app.permissions — resolveSenderIds, isOp, isBanned
  *  - this.app.commands — lookup
  *  - this.app.brain — maybeAutoRespond
@@ -93,26 +91,66 @@ export class MessageRouter {
       this.app.debug('ROUTER', `erro ao capturar msg no contexto: ${(e as Error).message}`);
     }
 
-    // Se msg sem body (figurinha/áudio) — captura no contexto foi o último passo.
-    // Figurinha pode ter disparado onda/guerra no passo 3. IA não responde a figurinha sem texto.
-    if (!msg.body) {
+    // 4b. Registra no historyLog (em tempo real) pra o painel Conversas
+    // ter histórico mesmo após o decisionLog limpar entries >2h.
+    // Não bloqueia o fluxo se falhar — painel é secundário.
+    try {
+      const msgAny = msg as any;
+      const msgId = msg.id?._serialized || '';
+      const text = msg.body ?? '';
+      const ts = typeof msg.timestamp === 'number' ? msg.timestamp * 1000 : Date.now();
+      let quotedMsgId: string | undefined;
+      try {
+        if (msgAny.hasQuotedMsg && msgAny.quotedMsgId) {
+          quotedMsgId = String(msgAny.quotedMsgId);
+        } else if (msgAny._data?.quotedMsg?.id?._serialized) {
+          quotedMsgId = msgAny._data.quotedMsg.id._serialized;
+        }
+      } catch { /* ignora */ }
+      // senderName vai ser resolvido pelo context.captureMessage acima (que populou o cache).
+      // Tenta lê-lo de forma barata síncrona aqui.
+      let senderName = '';
+      try {
+        // Tenta campos diretos da msg primeiro (mais rápido)
+        senderName = msgAny.author || msgAny.sender?.name || msgAny.sender?.pushname || '';
+        // Se não tem e o profileBook tem, usa o nome dele
+        if (!senderName && msgAny.from) {
+          const profile = this.app.profileBook.get(msgAny.from);
+          if (profile?.name) senderName = profile.name;
+        }
+      } catch { /* ignora */ }
+      if (msgId && this.app.retroactive) {
+        this.app.retroactive.recordIncomingMessage(
+          chatId,
+          msgId,
+          senderName,
+          text,
+          ts,
+          !!msg.fromMe,
+          quotedMsgId,
+        );
+        // Notifica o painel pra fazer auto-refresh (debounce no frontend)
+        if (this.app.control) {
+          this.app.control.broadcast('conversation-update', { chatId, msgId, fromMe: !!msg.fromMe });
+        }
+      }
+    } catch (e) {
+      this.app.debug('ROUTER', `erro ao registrar msg no historyLog: ${(e as Error).message}`);
+    }
+
+    // Se msg sem body (figurinha/áudio sem texto) — captura no contexto foi o último passo.
+    // - Figurinha: já disparou onda/guerra no passo 3. IA não responde a figurinha sem texto.
+    // - Áudio: NÃO pula aqui! Passa pro brain.maybeAutoRespond — o brain decide
+    //   se vai transcrever (baseado em chance/mention/PV) e responder.
+    const isAudioMsg = this.app.audioTranscriber?.isAudioMessage(msg) ?? false;
+    if (!msg.body && !isAudioMsg) {
       return;
     }
 
-    // 5. Twitter approval (se app.twitter existir — Fase 3.5)
-    if (this.app.twitter) {
-      try {
-        const handled = await this.app.twitter.maybeHandleApproval(msg, chatId);
-        if (handled) return;
-      } catch (e) {
-        this.app.debug('ROUTER', `erro no twitter approval: ${(e as Error).message}`);
-      }
-    }
-
-    // 6. Comando? (! ou /)
-    const isCommand = msg.body.startsWith('!') || msg.body.startsWith('/');
+    // 5. Comando? (! ou /) — só faz sentido pra msgs com body
+    const isCommand = msg.body ? (msg.body.startsWith('!') || msg.body.startsWith('/')) : false;
     if (!isCommand) {
-      // 7. Não-comando → IA decide se responde
+      // 7. Não-comando → IA decide se responde (texto OU áudio)
       try {
         await this.app.brain.maybeAutoRespond(msg, chatId);
       } catch (e) {
@@ -131,9 +169,10 @@ export class MessageRouter {
     }
 
     const token = body.split(' ')[0].toLowerCase();
-    const def = this.app.commands.lookup(token);
+    const def = this.app.commands.getEffectiveDef(token);
     if (!def) {
-      // Comando desconhecido — ignora silenciosamente (igual bot velho)
+      // Comando desconhecido OU desativado via override — ignora silenciosamente.
+      // (Comando desativado não manda "comando não existe" pra não confundir o usuário.)
       return;
     }
 
@@ -151,14 +190,14 @@ export class MessageRouter {
         return;
       }
 
-      // opOnly → só ops
-      if (def.opOnly && !senderIsOp) {
+      // effectiveOpOnly → só ops (pode ter vindo do def original OU de override)
+      if (def.effectiveOpOnly && !senderIsOp) {
         this.app.debug('ROUTER', `⛔ ${token} é opOnly, sender não é op`);
         try { await msg.react('❌'); } catch { /* ignora */ }
         return;
       }
 
-      // pvOnly → só no PV do bot
+      // pvOnly → só no PV do bot (NÃO pode ser mudado via override — fica fixo no código)
       if (def.pvOnly && chatId.endsWith('@g.us')) {
         this.app.debug('ROUTER', `⛔ ${token} é pvOnly, chamado em grupo`);
         await this.app.whatsapp.sendMessage(chatId, `${this.app.config.botName}: use este comando no *PV do bot* (não em grupo). 🚫`);

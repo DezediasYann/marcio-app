@@ -269,6 +269,26 @@ export class Context {
       if (this.app.memory) {
         await this.app.memory.maybeExtract(chatId, senderName, text!);
       }
+
+      // ProfileBook — registra msg da pessoa (dispara update IA a cada 15 msgs)
+      if (this.app.profileBook) {
+        try {
+          const senderId = (msg as any).author || msg.from;
+          if (senderId) {
+            this.app.profileBook.recordMessage(senderId, 'person', senderName, chatId);
+          }
+        } catch (e) {
+          this.app.debug('PROFILE', `erro ao registrar msg no ProfileBook: ${(e as Error).message}`);
+        }
+      }
+    }
+
+    // Registra msg do grupo no ProfileBook (se for grupo)
+    if (this.app.profileBook && chatId.endsWith('@g.us') && (textOverride !== undefined || (msg.body && msg.body.trim()))) {
+      try {
+        const groupName = (await msg.getChat()).name || chatId;
+        this.app.profileBook.recordMessage(chatId, 'group', groupName, chatId);
+      } catch { /* ignora */ }
     }
 
     // --- 9. Mantém só as últimas N ---

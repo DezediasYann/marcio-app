@@ -933,6 +933,49 @@
     }
     .conv-msg-quote::before { content: '↪ respondendo: '; opacity: 0.6; }
 
+    /* === Mídia nas conversas (figurinha, imagem) === */
+    .conv-msg-media {
+      margin-top: 4px;
+      max-width: 240px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .conv-msg-media img {
+      display: block;
+      max-width: 100%;
+      max-height: 180px;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+    .conv-msg-media-placeholder {
+      width: 100%;
+      padding: 16px;
+      text-align: center;
+      font-size: 32px;
+      color: var(--text-secondary);
+      opacity: 0.6;
+    }
+    .conv-msg-media-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      background: rgba(0, 0, 0, 0.15);
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-top: 4px;
+      display: inline-block;
+      max-width: 240px;
+      word-break: break-word;
+    }
+    .conv-msg-media-label.sticker {
+      background: rgba(191, 90, 242, 0.12);
+      color: #c98cff;
+    }
+    .conv-msg-media-label.image {
+      background: rgba(48, 209, 88, 0.12);
+      color: #5ad37a;
+    }
+
     /* ================================================================
        PROFILE GRID — cards de perfis (pessoas + grupos)
        ================================================================ */
@@ -1640,6 +1683,185 @@
     [data-feature].feature-hidden {
       display: none !important;
     }
+
+    /* === TOGGLE SWITCH (aceitar beta, etc.) === */
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider.round {
+      position: absolute; cursor: pointer; inset: 0;
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 24px; transition: 0.3s;
+    }
+    .slider.round:before {
+      position: absolute; content: ""; height: 18px; width: 18px;
+      left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.3s;
+    }
+    .switch input:checked + .slider.round {
+      background: linear-gradient(135deg, #a855f7, #ec4899);
+      border-color: transparent;
+    }
+    .switch input:checked + .slider.round:before { transform: translateX(20px); }
+
+    /* === UPDATE WIZARD (tela de download + instalação) === */
+    .update-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 10010;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.3s ease;
+    }
+    .update-modal {
+      background: linear-gradient(135deg, rgba(30, 25, 50, 0.98), rgba(20, 15, 40, 0.98));
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 520px;
+      width: 90vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 60px rgba(168, 85, 247, 0.2);
+      color: #f3e8ff;
+      text-align: center;
+    }
+    .update-icon {
+      font-size: 64px;
+      margin-bottom: 12px;
+      line-height: 1;
+    }
+    .update-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: #fff;
+    }
+    .update-version {
+      font-size: 14px;
+      color: #c084fc;
+      margin: 0 0 16px;
+      font-family: monospace;
+    }
+    .update-notes {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+      max-height: 200px;
+      overflow-y: auto;
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #d8b4fe;
+    }
+    .update-notes h3 {
+      font-size: 14px;
+      margin: 12px 0 6px;
+      color: #fff;
+    }
+    .update-notes ul {
+      margin: 4px 0 8px 20px;
+      padding: 0;
+    }
+    .update-notes li {
+      margin: 2px 0;
+    }
+    .update-progress-section {
+      margin: 24px 0 16px;
+      display: none;
+    }
+    .update-progress-section.active {
+      display: block;
+    }
+    .update-progress-bar-bg {
+      width: 100%;
+      height: 12px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid rgba(168, 85, 247, 0.2);
+    }
+    .update-progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #a855f7, #ec4899);
+      border-radius: 6px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .update-progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #d8b4fe;
+    }
+    .update-progress-percent {
+      font-weight: 700;
+      font-size: 16px;
+      color: #fff;
+    }
+    .update-speed {
+      font-family: monospace;
+    }
+    .update-status-text {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #c084fc;
+      opacity: 0.9;
+    }
+    .update-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .update-btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .update-btn-primary {
+      background: linear-gradient(135deg, #a855f7, #ec4899);
+      color: white;
+    }
+    .update-btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(168, 85, 247, 0.4);
+    }
+    .update-btn-ghost {
+      background: rgba(255, 255, 255, 0.05);
+      color: #d8b4fe;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .update-btn-ghost:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .update-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .update-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
   <script src="/chart.min.js?v=1"></script>
 </head>
@@ -2189,6 +2411,11 @@
                     <span class="val" id="aiTempVal2">1.0</span>
                   </div>
                 </div>
+                <div class="form-row">
+                  <label>Cooldown de figurinha (segundos)</label>
+                  <input type="number" id="aiStickerCooldown" placeholder="60" min="0" max="3600">
+                  <span class="muted small">0 = sem cooldown. Default: 60s.</span>
+                </div>
               </div>
               <div class="row-flex mt-2">
                 <button class="primary" onclick="saveAiConfig()">💾 Salvar configuração</button>
@@ -2446,6 +2673,30 @@
                 <button class="primary" onclick="checkForUpdates()">🔄 Verificar atualizações</button>
               </div>
               <div class="muted small mt-2" id="updateStatus"></div>
+              <div class="form-row row-flex mt-3" style="justify-content:center;align-items:center;gap:8px;">
+                <label class="muted small" for="acceptBetaToggle" style="cursor:pointer;">
+                  Aceitar versões <strong>beta</strong> (instáveis)
+                </label>
+                <label class="switch" style="display:inline-flex;align-items:center;">
+                  <input type="checkbox" id="acceptBetaToggle" onchange="toggleAcceptBeta(this.checked)">
+                  <span class="slider round"></span>
+                </label>
+              </div>
+              <div class="muted small mt-1" style="max-width:380px;margin:4px auto 0;">
+                💡 Se ativado, o updater também busca versões beta (pré-release). Versões beta podem ter bugs.
+              </div>
+              <div class="form-row row-flex mt-2" style="justify-content:center;align-items:center;gap:8px;">
+                <label class="muted small" for="acceptSecretToggle" style="cursor:pointer;">
+                  Aceitar <strong>menu secreto</strong> (Konami code)
+                </label>
+                <label class="switch" style="display:inline-flex;align-items:center;">
+                  <input type="checkbox" id="acceptSecretToggle" onchange="toggleAcceptSecret(this.checked)">
+                  <span class="slider round"></span>
+                </label>
+              </div>
+              <div class="muted small mt-1" style="max-width:380px;margin:4px auto 0;">
+                💡 Ativa o menu secreto de testes: <kbd>↑↑↓↓←→←→BA</kbd> ou 7 cliques no logo.
+              </div>
             </div>
 
             <div class="card mt-3" style="padding:16px;text-align:center;">
@@ -3223,6 +3474,8 @@
       // Também carrega a identidade do bot (nome + aliases + avatar)
       loadBotConfig();
       loadBotAvatar();
+      // Carrega config de update (aceitar beta)
+      loadUpdateSettings();
     }
 
     // === Identidade do Bot (nome + aliases) ===
@@ -4186,6 +4439,13 @@
       conv.messages.forEach(m => { if (m.msgId) msgMap.set(m.msgId, m); });
 
       try {
+        // Debug: conta mensagens com mídia
+        const mediaMsgs = conv.messages.filter(m => m.mediaType);
+        if (mediaMsgs.length > 0) {
+          dbg('CONV', `render: ${mediaMsgs.length} msg(s) com mídia (tipos: ${mediaMsgs.map(m => m.mediaType).join(', ')})`);
+        } else {
+          dbg('CONV', `render: 0 msgs com mídia (de ${conv.messages.length} total) — msgs antigas não têm mediaType`);
+        }
         el.innerHTML = conv.messages.map(m => {
           // Detecta se é o bot: fromMe=true OU senderName vazio (padrão do bot).
           const isBot = m.fromMe === true || m.senderName === '';
@@ -4221,6 +4481,44 @@
             }
           }
 
+          // === MÍDIA (figurinha, imagem) ===
+          // Se a msg tem mediaType, renderiza thumbnail + label discreto
+          let mediaHtml = '';
+          if (m.mediaType === 'sticker' || m.mediaType === 'image') {
+            const isSticker = m.mediaType === 'sticker';
+            // Thumbnail (se tiver)
+            let thumbHtml = '';
+            if (m.mediaThumbnail) {
+              thumbHtml = `<div class="conv-msg-media"><img src="${escapeHtml(m.mediaThumbnail)}" alt="${isSticker ? 'figurinha' : 'imagem'}" loading="lazy"></div>`;
+            } else {
+              // Placeholder (mídia grande ou não baixada ainda)
+              thumbHtml = `<div class="conv-msg-media"><div class="conv-msg-media-placeholder">${isSticker ? '🎭' : '🖼️'}</div></div>`;
+            }
+            // Label discreto
+            let labelHtml = '';
+            if (isSticker && m.stickerName) {
+              labelHtml = `<div class="conv-msg-media-label sticker">🎭 ${escapeHtml(m.stickerName)}</div>`;
+            } else if (!isSticker && m.imageDescription) {
+              labelHtml = `<div class="conv-msg-media-label image">🖼️ ${escapeHtml(m.imageDescription)}</div>`;
+            } else if (isSticker) {
+              labelHtml = `<div class="conv-msg-media-label sticker">🎭 figurinha</div>`;
+            } else {
+              labelHtml = `<div class="conv-msg-media-label image">🖼️ imagem</div>`;
+            }
+            mediaHtml = thumbHtml + labelHtml;
+          } else if (m.mediaType === 'video') {
+            mediaHtml = `<div class="conv-msg-media-label">🎬 vídeo</div>`;
+          } else if (m.mediaType === 'document') {
+            mediaHtml = `<div class="conv-msg-media-label">📄 documento</div>`;
+          } else if (m.mediaType === 'ptt' || m.mediaType === 'audio') {
+            // Áudio já tem badge próprio no header — não mostra mídia extra
+          }
+
+          // Texto da msg (pode ser vazio se for figurinha sem legenda)
+          const textHtml = m.text && m.text.trim().length > 0
+            ? `<div class="conv-msg-text${m.isAudio ? ' conv-msg-text-audio' : ''}">${escapeHtml(m.text)}</div>`
+            : '';
+
           return `<div class="conv-msg ${isBot ? 'bot' : 'user'}">
             <div class="conv-msg-header">
               <span class="conv-msg-sender" style="color:${senderColor};">${escapeHtml(senderDisplay)}</span>
@@ -4229,7 +4527,8 @@
               ${decisionBadge}
             </div>
             ${quoteHtml}
-            <div class="conv-msg-text${m.isAudio ? ' conv-msg-text-audio' : ''}">${escapeHtml(m.text)}</div>
+            ${mediaHtml}
+            ${textHtml}
           </div>`;
         }).join('');
         // Scroll pro final
@@ -4405,6 +4704,7 @@
         $('#aiAudioEnabled').checked = at.enabled !== false;  // default true se undefined
         $('#aiAudioPrimary').value = at.primaryModel || 'gemini-3.5-flash-lite';
         $('#aiAudioFallback').value = at.fallbackModel || 'gemini-3.1-flash-lite';
+        $('#aiStickerCooldown').value = r.stickerCooldownSec != null ? r.stickerCooldownSec : 60;
         $('#aiConfigStatus').textContent = 'config carregada ✓';
       } catch (e) {
         $('#aiConfigStatus').textContent = '❌ ' + e.message + ' — endpoint /api/ai-config ainda não existe';
@@ -4440,6 +4740,7 @@
           primaryModel: $('#aiAudioPrimary').value.trim() || 'gemini-3.5-flash-lite',
           fallbackModel: $('#aiAudioFallback').value.trim() || 'gemini-3.1-flash-lite',
         },
+        stickerCooldownSec: parseInt($('#aiStickerCooldown').value, 10) || 0,
       };
       try {
         await apiPost('/api/ai-config', cfg);
@@ -5126,6 +5427,52 @@
       }
     }
 
+    // === Update via GitHub — wizard completo com download + progresso ===
+    // Substitui o confirm() antigo por um modal bonito que mostra:
+    //  1. Changelog da nova versão (atende tarefa #5)
+    //  2. Botão "Deseja atualizar?" (atende tarefa #5)
+    //  3. Barra de progresso de download (atende tarefa #4)
+    //  4. Velocidade de download (atende tarefa #4)
+    //  5. Tela de instalação (atende tarefa #4)
+
+    // === UPDATE SETTINGS (aceitar beta + menu secreto) ===
+    async function loadUpdateSettings() {
+      try {
+        const r = await apiGet('/api/update-settings');
+        const toggle = $('#acceptBetaToggle');
+        if (toggle) toggle.checked = !!r.acceptBeta;
+        // Carrega também o toggle do menu secreto
+        _marcio_accept_secret = !!r.acceptSecret;
+        const secretToggle = $('#acceptSecretToggle');
+        if (secretToggle) secretToggle.checked = _marcio_accept_secret;
+      } catch (e) {
+        console.error('[UPDATE] erro ao carregar update-settings:', e);
+      }
+    }
+
+    async function toggleAcceptBeta(enabled) {
+      try {
+        await apiPost('/api/update-settings', { acceptBeta: enabled });
+        toast(enabled ? '✅ Versões beta aceitas' : '✅ Só versões estáveis', 'success');
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+        const toggle = $('#acceptBetaToggle');
+        if (toggle) toggle.checked = !enabled;
+      }
+    }
+
+    async function toggleAcceptSecret(enabled) {
+      try {
+        await apiPost('/api/update-settings', { acceptSecret: enabled });
+        _marcio_accept_secret = enabled;
+        toast(enabled ? '✅ Menu secreto ativado (↑↑↓↓←→←→BA)' : '✅ Menu secreto desativado', 'success');
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+        const toggle = $('#acceptSecretToggle');
+        if (toggle) toggle.checked = !enabled;
+      }
+    }
+
     async function checkForUpdates() {
       const status = $('#updateStatus');
       if (!window.__TAURI__) {
@@ -5139,51 +5486,218 @@
         const update = await check();
         if (update) {
           if (status) status.textContent = `Nova versão: ${update.version}`;
-          if (confirm(`Nova versão disponível: ${update.version}\n\n${update.body || '(sem notas de versão)'}\n\nBaixar e instalar agora?`)) {
-            if (status) status.textContent = 'Baixando e instalando…';
-            await update.downloadAndInstall();
-            toast('✅ Atualizado! Reiniciando…', 'success');
-            await new Promise(r => setTimeout(r, 2000));
-            // Usa comando customizado (mais confiável que window.__TAURI__.process.relaunch)
-            try {
-              await window.__TAURI__.core.invoke('relaunch_app');
-            } catch (e) {
-              console.error('[UPDATE] erro ao reiniciar:', e);
-              // Fallback: tenta API antiga
-              try { window.__TAURI__.process?.relaunch?.(); } catch {}
-            }
-          } else {
-            if (status) status.textContent = 'Atualização cancelada';
-          }
+          // Abre o wizard de update (modal completo com changelog + progresso)
+          openUpdateWizard(update);
         } else {
           if (status) status.textContent = '✅ Você tá na versão mais recente';
           toast('App atualizado ✅', 'success');
         }
       } catch (e) {
-        // Diagnóstico detalhado do erro (atende Bug #3: reportar erros melhor)
+        // Diagnóstico detalhado do erro
         const errMsg = String(e?.message || e || '');
         let userHint = '';
         if (errMsg.includes('Could not fetch a valid release JSON')) {
           userHint = '\n\nCausas possíveis:\n' +
-            '• A release no GitHub pode não ter o arquivo latest.json (verifique em\n' +
-            '  https://github.com/DezediasYann/marcio-app/releases/latest)\n' +
-            '• Os secrets TAURI_SIGNING_PRIVATE_KEY / _PASSWORD podem não estar\n' +
-            '  configurados no repo (Settings → Secrets and variables → Actions)\n' +
+            '• A release no GitHub pode não ter o arquivo latest.json\n' +
+            '• Os secrets TAURI_SIGNING_PRIVATE_KEY podem não estar configurados\n' +
             '• O latest.json pode estar em formato inválido';
         } else if (errMsg.includes('signature') || errMsg.includes('verify')) {
-          userHint = '\n\nA assinatura do update não confere. A chave pública (pubkey)\n' +
-            'no tauri.conf.json não bate com a privada usada no build.\n' +
-            'Gere uma chave nova com `npm run signer:generate` e atualize a pubkey.';
+          userHint = '\n\nA assinatura do update não confere. A pubkey no tauri.conf.json não bate com a chave privada.';
         } else if (errMsg.includes('Network') || errMsg.includes('fetch')) {
-          userHint = '\n\nSem conexão com github.com.\n' +
-            'Verifique sua internet ou firewall.';
+          userHint = '\n\nSem conexão com github.com. Verifique sua internet.';
         } else if (errMsg.includes('plugin:updater')) {
-          userHint = '\n\nO plugin updater não está carregado.\n' +
-            'Pode ser que o app foi compilado sem o tauri-plugin-updater.';
+          userHint = '\n\nO plugin updater não está carregado.';
         }
         console.error('[UPDATE] erro completo:', e);
         if (status) status.textContent = '❌ Erro: ' + errMsg;
         toast('Erro ao verificar atualização: ' + errMsg + userHint, 'error', 8000);
+      }
+    }
+
+    // === UPDATE WIZARD (tarefa #4 + #5) ===
+    // Modal completo que mostra:
+    //  1. Changelog da nova versão (pra usuário saber o que muda)
+    //  2. Botões: "Deseja atualizar?" / "Agora não"
+    //  3. Barra de progresso + velocidade durante download
+    //  4. Tela de instalação automática
+    let _currentUpdate = null;
+    function openUpdateWizard(update) {
+      _currentUpdate = update;
+      // Remove overlay existente se tiver
+      const existing = document.getElementById('updateWizardOverlay');
+      if (existing) existing.remove();
+
+      // Busca changelog da versão nova (pra mostrar notas)
+      let changelogHtml = '';
+      if (update.body) {
+        // update.body pode ser markdown simples — converte pra HTML básico
+        const body = update.body;
+        // Converte markdown mínimo: ##, ###, -, *
+        const lines = body.split('\n');
+        let html = '';
+        let inList = false;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('## ')) {
+            if (inList) { html += '</ul>'; inList = false; }
+            html += `<h3>${escapeHtml(trimmed.slice(3))}</h3>`;
+          } else if (trimmed.startsWith('### ')) {
+            if (inList) { html += '</ul>'; inList = false; }
+            html += `<h3>${escapeHtml(trimmed.slice(4))}</h3>`;
+          } else if (trimmed.startsWith('- ')) {
+            if (!inList) { html += '<ul>'; inList = true; }
+            html += `<li>${escapeHtml(trimmed.slice(2))}</li>`;
+          } else if (trimmed.length > 0) {
+            if (inList) { html += '</ul>'; inList = false; }
+            html += `<p>${escapeHtml(trimmed)}</p>`;
+          }
+        }
+        if (inList) html += '</ul>';
+        changelogHtml = `<div class="update-notes"><h3>📋 Novidades da versão ${escapeHtml(update.version)}</h3>${html}</div>`;
+      }
+
+      const overlay = document.createElement('div');
+      overlay.id = 'updateWizardOverlay';
+      overlay.className = 'update-overlay';
+      overlay.innerHTML = `
+        <div class="update-modal">
+          <div class="update-icon">🔄</div>
+          <div class="update-title">Nova versão disponível!</div>
+          <div class="update-version">v${escapeHtml(update.version)}</div>
+          ${changelogHtml}
+          <div class="update-progress-section" id="updateProgressSection">
+            <div class="update-progress-bar-bg">
+              <div class="update-progress-bar-fill" id="updateProgressBar"></div>
+            </div>
+            <div class="update-progress-info">
+              <span class="update-progress-percent" id="updateProgressPercent">0%</span>
+              <span class="update-speed" id="updateSpeed">— MB/s</span>
+            </div>
+            <div class="update-status-text" id="updateStatusText">
+              <span class="update-spinner"></span>Baixando atualização…
+            </div>
+          </div>
+          <div class="update-actions" id="updateActions">
+            <button class="update-btn update-btn-primary" onclick="startUpdateDownload()" id="updateBtnDownload">
+              ⬇️ Desejo atualizar
+            </button>
+            <button class="update-btn update-btn-ghost" onclick="closeUpdateWizard()">
+              Agora não
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      console.log('[UPDATE] wizard aberto — versão', update.version);
+    }
+
+    function closeUpdateWizard() {
+      const overlay = document.getElementById('updateWizardOverlay');
+      if (overlay) overlay.remove();
+      _currentUpdate = null;
+    }
+
+    async function startUpdateDownload() {
+      if (!_currentUpdate) return;
+      const update = _currentUpdate;
+      // Esconde botões de ação e mostra seção de progresso
+      const actions = document.getElementById('updateActions');
+      if (actions) actions.innerHTML = '<span style="color:#d8b4fe;font-size:13px;">⏳ Atualizando… não feche o app</span>';
+      const progressSection = document.getElementById('updateProgressSection');
+      if (progressSection) progressSection.classList.add('active');
+
+      // Variáveis pra calcular velocidade
+      let downloadedBytes = 0;
+      let totalBytes = 0;
+      let startTime = Date.now();
+      let lastUpdate = 0;
+
+      try {
+        await update.downloadAndInstall((event) => {
+          console.log('[UPDATE] event:', event);
+          if (event.event === 'Started') {
+            // Download começou — contentLength é o tamanho total
+            totalBytes = event.data?.contentLength || 0;
+            startTime = Date.now();
+            const statusText = document.getElementById('updateStatusText');
+            if (statusText) statusText.innerHTML = '<span class="update-spinner"></span>Baixando atualização…';
+            console.log('[UPDATE] download iniciado — tamanho total:', totalBytes, 'bytes');
+          } else if (event.event === 'Progress') {
+            // Chunk recebido — chunkLength é o tamanho do chunk
+            downloadedBytes += event.data?.chunkLength || 0;
+            // Atualiza UI (no máximo 10x por segundo pra não lagar)
+            const now = Date.now();
+            if (now - lastUpdate > 100) {
+              lastUpdate = now;
+              updateProgressUI(downloadedBytes, totalBytes, startTime);
+            }
+          } else if (event.event === 'Finished') {
+            // Download completo
+            updateProgressUI(downloadedBytes, totalBytes, startTime);
+            const statusText = document.getElementById('updateStatusText');
+            if (statusText) statusText.innerHTML = '<span class="update-spinner"></span>Instalando atualização…';
+            const percentEl = document.getElementById('updateProgressPercent');
+            if (percentEl) percentEl.textContent = '100%';
+            const bar = document.getElementById('updateProgressBar');
+            if (bar) bar.style.width = '100%';
+            console.log('[UPDATE] download completo — instalando…');
+          }
+        });
+        // downloadAndInstall completou — instalação feita, reinicia
+        const statusText = document.getElementById('updateStatusText');
+        if (statusText) statusText.innerHTML = '✅ Atualização instalada! Reiniciando…';
+        toast('✅ Atualizado! Reiniciando…', 'success');
+        await new Promise(r => setTimeout(r, 2000));
+        // Reinicia o app
+        try {
+          await window.__TAURI__.core.invoke('relaunch_app');
+        } catch (e) {
+          console.error('[UPDATE] erro ao reiniciar:', e);
+          try { window.__TAURI__.process?.relaunch?.(); } catch {}
+        }
+      } catch (e) {
+        console.error('[UPDATE] erro durante download/instalação:', e);
+        const statusText = document.getElementById('updateStatusText');
+        if (statusText) statusText.innerHTML = `❌ Erro: ${escapeHtml(e?.message || String(e))}`;
+        const actions = document.getElementById('updateActions');
+        if (actions) actions.innerHTML = `
+          <button class="update-btn update-btn-primary" onclick="startUpdateDownload()">↻ Tentar de novo</button>
+          <button class="update-btn update-btn-ghost" onclick="closeUpdateWizard()">Fechar</button>
+        `;
+        toast('Erro ao atualizar: ' + (e?.message || e), 'error', 8000);
+      }
+    }
+
+    // Atualiza a UI de progresso (barra + percent + velocidade)
+    function updateProgressUI(downloaded, total, startTime) {
+      const bar = document.getElementById('updateProgressBar');
+      const percentEl = document.getElementById('updateProgressPercent');
+      const speedEl = document.getElementById('updateSpeed');
+
+      // Calcula percent
+      let percent = 0;
+      if (total > 0) {
+        percent = Math.min(100, Math.round((downloaded / total) * 100));
+      }
+      if (bar) bar.style.width = percent + '%';
+      if (percentEl) percentEl.textContent = percent + '%';
+
+      // Calcula velocidade (bytes por segundo)
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      if (elapsedSec > 0 && speedEl) {
+        const bytesPerSec = downloaded / elapsedSec;
+        let speedText;
+        if (bytesPerSec > 1024 * 1024) {
+          speedText = (bytesPerSec / (1024 * 1024)).toFixed(1) + ' MB/s';
+        } else if (bytesPerSec > 1024) {
+          speedText = (bytesPerSec / 1024).toFixed(0) + ' KB/s';
+        } else {
+          speedText = bytesPerSec.toFixed(0) + ' B/s';
+        }
+        // Tamanho baixado / total
+        const downloadedMB = (downloaded / (1024 * 1024)).toFixed(1);
+        const totalMB = total > 0 ? (total / (1024 * 1024)).toFixed(1) + ' MB' : '? MB';
+        speedEl.textContent = `${downloadedMB} / ${totalMB} · ${speedText}`;
       }
     }
 
@@ -5526,6 +6040,7 @@
 
     var _marcio_channel = 'stable';  // default conservador
     var _marcio_features = {};
+    var _marcio_accept_secret = false;  // toggle do menu secreto (configurável)
 
     async function loadFeatureFlags() {
       try {
@@ -5637,9 +6152,10 @@
     }
 
     function openSecretMenu() {
-      // Em stable, menu secreto não existe
-      if (_marcio_channel === 'stable') {
-        toast('Menu secreto desativado em stable', 'warn');
+      // Verifica se o usuário ativou o menu secreto nas configurações
+      // (em vez de ser hardcoded por canal)
+      if (!_marcio_accept_secret) {
+        toast('Menu secreto desativado. Ative em Configurações → Aceitar menu secreto.', 'warn', 5000);
         return;
       }
       // Se o modal já tá aberto, fecha
@@ -6041,6 +6557,9 @@
       testNotification: () => typeof testNotification !== 'undefined' ? testNotification : null,
       checkForUpdates: () => typeof checkForUpdates !== 'undefined' ? checkForUpdates : null,
       quitAppCompletely: () => typeof quitAppCompletely !== 'undefined' ? quitAppCompletely : null,
+      openUpdateWizard: () => typeof openUpdateWizard !== 'undefined' ? openUpdateWizard : null,
+      closeUpdateWizard: () => typeof closeUpdateWizard !== 'undefined' ? closeUpdateWizard : null,
+      startUpdateDownload: () => typeof startUpdateDownload !== 'undefined' ? startUpdateDownload : null,
       openSetupWizard: () => typeof openSetupWizard !== 'undefined' ? openSetupWizard : null,
       resetSetupState: () => typeof resetSetupState !== 'undefined' ? resetSetupState : null,
       checkChangelog: () => typeof checkChangelog !== 'undefined' ? checkChangelog : null,

@@ -243,6 +243,8 @@ interface RuntimeAIConfig {
     primaryModel: string;
     fallbackModel: string;
   };
+  /** Cooldown de figurinha em segundos (default: 60). 0 = sem cooldown. */
+  stickerCooldownSec?: number;
 }
 
 interface GeminiResult {
@@ -344,6 +346,7 @@ export class MarcioBrain {
             temperature: parsed.temperature !== undefined ? parsed.temperature : AI_DEFAULTS.temperature,
             provider: parsed.provider || null,
             audioTranscription,
+            stickerCooldownSec: typeof parsed.stickerCooldownSec === 'number' ? parsed.stickerCooldownSec : 60,
           };
           this.aiConfigCacheTime = now;
           return this.aiConfigCache;
@@ -1290,12 +1293,14 @@ export class MarcioBrain {
     const stickerRegex = /\[FIGURINHA(?::\s*([^\]]+))?\]/gi;
     let hasStickerRequest = stickerRegex.test(reply);
 
-    // Cooldown de figurinha (60s)
+    // Cooldown de figurinha (configurável via ai-config.json, default 60s)
     if (hasStickerRequest) {
+      const cfg = this.getAIConfig();
+      const cooldownMs = (cfg.stickerCooldownSec ?? 60) * 1000;
       const lastStickerKey = `_last_sticker_time_${chatId}`;
       const lastStickerTime = this.lastAutoResponse.get(lastStickerKey) || 0;
-      if (Date.now() - lastStickerTime < 60000) {
-        this.app.debug('VAULT', `cooldown de figurinha ativo (${Math.round((60000 - (Date.now() - lastStickerTime)) / 1000)}s restantes) — ignorando pedido de figurinha`);
+      if (cooldownMs > 0 && Date.now() - lastStickerTime < cooldownMs) {
+        this.app.debug('VAULT', `cooldown de figurinha ativo (${Math.round((cooldownMs - (Date.now() - lastStickerTime)) / 1000)}s restantes) — ignorando pedido de figurinha`);
         hasStickerRequest = false;
         reply = reply.replace(stickerRegex, '').replace(/\s{2,}/g, ' ').trim();
       }

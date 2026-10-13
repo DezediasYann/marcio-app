@@ -74,6 +74,15 @@ export interface HistoryEntry {
    * Default: 'realtime' (maioria dos casos). Só backfillHistory seta 'backfill'.
    */
   source?: 'realtime' | 'backfill';
+  // === Campos de mídia (figurinha, imagem, vídeo, documento) ===
+  /** Tipo de mídia. Se undefined, é msg de texto puro. */
+  mediaType?: 'sticker' | 'image' | 'video' | 'document' | 'ptt' | 'audio';
+  /** Thumbnail base64 data URL (ex: 'data:image/webp;base64,...'). Pequena (~5-30KB). */
+  mediaThumbnail?: string;
+  /** Nome da figurinha se ela foi identificada no vault. */
+  stickerName?: string;
+  /** Descrição da imagem (legenda da msg OU descrição gerada pela IA). */
+  imageDescription?: string;
 }
 
 // ============================================================================
@@ -277,13 +286,20 @@ export class Retroactive {
     quotedMsgId?: string,
     isAudio?: boolean,
     source: 'realtime' | 'backfill' = 'realtime',
+    // === Campos de mídia (opcionais) ===
+    mediaType?: 'sticker' | 'image' | 'video' | 'document' | 'ptt' | 'audio',
+    mediaThumbnail?: string,
+    stickerName?: string,
+    imageDescription?: string,
   ): void {
     if (!chatId || !msgId) return;
     const trimmed = (text || '').slice(0, 500);
-    // Só guarda msgs com texto não-vazio (pula figurinha/áudio/documento sem body)
-    if (!trimmed || trimmed.trim().length < 1) return;
+    // Só guarda msgs com texto não-vazio OU com mídia (figurinha/imagem).
+    // Antes: pula se texto vazio. Agora: permite se tem mediaType (figurinha/imagem sem legenda).
+    const hasMedia = !!mediaType;
+    if (!hasMedia && (!trimmed || trimmed.trim().length < 1)) return;
     // Pula placeholders internos
-    if (/^\[(mandou|CONTEÚDO|respondendo)/.test(trimmed)) return;
+    if (trimmed && /^\[(mandou|CONTEÚDO|respondendo)/.test(trimmed)) return;
 
     if (!this.historyLog.has(chatId)) this.historyLog.set(chatId, []);
     const entries = this.historyLog.get(chatId)!;
@@ -301,6 +317,11 @@ export class Retroactive {
       if (source === 'realtime' && existing.source !== 'realtime') {
         existing.source = 'realtime';
       }
+      // Atualiza campos de mídia se essa chamada tem info nova
+      if (mediaType && !existing.mediaType) existing.mediaType = mediaType;
+      if (mediaThumbnail && !existing.mediaThumbnail) existing.mediaThumbnail = mediaThumbnail;
+      if (stickerName && !existing.stickerName) existing.stickerName = stickerName;
+      if (imageDescription && !existing.imageDescription) existing.imageDescription = imageDescription;
       // Não muda mais nada (text/timestamp já estão corretos)
       return;
     }
@@ -314,6 +335,10 @@ export class Retroactive {
       quotedMsgId,
       isAudio: isAudio === true ? true : undefined,  // só seta se true (pra não poluir JSON)
       source,  // 'realtime' ou 'backfill'
+      mediaType: mediaType || undefined,
+      mediaThumbnail: mediaThumbnail || undefined,
+      stickerName: stickerName || undefined,
+      imageDescription: imageDescription || undefined,
     });
 
     // Mantém o cap de 200 msgs por chat (descarta as mais antigas)
@@ -322,7 +347,8 @@ export class Retroactive {
       entries.splice(0, entries.length - 200);
     }
 
-    this.app.debug('HISTORY', `msg registrada em ${chatId} (total: ${entries.length})${isAudio ? ' [áudio]' : ''} [${source}] — "${trimmed.slice(0, 40)}..."`);
+    const mediaInfo = hasMedia ? ` [${mediaType}${stickerName ? `:${stickerName}` : ''}]` : '';
+    this.app.debug('HISTORY', `msg registrada em ${chatId} (total: ${entries.length})${isAudio ? ' [áudio]' : ''}${mediaInfo} [${source}] — "${trimmed.slice(0, 40)}..."`);
   }
 
   /**
@@ -586,6 +612,10 @@ export class Retroactive {
       quotedMsgId?: string;
       fromMe: boolean;
       isAudio?: boolean;
+      mediaType?: 'sticker' | 'image' | 'video' | 'document' | 'ptt' | 'audio';
+      mediaThumbnail?: string;
+      stickerName?: string;
+      imageDescription?: string;
     }>;
   }> {
     const allChatIds = this.allChatIds();
@@ -641,18 +671,25 @@ export class Retroactive {
       const histEntries = this.historyLog.get(chatId) || [];
       for (const h of histEntries) {
         if (seen.has(h.msgId)) continue;
-        if (!h.text || h.text.trim().length < 1) continue;
+        // Permite msg sem texto se tem mídia (figurinha/imagem sem legenda)
+        const hasMedia = !!h.mediaType;
+        if (!hasMedia && (!h.text || h.text.trim().length < 1)) continue;
         seen.add(h.msgId);
         const isBackfill = h.source === 'backfill';
         merged.push({
           msgId: h.msgId,
           senderName: h.fromMe ? '' : (h.senderName || '?'),
-          text: h.text,
+          text: h.text || '',
           timestamp: h.timestamp,
           decision: isBackfill ? 'backfill' : 'received',
           quotedMsgId: h.quotedMsgId,
           fromMe: h.fromMe,
           isAudio: h.isAudio === true ? true : undefined,
+          // Campos de mídia (novos)
+          mediaType: h.mediaType,
+          mediaThumbnail: h.mediaThumbnail,
+          stickerName: h.stickerName,
+          imageDescription: h.imageDescription,
         });
       }
 

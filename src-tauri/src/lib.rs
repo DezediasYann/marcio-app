@@ -367,14 +367,23 @@ fn extract_zip_native(zip_path: &PathBuf, dest: &PathBuf) -> bool {
 fn is_setup_completed(app_data_dir: &PathBuf) -> bool {
     let setup_state_path = app_data_dir.join("data").join("setup-state.json");
     if !setup_state_path.exists() {
+        println!("[TAURI] setup-state.json não existe em: {}", setup_state_path.display());
         return false;
     }
     match std::fs::read_to_string(&setup_state_path) {
         Ok(content) => {
+            println!("[TAURI] setup-state.json encontrado — conteúdo: {}", content);
             // Parse simples do JSON (evita dep de serde no lib.rs)
-            content.contains("\"completed\":true")
+            // Aceita com ou sem espaço depois do ":" (JSON.stringify com indent=2 gera ": true")
+            let cleaned = content.replace(" ", "").replace("\n", "").replace("\t", "");
+            let found = cleaned.contains("\"completed\":true");
+            println!("[TAURI] is_setup_completed = {} (procurou \"completed\":true)", found);
+            found
         }
-        Err(_) => false,
+        Err(e) => {
+            println!("[TAURI] erro ao ler setup-state.json: {}", e);
+            false
+        }
     }
 }
 
@@ -675,13 +684,23 @@ pub fn run() {
 
                 // Decide qual janela mostrar (setup ou main)
                 let is_dev = is_port_open("127.0.0.1", 3001);
+                println!("[TAURI] is_dev (porta 3001) = {}", is_dev);
                 let should_show_setup = if is_dev {
+                    println!("[TAURI] Modo dev — não mostra setup wizard (bot já rodando via npm run dev)");
                     false
                 } else {
                     let app_data_dir = app_handle.path().app_data_dir().ok();
                     match app_data_dir {
-                        Some(d) => !is_setup_completed(&d),
-                        None => true,
+                        Some(d) => {
+                            println!("[TAURI] AppData dir: {}", d.display());
+                            let setup_done = is_setup_completed(&d);
+                            println!("[TAURI] is_setup_completed = {}", setup_done);
+                            !setup_done
+                        },
+                        None => {
+                            println!("[TAURI] ⚠️ AppData dir não encontrado — mostrando setup");
+                            true
+                        }
                     }
                 };
 

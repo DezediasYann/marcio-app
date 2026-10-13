@@ -21,17 +21,50 @@ import { MarcioApp, type AppConfig } from './MarcioApp';
 // === Determina o diretório base de dados ===
 // Em produção (Tauri), o Rust passa MARCIO_DATA_DIR = %APPDATA%\MarcioApp
 // Em dev (sem a env var), usa o cwd do projeto
+//
+// ⚠️ OPÇÃO: MARCIO_USE_PROD_DATA=1
+// Se setado em dev, usa os dados de produção (AppData) em vez da pasta local.
+// Isso permite testar com dados reais sem precisar fazer backup/restore.
+// Ex: $env:MARCIO_USE_PROD_DATA=1; npm run dev
 const MARCIO_DATA_DIR = process.env.MARCIO_DATA_DIR;
 const rootDir = process.cwd();
 
-if (MARCIO_DATA_DIR) {
-  console.log(`[BOOT] Usando data dir: ${MARCIO_DATA_DIR}`);
-} else {
-  console.log(`[BOOT] MARCIO_DATA_DIR não setado — usando cwd (${rootDir})`);
+// Detecta o AppData dir do Tauri (mesma lógica do Rust)
+function detectAppDataDir(): string | null {
+  const home = process.env.USERPROFILE || process.env.HOME || process.env.APPDATA;
+  if (!home) return null;
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA || home, 'com.marcio.app');
+  } else if (process.platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'com.marcio.app');
+  } else {
+    return path.join(home, '.config', 'com.marcio.app');
+  }
 }
 
-// Diretório base pra todos os dados
-const baseDir = MARCIO_DATA_DIR || rootDir;
+let baseDir: string;
+
+if (MARCIO_DATA_DIR) {
+  // Produção: Rust passou o caminho
+  baseDir = MARCIO_DATA_DIR;
+  console.log(`[BOOT] Usando data dir (produção): ${baseDir}`);
+} else if (process.env.MARCIO_USE_PROD_DATA === '1') {
+  // Dev com dados de produção
+  const appData = detectAppDataDir();
+  if (appData && fs.existsSync(appData)) {
+    baseDir = appData;
+    console.log(`[BOOT] Usando data dir de PRODUÇÃO em dev: ${baseDir}`);
+    console.log(`[BOOT] ⚠️ Cuidado: mudanças em dev afetam os dados de produção!`);
+  } else {
+    baseDir = rootDir;
+    console.log(`[BOOT] MARCIO_USE_PROD_DATA=1 mas AppData não encontrado (${appData}) — usando cwd`);
+  }
+} else {
+  // Dev normal (dados locais)
+  baseDir = rootDir;
+  console.log(`[BOOT] Dev mode — usando cwd (${baseDir})`);
+  console.log(`[BOOT] 💡 Pra usar dados de produção: $env:MARCIO_USE_PROD_DATA=1; npm run dev`);
+}
 
 // === Migração: se tem data/ ou .wwebjs_auth/ no cwd mas não no baseDir, copia ===
 function migrateIfNeeded() {

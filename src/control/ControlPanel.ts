@@ -537,8 +537,12 @@ export class ControlPanel {
           const seenVersion = this.readChangelogState().lastSeenVersion;
           // Versão atual do app (do package.json lido uma vez)
           const currentVersion = this.getCurrentVersion();
-          // hasNew = tem versão mais nova que a última vista
-          const hasNew = changelog.releases.some(r => this.compareVersions(r.version, seenVersion) > 0);
+          // hasNew = a versão ATUAL do app é mais nova que a última vista.
+          // Isso garante que ao ATUALIZAR o app (versão muda), o changelog aparece
+          // mesmo que o usuário tenha dismissado uma versão anterior.
+          // Ex: usuário na v1.0.1 viu e dismissou (lastSeen=1.0.1).
+          //     Atualiza pra v1.0.2 → currentVersion(1.0.2) > seenVersion(1.0.1) → hasNew=true ✅
+          const hasNew = this.compareVersions(currentVersion, seenVersion) > 0;
           return this.json(res, {
             currentVersion,
             lastSeenVersion: seenVersion,
@@ -636,6 +640,31 @@ export class ControlPanel {
       // O painel usa pra mascarar botões que não devem aparecer em release estável.
       if (method === 'GET' && pathname === '/api/feature-flags') {
         return this.json(res, this.app.features.getConfig());
+      }
+
+      // GET /api/update-settings — retorna config de update (aceitar beta, etc.)
+      if (method === 'GET' && pathname === '/api/update-settings') {
+        return this.json(res, this.readUpdateSettings());
+      }
+
+      // POST /api/update-settings — salva config de update
+      // Body: { acceptBeta?: boolean, acceptSecret?: boolean }
+      if (method === 'POST' && pathname === '/api/update-settings') {
+        const body = await this.readJsonBody(req).catch(() => ({}));
+        try {
+          const current = this.readUpdateSettings();
+          if (typeof body?.acceptBeta === 'boolean') {
+            current.acceptBeta = body.acceptBeta;
+          }
+          if (typeof body?.acceptSecret === 'boolean') {
+            current.acceptSecret = body.acceptSecret;
+          }
+          this.writeUpdateSettings(current);
+          this.app.log('UPDATE', `update-settings salvo — acceptBeta=${current.acceptBeta} acceptSecret=${current.acceptSecret}`);
+          return this.json(res, { ok: true, ...current });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
       }
 
       // POST /api/dev/secret-action — executa ação secreta (só em dev/beta)
@@ -2078,23 +2107,90 @@ export class ControlPanel {
     }
   }
 
+  // ===========================================================================
+  // UPDATE SETTINGS (acceptBeta)
+  // ===========================================================================
+
+  private readUpdateSettings(): { acceptBeta: boolean; acceptSecret: boolean } {
+    try {
+      const filePath = this.app.dataPath('update-settings.json');
+      const content = fs.readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(content);
+      return {
+        acceptBeta: !!parsed.acceptBeta,
+        acceptSecret: !!parsed.acceptSecret,
+      };
+    } catch {
+      return { acceptBeta: false, acceptSecret: false };
+    }
+  }
+
+  private writeUpdateSettings(settings: { acceptBeta: boolean; acceptSecret: boolean }): void {
+    try {
+      const filePath = this.app.dataPath('update-settings.json');
+      fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf8');
+    } catch (e) {
+      this.app.debug('UPDATE', `erro ao salvar update-settings: ${(e as Error).message}`);
+    }
+  }
+
   /**
-   * Compara 2 versões semânticas (ex: '1.2.3' vs '1.2.4').
-   * Retorna > 0 se a > b, 0 se iguais, < 0 se a < b.
+   * Compara duas versões semver (com suporte a pre-release tags e 4-part beta).
+   * Retorna: 1 se a > b, -1 se a < b, 0 se igual.
+   *
+   * Regras semver:
+   *  - 1.0.3 > 1.0.2 (normal)
+   *  - 1.0.3 > 1.0.3-beta-1 (release > pre-release)
+   *  - 1.0.3 > 1.0.3.1 (release > 4-part beta — 4º número = contador de beta)
+   *  - 1.0.3.2 > 1.0.3.1 (beta maior)
    */
   private compareVersions(a: string, b: string): number {
-    const parse = (v: string): number[] => {
-      return (v || '0.0.0').split('.').map(n => parseInt(n.replace(/\D/g, '')) || 0);
+    const parseSemver = (v: string): { major: number[]; pre: string[]; betaNum: number } => {
+      const clean = (v || '0.0.0').replace(/^v/, '');
+      // Split version e pre-release (ex: 1.0.3-beta-1 → version=1.0.3, pre=beta-1)
+      const [versionPart, ...preParts] = clean.split('-');
+      const parts = versionPart.split('.').map(n => parseInt(n.replace(/\D/g, '')) || 0);
+      // Se tem 4 partes (ex: 1.0.3.1), a 4ª é o contador de beta
+      let betaNum = 0;
+      let major = parts;
+      if (parts.length >= 4) {
+        betaNum = parts[3];
+        major = parts.slice(0, 3); // só usa as 3 primeiras como major
+      }
+      const pre = preParts.length > 0 ? preParts.join('-').split('.') : [];
+      return { major, pre, betaNum };
     };
-    const pa = parse(a);
-    const pb = parse(b);
-    const maxLen = Math.max(pa.length, pb.length);
+    const pa = parseSemver(a);
+    const pb = parseSemver(b);
+    // Compara major.minor.patch primeiro
+    const maxLen = Math.max(pa.major.length, pb.major.length);
     for (let i = 0; i < maxLen; i++) {
-      const na = pa[i] || 0;
-      const nb = pb[i] || 0;
+      const na = pa.major[i] || 0;
+      const nb = pb.major[i] || 0;
       if (na > nb) return 1;
       if (na < nb) return -1;
     }
+    // major.minor.patch é igual — agora verifica se é beta (4-part ou pre-release)
+    // - Sem beta (betaNum=0 e sem pre) > com beta (betaNum>0 ou tem pre)
+    // - 1.0.3 > 1.0.3.1 (betaNum=1)
+    // - 1.0.3 > 1.0.3-beta-1 (pre=["beta","1"])
+    const aIsBeta = pa.betaNum > 0 || pa.pre.length > 0;
+    const bIsBeta = pb.betaNum > 0 || pb.pre.length > 0;
+    if (!aIsBeta && !bIsBeta) return 0;  // ambos são release
+    if (!aIsBeta) return 1;  // a é release, b é beta → a > b
+    if (!bIsBeta) return -1; // b é release, a é beta → a < b
+    // Ambos são beta — compara qual é maior
+    // Pra 4-part: 1.0.3.2 > 1.0.3.1
+    // Pra pre-release: beta-2 > beta-1 (alfabético)
+    // Mistura: 4-part (betaNum=2) > pre-release (beta-1)? Trata como numérico.
+    if (pa.betaNum !== pb.betaNum) {
+      return pa.betaNum > pb.betaNum ? 1 : -1;
+    }
+    // Se betaNum é igual (ambos 0 ou ambos mesmo), compara pre-release alfabético
+    const aPre = pa.pre.join('.');
+    const bPre = pb.pre.join('.');
+    if (aPre > bPre) return 1;
+    if (aPre < bPre) return -1;
     return 0;
   }
 

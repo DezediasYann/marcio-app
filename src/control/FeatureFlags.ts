@@ -141,10 +141,21 @@ export class FeatureFlags {
       return 'dev';
     }
 
-    // 2. Versão contém -beta ou -rc
+    // 2. Versão contém pre-release tag (formato semver: X.Y.Z-pre)
+    // Detecta qualquer coisa depois do hífen: -beta, -rc, -alpha, -1 (numérico)
     const version = this.readVersion();
-    if (version.includes('-beta') || version.includes('-rc') || version.includes('-alpha')) {
+    const dashIdx = version.indexOf('-');
+    if (dashIdx >= 0 && dashIdx < version.length - 1) {
+      // Tem algo depois do hífen → é pre-release → canal beta
       return 'beta';
+    }
+
+    // 2.5. Versão tem 4 partes numéricas (ex: 1.0.3.1 = beta 1)
+    // Formato alternativo (MSI legacy). Não usado mais, mas mantém por segurança.
+    const parts = version.split('.');
+    if (parts.length >= 4) {
+      const fourth = parseInt(parts[3].replace(/\D/g, '')) || 0;
+      if (fourth > 0) return 'beta';
     }
 
     // 3. Detecta se tá rodando via tsx (dev mode)

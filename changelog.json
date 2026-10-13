@@ -239,6 +239,61 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.3-1",
+      "date": "2025-10-13",
+      "title": "🧪 Beta — Figurinhas no painel + update wizard + correções",
+      "sections": [
+        {
+          "icon": "🎭",
+          "title": "Conversas com Mídia",
+          "items": [
+            "Figurinhas agora aparecem nas conversas do painel com thumbnail",
+            "Nome da figurinha aparece em label discreto (🎭 roxo)",
+            "Imagens aparecem com thumbnail e legenda em label (🖼️ verde)",
+            "Vídeos e documentos mostram label do tipo",
+            "Thumbnails são baixados em background (não bloqueia o bot)"
+          ]
+        },
+        {
+          "icon": "🔄",
+          "title": "Update Wizard",
+          "items": [
+            "Nova tela de update com changelog da nova versão antes de instalar",
+            "Botão 'Desejo atualizar' em vez de confirm nativo",
+            "Barra de progresso de download com percent e velocidade (MB/s)",
+            "Tela de instalação automática com spinner",
+            "Botão 'Tentar de novo' em caso de erro"
+          ]
+        },
+        {
+          "icon": "🧙",
+          "title": "Setup Wizard",
+          "items": [
+            "Corrigido: setup wizard abria sempre ao iniciar o app (bug do JSON parsing)",
+            "is_setup_completed agora remove espaços antes de procurar a flag"
+          ]
+        },
+        {
+          "icon": "📋",
+          "title": "Changelog",
+          "items": [
+            "Corrigido: 'O que há de novo?' agora aparece ao atualizar o app",
+            "Comparação de versão agora respeita semver (1.0.3 > 1.0.3-beta-1)",
+            "Modal abre na versão mais recente primeiro (1 de X)"
+          ]
+        },
+        {
+          "icon": "🧪",
+          "title": "Canal Beta",
+          "items": [
+            "Toggle 'Aceitar versões beta' na seção Atualizações",
+            "Persistido em data/update-settings.json",
+            "CompareVersions corrigido pra suportar pre-release tags (-beta, -rc, -alpha)"
+          ]
+        }
+      ]
     }
   ]
 }

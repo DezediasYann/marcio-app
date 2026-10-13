@@ -119,7 +119,25 @@ export class MessageRouter {
           if (profile?.name) senderName = profile.name;
         }
       } catch { /* ignora */ }
+      // === DETECÇÃO DE MÍDIA (síncrona — rápida) ===
+      // Detecta o tipo de mídia pela propriedade `type` da msg do whatsapp-web.js.
+      // Não baixa a mídia aqui (demora) — só registra o tipo.
+      // O thumbnail + nome da figurinha vão ser buscados em background abaixo.
+      let detectedMediaType: 'sticker' | 'image' | 'video' | 'document' | 'ptt' | 'audio' | undefined;
+      const msgType = String(msgAny.type || '').toLowerCase();
+      if (msgType === 'sticker') detectedMediaType = 'sticker';
+      else if (msgType === 'image') detectedMediaType = 'image';
+      else if (msgType === 'video') detectedMediaType = 'video';
+      else if (msgType === 'document') detectedMediaType = 'document';
+      else if (msgType === 'ptt') detectedMediaType = 'ptt';
+      else if (msgType === 'audio') detectedMediaType = 'audio';
+
+      // Pra imagem: msg.body tem a legenda (se tiver). Usa como imageDescription.
+      // Pra figurinha: msg.body é vazio.
+      const imageDescription = (detectedMediaType === 'image' && text && text.trim().length > 0) ? text.trim() : undefined;
+
       if (msgId && this.app.retroactive) {
+        // Registro síncrono inicial (só com tipo + legenda se tiver)
         this.app.retroactive.recordIncomingMessage(
           chatId,
           msgId,
@@ -128,10 +146,24 @@ export class MessageRouter {
           ts,
           !!msg.fromMe,
           quotedMsgId,
+          undefined,  // isAudio (vai ser setado pelo brain depois se transcrever)
+          'realtime',
+          detectedMediaType,
+          undefined,  // mediaThumbnail — vai ser preenchido em background abaixo
+          undefined,  // stickerName — vai ser preenchido em background abaixo
+          imageDescription,
         );
         // Notifica o painel pra fazer auto-refresh (debounce no frontend)
         if (this.app.control) {
           this.app.control.broadcast('conversation-update', { chatId, msgId, fromMe: !!msg.fromMe });
+        }
+
+        // === BACKGROUND: baixa mídia e atualiza a entry com thumbnail + nome da figurinha ===
+        // Roda em background (sem await) — não bloqueia o fluxo principal do bot.
+        // Quando termina, chama recordIncomingMessage de novo (o código detecta entry existente
+        // e atualiza só os campos novos).
+        if (detectedMediaType === 'sticker' || detectedMediaType === 'image') {
+          this.enrichMediaInBackground(msg, chatId, msgId, senderName, text, ts, !!msg.fromMe, quotedMsgId, detectedMediaType, imageDescription);
         }
       }
     } catch (e) {
@@ -226,5 +258,99 @@ export class MessageRouter {
     const startup = this.app.startTime;
     // 10s de buffer pra não perder msgs que chegaram enquanto o bot iniciava
     return msgTs >= (startup - 10000);
+  }
+
+  /**
+   * Baixa mídia (figurinha/imagem) em background e atualiza a entry no historyLog
+   * com thumbnail + nome da figurinha (se tiver).
+   *
+   * Roda em background (sem await) — não bloqueia o fluxo principal do bot.
+   * Quando termina, chama recordIncomingMessage de novo — o código detecta entry
+   * existente e atualiza só os campos novos (mediaThumbnail + stickerName).
+   *
+   * IMPORTANTE: thumbnail é limitado a ~30KB pra não inflar a memória do painel.
+   */
+  private enrichMediaInBackground(
+    msg: Message,
+    chatId: string,
+    msgId: string,
+    senderName: string,
+    text: string,
+    ts: number,
+    fromMe: boolean,
+    quotedMsgId: string | undefined,
+    mediaType: 'sticker' | 'image',
+    imageDescription: string | undefined,
+  ): void {
+    // Não usa await — roda em background
+    (async () => {
+      try {
+        if (!this.app.retroactive) return;
+
+        // 1. Baixa a mídia
+        const media = await msg.downloadMedia();
+        if (!media || !media.data) {
+          this.app.debug('ROUTER', `enrichMedia: mídia vazia pra ${msgId}`);
+          return;
+        }
+
+        // 2. Gera thumbnail base64 data URL
+        // Pra figurinha: webp (geralmente ~10-30KB)
+        // Pra imagem: pode ser grande — limita a 50KB (aumenta compressão base64)
+        const mime = media.mimetype || (mediaType === 'sticker' ? 'image/webp' : 'image/jpeg');
+        const mediaSize = Math.floor(media.data.length * 0.75); // base64 → bytes aprox
+        const MAX_SIZE = 60 * 1024; // 60KB — limite pra não inflar memória do painel
+
+        let thumbnail: string;
+        if (mediaSize <= MAX_SIZE) {
+          // Cabe no limite — usa direto
+          thumbnail = `data:${mime};base64,${media.data}`;
+        } else {
+          // Passa do limite — NÃO usa o thumbnail (painel vai mostrar placeholder)
+          // Não vamos redimensionar (precisa de lib externa). Pra imagem grande,
+          // mostra só o tipo + descrição/legenda.
+          this.app.debug('ROUTER', `enrichMedia: mídia muito grande (${(mediaSize / 1024).toFixed(0)}KB) — pulando thumbnail`);
+          thumbnail = '';
+        }
+
+        // 3. Se for figurinha, tenta identificar pelo nome no vault
+        let stickerName: string | undefined;
+        if (mediaType === 'sticker') {
+          const identified = await this.app.stickers.identify(msg);
+          if (identified?.name) {
+            stickerName = identified.name;
+            this.app.debug('ROUTER', `enrichMedia: figurinha identificada — "${stickerName}"`);
+          } else {
+            this.app.debug('ROUTER', `enrichMedia: figurinha sem nome no vault`);
+          }
+        }
+
+        // 4. Atualiza a entry no historyLog (recordIncomingMessage detecta entry existente)
+        this.app.retroactive.recordIncomingMessage(
+          chatId,
+          msgId,
+          senderName,
+          text,
+          ts,
+          fromMe,
+          quotedMsgId,
+          undefined,
+          'realtime',
+          mediaType,
+          thumbnail || undefined,
+          stickerName,
+          imageDescription,
+        );
+
+        // 5. Notifica o painel que a msg foi enriquecida (vai re-renderizar)
+        if (this.app.control) {
+          this.app.control.broadcast('conversation-update', { chatId, msgId, fromMe });
+        }
+
+        this.app.debug('ROUTER', `enrichMedia: ✅ mídia enriquecida pra ${msgId}${stickerName ? ` (figurinha: ${stickerName})` : ''}`);
+      } catch (e) {
+        this.app.debug('ROUTER', `enrichMedia: erro em background: ${(e as Error).message}`);
+      }
+    })();
   }
 }

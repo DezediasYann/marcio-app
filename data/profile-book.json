@@ -25,7 +25,7 @@
     "type": "group",
     "name": "penis",
     "photoUrl": "https://pps.whatsapp.net/v/t61.24694-24/677242100_1777563320239348_2923311383122948647_n.jpg?ccb=11-4&oh=01_Q5Aa5wEvif3odktP9DKtvijofeu5TdHehm1ew1pso82bbcWZRw&oe=6ADA6C02&_nc_sid=5e03e0&_nc_cat=107",
-    "interactionCount": 252,
+    "interactionCount": 286,
     "dataPoints": 4,
     "aiSummary": "Grupo de amigos focado em zoeira intensa, figurinhas e brincadeiras irônicas entre os membros, com Carlos e Diogo frequentemente sendo os alvos principais.",
     "aiShortView": "zoeira, figurinhas, amigos, informal, zoeira entre amigos",
@@ -37,9 +37,9 @@
     },
     "rawNotes": "O grupo continua mantendo o foco em zoeira e figurinhas, com interações irônicas frequentes e brincadeiras direcionadas a membros específicos como Carlos e Diogo.",
     "firstSeen": "2026-10-12T20:31:16.844Z",
-    "lastUpdated": "2026-10-12T22:17:12.920Z",
-    "lastAIUpdate": "2026-10-12T22:17:12.920Z",
-    "messageCountSinceUpdate": 12,
+    "lastUpdated": "2026-10-12T23:45:28.982Z",
+    "lastAIUpdate": "2026-10-12T23:45:28.982Z",
+    "messageCountSinceUpdate": 1,
     "aliases": []
   },
   "77129039540435@lid": {
@@ -47,9 +47,9 @@
     "type": "person",
     "name": "Yann",
     "photoUrl": "https://pps.whatsapp.net/v/t61.24694-24/642843356_2657829587944450_8523475339961661933_n.jpg?ccb=11-4&oh=01_Q5Aa5wHRk9PR4E6yO2CGvqQib_hxBshUbvcYt-Z849uVy_4Scg&oe=6ADA679C&_nc_sid=5e03e0&_nc_cat=102",
-    "interactionCount": 161,
+    "interactionCount": 265,
     "dataPoints": 5,
-    "aiSummary": "Yann tem 22 anos, é flamenguista, gamer de League of Legends e tem posicionamento político de esquerda. Ele interage de forma bem-humorada, usando áudios, figurinhas e comandos de bot.",
+    "aiSummary": "Yann tem 22 anos, é flamenguista, gamer de League of Legends e tem posicionamento político de esquerda. Interage de forma descontraída, usa frequentes figurinhas e comenta sobre interações em grupo.",
     "aiShortView": "22 anos, flamenguista, gamer, esquerda, bem-humorado, usa figurinhas",
     "traits": {
       "idade": "22",
@@ -58,11 +58,11 @@
       "info5": "está no elo Esmeralda IV no League of Legends",
       "posicionamento_politico": "esquerda"
     },
-    "rawNotes": "Migrado de memories.json em 2026-10-12T20:31:18.024Z. Manifestou frustração por não ter ido à manifestação do Lula em Copacabana. Interage frequentemente com comandos de figurinhas e áudios com o bot.",
+    "rawNotes": "Migrado de memories.json em 2026-10-12T20:31:18.024Z. Manifestou frustração por não ter ido à manifestação do Lula em Copacabana e expressou repúdio a quem vai a manifestações para 'gigolar'. Interage frequentemente com comandos de figurinhas e áudios com o bot. Faz referências a League of Legends (Jarvan).",
     "firstSeen": "2026-10-12T20:31:18.024Z",
-    "lastUpdated": "2026-10-12T22:35:15.262Z",
-    "lastAIUpdate": "2026-10-12T22:35:15.262Z",
-    "messageCountSinceUpdate": 11,
+    "lastUpdated": "2026-10-13T01:54:32.913Z",
+    "lastAIUpdate": "2026-10-13T01:54:32.913Z",
+    "messageCountSinceUpdate": 10,
     "aliases": []
   },
   "diogo": {
@@ -106,7 +106,7 @@
     "id": "89597363097633@lid",
     "type": "person",
     "name": "Renan Pedersane",
-    "interactionCount": 17,
+    "interactionCount": 29,
     "dataPoints": 0,
     "aiSummary": "Renan Pedersane é um participante ativo do grupo que interage com outros membros de forma descontraída, perguntando sobre regras e incentivando interações sociais.",
     "aiShortView": "participativo, descontraído, curioso",
@@ -115,7 +115,7 @@
     "firstSeen": "2026-10-12T20:32:25.528Z",
     "lastUpdated": "2026-10-12T21:19:10.574Z",
     "lastAIUpdate": "2026-10-12T21:19:10.574Z",
-    "messageCountSinceUpdate": 2,
+    "messageCountSinceUpdate": 14,
     "aliases": [],
     "photoUrl": "https://pps.whatsapp.net/v/t61.24694-24/831154043_1058427350520036_5447207324360333537_n.jpg?ccb=11-4&oh=01_Q5Aa5wF6s9SnhG4KTj5Yrlu8Jn75tkMZNsyA80scc3Semck9Ew&oe=6ADA6E6E&_nc_sid=5e03e0&_nc_cat=103"
   },
@@ -124,7 +124,7 @@
     "type": "person",
     "name": "Cauã Lemos",
     "aliases": [],
-    "interactionCount": 18,
+    "interactionCount": 20,
     "dataPoints": 0,
     "aiSummary": "Perfil em construção.",
     "aiShortView": "política, debate, brasil",
@@ -133,32 +133,32 @@
     "firstSeen": "2026-10-12T20:45:25.242Z",
     "lastUpdated": "2026-10-12T20:58:33.030Z",
     "lastAIUpdate": "2026-10-12T20:58:27.542Z",
-    "messageCountSinceUpdate": 3
+    "messageCountSinceUpdate": 5
   },
   "155963365548068@lid": {
     "id": "155963365548068@lid",
     "type": "person",
     "name": "ítalo",
     "aliases": [],
-    "interactionCount": 87,
+    "interactionCount": 142,
     "dataPoints": 1,
-    "aiSummary": "ítalo é um usuário brincalhão e zoqueiro no grupo, focado em humor ácido, piadas de cunho sexual e uso frequente de figurinhas.",
-    "aiShortView": "usuário de figurinhas, brincalhão, zoeira, esquerda, piadista",
+    "aiSummary": "ítalo é um usuário brincalhão e zoeiro no grupo, que interage frequentemente com figurinhas irônicas e respostas bem-humoradas e informais.",
+    "aiShortView": "usuário de figurinhas, brincalhão, zoeira, esquerda, irônico",
     "traits": {
       "posicionamento político": "esquerda"
     },
-    "rawNotes": "Usa figurinhas frequentemente e faz piadas de cunho sexual e zoeira com os membros do grupo.",
+    "rawNotes": "Usa figurinhas frequentemente (incluindo a da Pepita com cara de nojo e Ana Maria Braga julgando), faz piadas e brincadeiras provocativas com os membros.",
     "firstSeen": "2026-10-12T20:46:54.802Z",
-    "lastUpdated": "2026-10-12T21:30:38.101Z",
-    "lastAIUpdate": "2026-10-12T21:30:24.979Z",
-    "messageCountSinceUpdate": 12
+    "lastUpdated": "2026-10-13T01:54:37.626Z",
+    "lastAIUpdate": "2026-10-13T01:54:37.626Z",
+    "messageCountSinceUpdate": 7
   },
   "87029090148605@lid": {
     "id": "87029090148605@lid",
     "type": "person",
     "name": "Carlos Eduardo Lima",
     "aliases": [],
-    "interactionCount": 5,
+    "interactionCount": 7,
     "dataPoints": 0,
     "aiSummary": "",
     "aiShortView": "",
@@ -167,14 +167,14 @@
     "firstSeen": "2026-10-12T21:10:13.929Z",
     "lastUpdated": null,
     "lastAIUpdate": null,
-    "messageCountSinceUpdate": 5
+    "messageCountSinceUpdate": 7
   },
   "162354142703765@lid": {
     "id": "162354142703765@lid",
     "type": "person",
     "name": "Felipe 🐍",
     "aliases": [],
-    "interactionCount": 1,
+    "interactionCount": 3,
     "dataPoints": 0,
     "aiSummary": "",
     "aiShortView": "",
@@ -183,23 +183,26 @@
     "firstSeen": "2026-10-12T21:26:43.645Z",
     "lastUpdated": null,
     "lastAIUpdate": null,
-    "messageCountSinceUpdate": 1
+    "messageCountSinceUpdate": 3
   },
   "120363163279095316@g.us": {
     "id": "120363163279095316@g.us",
     "type": "group",
     "name": "GH (Gays e Hetero)",
     "aliases": [],
-    "interactionCount": 12,
-    "dataPoints": 0,
-    "aiSummary": "",
-    "aiShortView": "",
-    "traits": {},
-    "rawNotes": "",
+    "interactionCount": 88,
+    "dataPoints": 1,
+    "aiSummary": "Grupo animado e informal de amigos composto por ítalo, Yann e Márcio, que compartilham conversas descontraídas, piadas e uso frequente de figurinhas.",
+    "aiShortView": "animado, descontraído, informal, amigos, figurinhas",
+    "traits": {
+      "tipo": "grupo de amigos"
+    },
+    "rawNotes": "Participantes ativos incluem ítalo, Yann e Márcio.",
     "firstSeen": "2026-10-12T22:26:13.245Z",
-    "lastUpdated": null,
-    "lastAIUpdate": null,
-    "messageCountSinceUpdate": 12
+    "lastUpdated": "2026-10-13T01:54:19.390Z",
+    "lastAIUpdate": "2026-10-13T01:54:19.390Z",
+    "messageCountSinceUpdate": 13,
+    "photoUrl": "https://pps.whatsapp.net/v/t61.24694-24/459193773_901142328742033_3013406872422051861_n.jpg?ccb=11-4&oh=01_Q5Aa5wET6LcyknQkl0SkvgdcfYtLXO4Pz3tsfCBudek1KP5PoQ&oe=6ADA7729&_nc_sid=5e03e0&_nc_cat=104"
   },
   "3148244598937@lid": {
     "id": "3148244598937@lid",

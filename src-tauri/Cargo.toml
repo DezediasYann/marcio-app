@@ -1,8 +1,8 @@
 [package]
 name = "marcio-app"
-version = "1.0.0"
+version = "1.0.1"
 description = "Márcio App — bot do WhatsApp com IA"
-authors = ["Yann"]
+authors = []
 edition = "2021"
 
 # Veja mais chaves em https://doc.rust-lang.org/cargo/reference/manifest.html

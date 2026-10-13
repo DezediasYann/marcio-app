@@ -160,6 +160,20 @@ export class BasicCommands implements CommandModule {
         help: 'lista as regras de comportamento ativas.',
         opOnly: true,
       },
+      {
+        name: '/nome',
+        aliases: ['!nome'],
+        handler: (msg, chatId) => this.handleNome(msg, chatId),
+        help: 'muda o nome do bot. Ex.: /nome Meu Bot.',
+        opOnly: true,
+      },
+      {
+        name: '/alias',
+        aliases: ['!alias'],
+        handler: (msg, chatId) => this.handleAlias(msg, chatId),
+        help: 'gerencia aliases (/alias, /alias add <nome>, /alias remove <nome>).',
+        opOnly: true,
+      },
     ];
   }
 
@@ -357,7 +371,7 @@ export class BasicCommands implements CommandModule {
 
       const conversationText = lines.join('\n');
 
-      const summaryPrompt = `Você é o Robô do PT. Alguém pediu um resumo da conversa recente do grupo.
+      const summaryPrompt = `Você é um bot de WhatsApp. Alguém pediu um resumo da conversa recente do grupo.
 Faça um resumo dos principais assuntos discutidos, de forma breve e informal, como um amigo contando o que aconteceu.
 Use o mesmo estilo de escrita: minúsculas, sem pontuação formal, gírias se fizer sentido.
 Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
@@ -941,5 +955,95 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
     }
 
     await this.app.react(msg, EMOJI.SUCCESS);
+  }
+
+  // ===========================================================================
+  // /nome — muda o nome do bot
+  // ===========================================================================
+
+  private async handleNome(msg: Message, chatId: string): Promise<void> {
+    await this.app.react(msg, EMOJI.LOADING);
+
+    const args = msg.body.trim().split(/\s+/).slice(1);
+    const newName = args.join(' ').trim();
+
+    if (!newName) {
+      const cfg = this.app.brain.getBotConfig();
+      await this.app.notify(chatId, `nome atual: *${cfg.botName}*\n\nUse */nome <novo nome>* pra mudar.`);
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    // Pega aliases atuais e salva com o novo nome
+    const cfg = this.app.brain.getBotConfig();
+    this.app.brain.saveBotConfig(newName, cfg.aliases);
+    await this.app.notify(chatId, `✅ nome mudado pra *${newName}*`);
+    await this.app.react(msg, EMOJI.SUCCESS);
+  }
+
+  // ===========================================================================
+  // /alias — gerencia aliases do bot
+  // ===========================================================================
+
+  private async handleAlias(msg: Message, chatId: string): Promise<void> {
+    await this.app.react(msg, EMOJI.LOADING);
+
+    const args = msg.body.trim().split(/\s+/).slice(1);
+    const subcommand = (args[0] || '').toLowerCase();
+    const aliasValue = args.slice(1).join(' ').trim();
+
+    const cfg = this.app.brain.getBotConfig();
+
+    // /alias (sem subcomando) — lista
+    if (!subcommand || subcommand === 'list') {
+      if (cfg.allAliases.length === 0) {
+        await this.app.notify(chatId, 'nenhum alias. Use */alias add <nome>* pra adicionar.');
+      } else {
+        await this.app.notify(chatId, `aliases:\n${cfg.allAliases.map(a => `• ${a}`).join('\n')}`);
+      }
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    // /alias add <nome>
+    if (subcommand === 'add') {
+      if (!aliasValue) {
+        await this.app.notify(chatId, 'use */alias add <nome>*');
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      if (cfg.aliases.includes(aliasValue)) {
+        await this.app.notify(chatId, `"${aliasValue}" já é um alias.`);
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      const newAliases = [...cfg.aliases, aliasValue];
+      this.app.brain.saveBotConfig(cfg.botName, newAliases);
+      await this.app.notify(chatId, `✅ alias adicionado: *${aliasValue}*\nAgora o bot responde 100% das vezes quando alguém diz "${aliasValue}".`);
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    // /alias remove <nome>
+    if (subcommand === 'remove' || subcommand === 'rm' || subcommand === 'del') {
+      if (!aliasValue) {
+        await this.app.notify(chatId, 'use */alias remove <nome>*');
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      const newAliases = cfg.aliases.filter(a => a.toLowerCase() !== aliasValue.toLowerCase());
+      if (newAliases.length === cfg.aliases.length) {
+        await this.app.notify(chatId, `"${aliasValue}" não é um alias customizado (pode ser genérico).`);
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      this.app.brain.saveBotConfig(cfg.botName, newAliases);
+      await this.app.notify(chatId, `✅ alias removido: *${aliasValue}*`);
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    await this.app.notify(chatId, 'use */alias* (lista), */alias add <nome>*, ou */alias remove <nome>*');
+    await this.app.react(msg, EMOJI.ERROR);
   }
 }

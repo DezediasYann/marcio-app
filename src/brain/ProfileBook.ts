@@ -380,7 +380,7 @@ export class ProfileBook {
   }
 
   // ===========================================================================
-  // RESOLVE BY NAME — pra self-awareness (IA → "manda pro Italo" → qual ID?)
+  // RESOLVE BY NAME — pra self-awareness (IA → "manda pro Fulano" → qual ID?)
   // ===========================================================================
 
   /**
@@ -390,7 +390,7 @@ export class ProfileBook {
    *  - 0.8 = match por substring (nome contém query ou query contém nome)
    *  - 0.6 = match fuzzy (Levenshtein distance)
    *
-   * @param name Nome pra buscar (ex: "italo", "Carlos D.")
+   * @param name Nome pra buscar (ex: "fulano", "Beltrano S.")
    * @param type Filtrar por tipo (default: 'person')
    * @returns Array ordenado por confidence (maior primeiro).
    */

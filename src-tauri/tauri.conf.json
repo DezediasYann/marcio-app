@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Márcio App",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.marcio.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node precopy.js && npm run dev",
     "devUrl": "http://localhost:3001",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node precopy.js && npm run build && node prepare-bundle.js",
     "frontendDist": "../src/control/public"
   },
   "app": {
@@ -37,6 +37,18 @@
         "center": true,
         "decorations": false,
         "visible": false
+      },
+      {
+        "label": "preparing",
+        "title": "",
+        "url": "preparing.html",
+        "width": 400,
+        "height": 320,
+        "resizable": false,
+        "fullscreen": false,
+        "center": true,
+        "decorations": false,
+        "visible": true
       }
     ],
     "security": {
@@ -58,7 +70,10 @@
       "data/**/*",
       "package.json",
       "patch-whatsapp-web.js",
-      "changelog.json"
+      "changelog.json",
+      "node-portable*",
+      "node_modules.zip",
+      "dist-bundle.zip"
     ],
     "externalBin": [],
     "copyright": "",
@@ -73,7 +88,7 @@
         "https://github.com/ydm-r/marcio-app/releases/latest/download/latest.json"
       ],
       "dialog": true,
-      "pubkey": "PLACEHOLDER_GENERAR_CON_TAURI_SIGNER"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZCMTg4MDA3RDc3OTA3QTYKUldTbUIzblhCNEFZKzVGNlkzTnNWbm56NmgzMlhxMGxyN3ZiRXJKeVlkZy84TXhPR2h0cmFvNWUK"
     }
   }
 }

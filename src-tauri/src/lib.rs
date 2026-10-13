@@ -21,34 +21,19 @@ use std::path::PathBuf;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager, WindowEvent,
+    Manager, WindowEvent, Emitter, Listener,
 };
 use tauri_plugin_notification::NotificationExt;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 struct BotProcess(Mutex<Option<Child>>);
 
 fn is_port_open(host: &str, port: u16) -> bool {
     std::net::TcpStream::connect((host, port)).is_ok()
-}
-
-/// Copia um diretório recursivamente, mas SÓ arquivos que não existem no destino.
-/// Não sobrescreve dados do usuário (memories.json, etc.).
-fn copy_dir_if_not_exists(src: &std::path::Path, dst: &std::path::Path) {
-    if !src.exists() { return; }
-    let _ = std::fs::create_dir_all(dst);
-    if let Ok(entries) = std::fs::read_dir(src) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let dst_path = dst.join(entry.file_name());
-            if path.is_dir() {
-                copy_dir_if_not_exists(&path, &dst_path);
-            } else {
-                if !dst_path.exists() {
-                    let _ = std::fs::copy(&path, &dst_path);
-                }
-            }
-        }
-    }
 }
 
 /// Cópia recursiva que SEMPRE sobrescreve (usado pra dist/).
@@ -150,118 +135,160 @@ fn ensure_default_data_files(app_data_dir: &PathBuf) {
 }
 
 /// Configura o ambiente de produção em AppData:
-/// 1. Copia dist/ (código compilado) — sempre sobrescreve (código novo a cada versão)
-/// 2. Copia package.json + patch-whatsapp-web.js (sempre sobrescreve)
-/// 3. Cria arquivos default de config (ai-config.json, etc.) se não existirem
-/// 4. Roda `npm install --production` se node_modules/ não existe
-/// 5. Roda `node patch-whatsapp-web.js` depois do npm install
-/// Retorna o PathBuf do AppData dir (onde o bot deve rodar).
+/// 1. Extrai dist-bundle.zip (código compilado) — sempre sobrescreve
+/// 2. Extrai node_modules.zip (dependências) — só se não existe (pula se já tem)
+/// 3. Copia package.json + patch-whatsapp-web.js + changelog.json
+/// 4. Cria arquivos default de config se não existirem
+/// 5. Aplica patch do whatsapp-web.js (idempotente)
+/// NÃO faz npm install — node_modules já vem no zip (funciona sem Node.js no PC).
 fn setup_production_env(resource_dir: &PathBuf, app_data_dir: &PathBuf) {
     println!("[TAURI] Configurando ambiente de produção em: {}", app_data_dir.display());
     let _ = std::fs::create_dir_all(app_data_dir);
 
-    // 1. Copia dist/ (código compilado) — sempre sobrescreve (código novo a cada versão)
-    let src_dist = resource_dir.join("dist");
+    // 1. Extrai dist-bundle.zip (código compilado) — sempre sobrescreve
+    let dist_zip = resource_dir.join("dist-bundle.zip");
     let dst_dist = app_data_dir.join("dist");
-    if src_dist.exists() {
+    if dist_zip.exists() {
+        let _ = std::fs::remove_dir_all(&dst_dist);
+        let _ = std::fs::create_dir_all(&dst_dist);
+        println!("[TAURI] Extraindo dist-bundle.zip...");
+        extract_zip(&dist_zip, &dst_dist);
+        println!("[TAURI] ✅ dist/ extraído");
+    } else if resource_dir.join("dist").exists() {
+        // Fallback: copia dist/ direto (se não tem zip)
+        let src_dist = resource_dir.join("dist");
         let _ = std::fs::remove_dir_all(&dst_dist);
         let _ = std::fs::create_dir_all(&dst_dist);
         copy_dir_recursive(&src_dist, &dst_dist);
-        println!("[TAURI] ✅ dist/ copiado");
+        println!("[TAURI] ✅ dist/ copiado (fallback)");
+    }
+
+    // 2. Extrai node_modules.zip — SÓ se não existe (não sobrescreve pra não quebrar patches)
+    let nm_zip = resource_dir.join("node_modules.zip");
+    let dst_nm = app_data_dir.join("node_modules");
+    if !dst_nm.exists() {
+        if nm_zip.exists() {
+            let _ = std::fs::create_dir_all(&dst_nm);
+            println!("[TAURI] Extraindo node_modules.zip (pode demorar)...");
+            extract_zip(&nm_zip, &dst_nm);
+            println!("[TAURI] ✅ node_modules/ extraído");
+        } else {
+            eprintln!("[TAURI] ⚠️ node_modules.zip não encontrado — bot pode não funcionar");
+        }
     } else {
-        eprintln!("[TAURI] ⚠️ dist/ não encontrado nos resources — build pode estar quebrado");
+        println!("[TAURI] node_modules/ já existe — pulando extração");
     }
 
-    // 2. Copia package.json + patch-whatsapp-web.js (sempre sobrescreve)
-    let src_pkg = resource_dir.join("package.json");
-    if src_pkg.exists() {
-        let _ = std::fs::copy(&src_pkg, app_data_dir.join("package.json"));
-        println!("[TAURI] ✅ package.json copiado");
+    // 3. Copia node-portable (Node.js embutido) — sempre sobrescreve
+    #[cfg(windows)]
+    {
+        let src_node = resource_dir.join("node-portable.exe");
+        if src_node.exists() {
+            let _ = std::fs::copy(&src_node, app_data_dir.join("node-portable.exe"));
+            println!("[TAURI] ✅ node-portable.exe copiado");
+        }
     }
-    let src_patch = resource_dir.join("patch-whatsapp-web.js");
-    if src_patch.exists() {
-        let _ = std::fs::copy(&src_patch, app_data_dir.join("patch-whatsapp-web.js"));
-        println!("[TAURI] ✅ patch-whatsapp-web.js copiado");
+    #[cfg(not(windows))]
+    {
+        let src_node = resource_dir.join("node-portable");
+        if src_node.exists() {
+            let _ = std::fs::copy(&src_node, app_data_dir.join("node-portable"));
+            let _ = std::fs::permissions(app_data_dir.join("node-portable"), std::os::unix::fs::PermissionsExt::from_mode(0o755));
+            println!("[TAURI] ✅ node-portable copiado");
+        }
     }
 
-    // 3. Cria arquivos default de config se não existirem (NÃO sobrescreve existentes)
+    // 4. Copia package.json + patch-whatsapp-web.js + changelog.json
+    for file in &["package.json", "patch-whatsapp-web.js", "changelog.json"] {
+        let src = resource_dir.join(file);
+        if src.exists() {
+            let _ = std::fs::copy(&src, app_data_dir.join(file));
+        }
+    }
+
+    // 5. Cria arquivos default de config
     ensure_default_data_files(app_data_dir);
 
-    // 4. Se node_modules/ não existe, roda npm install --production
-    let node_modules = app_data_dir.join("node_modules");
-    if !node_modules.exists() {
-        println!("[TAURI] node_modules/ não existe — rodando npm install --production...");
-        println!("[TAURI] Isso pode demorar vários minutos na primeira vez (baixa Puppeteer + Chromium)...");
-
-        #[cfg(windows)]
-        let output = Command::new("cmd")
-            .arg("/c").arg("npm").arg("install").arg("--production").arg("--no-audit").arg("--no-fund")
-            .current_dir(app_data_dir)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output();
-
-        #[cfg(not(windows))]
-        let output = Command::new("npm")
-            .arg("install").arg("--production").arg("--no-audit").arg("--no-fund")
-            .current_dir(app_data_dir)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output();
-
-        match output {
-            Ok(o) => {
-                if o.status.success() {
-                    println!("[TAURI] ✅ npm install concluído");
-                } else {
-                    eprintln!("[TAURI] ⚠️ npm install pode ter falhado — verificando...");
-                }
-            }
-            Err(e) => {
-                eprintln!("[TAURI] ❌ erro ao rodar npm install: {}", e);
-            }
-        }
-
-        // Roda o patch do whatsapp-web.js (vsync → fps_mode)
+    // 6. Aplica patch do whatsapp-web.js (idempotente, sem janela visível)
+    let patch_marker = app_data_dir.join(".patch-applied");
+    if !patch_marker.exists() {
         println!("[TAURI] Aplicando patch do whatsapp-web.js...");
+        let node_exe = get_node_executable(app_data_dir);
         #[cfg(windows)]
-        let _ = Command::new("cmd")
-            .arg("/c").arg("node").arg("patch-whatsapp-web.js")
-            .current_dir(app_data_dir)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output();
-
-        #[cfg(not(windows))]
-        let _ = Command::new("node")
-            .arg("patch-whatsapp-web.js")
-            .current_dir(app_data_dir)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output();
-    } else {
-        println!("[TAURI] node_modules/ já existe — pulando npm install");
-        // Mesmo com node_modules existente, roda o patch se ainda não foi aplicado
-        // (idempotente — se já tá patcheado, não faz nada)
-        let patch_marker = app_data_dir.join(".patch-applied");
-        if !patch_marker.exists() {
-            println!("[TAURI] Aplicando patch do whatsapp-web.js (primeira vez)...");
-            #[cfg(windows)]
-            let _ = Command::new("cmd")
-                .arg("/c").arg("node").arg("patch-whatsapp-web.js")
+        {
+            let mut cmd = Command::new(&node_exe);
+            cmd.arg("patch-whatsapp-web.js")
                 .current_dir(app_data_dir)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .output();
-            #[cfg(not(windows))]
-            let _ = Command::new("node")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            cmd.creation_flags(CREATE_NO_WINDOW);
+            let _ = cmd.output();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = Command::new(&node_exe)
                 .arg("patch-whatsapp-web.js")
                 .current_dir(app_data_dir)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
                 .output();
-            let _ = std::fs::write(&patch_marker, "applied");
         }
+        let _ = std::fs::write(&patch_marker, "applied");
+    }
+}
+
+/// Resolve o caminho do executável do Node.js.
+/// Em produção: usa node-portable (embutido no app) no AppData.
+/// Em dev: usa "node" do PATH (fallback).
+fn get_node_executable(app_data_dir: &PathBuf) -> String {
+    #[cfg(windows)]
+    {
+        let portable = app_data_dir.join("node-portable.exe");
+        if portable.exists() {
+            return portable.to_string_lossy().to_string();
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let portable = app_data_dir.join("node-portable");
+        if portable.exists() {
+            return portable.to_string_lossy().to_string();
+        }
+    }
+    // Fallback: "node" do PATH (se node-portable não existe)
+    "node".to_string()
+}
+
+/// Extrai um arquivo .zip num diretório destino.
+/// Usa descompactação nativa SEM mostrar janela (CREATE_NO_WINDOW no Windows).
+fn extract_zip(zip_path: &PathBuf, dest: &PathBuf) {
+    let _ = std::fs::create_dir_all(dest);
+    #[cfg(windows)]
+    {
+        let mut cmd = Command::new("powershell");
+        cmd.arg("-WindowStyle").arg("Hidden")
+            .arg("-Command")
+            .arg(format!(
+                "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                zip_path.display(),
+                dest.display()
+            ))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let _ = cmd.output();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = Command::new("unzip")
+            .arg("-o")
+            .arg("-q")
+            .arg(zip_path)
+            .arg("-d")
+            .arg(dest)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .output();
     }
 }
 
@@ -304,42 +331,65 @@ fn spawn_bot_process(app_handle: &tauri::AppHandle) -> Option<Child> {
     let _ = std::fs::create_dir_all(&app_data_dir);
     println!("[TAURI] AppData dir: {}", app_data_dir.display());
 
-    // Configura o ambiente (copia resources, npm install se preciso)
+    // Configura o ambiente (extrai resources, NÃO faz npm install)
     let resource_dir = app_handle.path().resource_dir().ok()?;
     setup_production_env(&resource_dir, &app_data_dir);
 
-    // Spawna `node dist/bot.js` no AppData
-    println!("[TAURI] Iniciando bot: node dist/bot.js em {}", app_data_dir.display());
+    // Resolve o executável do Node.js (node-portable embutido ou "node" do PATH)
+    let node_exe = get_node_executable(&app_data_dir);
+    println!("[TAURI] Node.js: {}", node_exe);
+    println!("[TAURI] Iniciando bot: {} dist/bot.js em {}", node_exe, app_data_dir.display());
+
+    // Redireciona stdout/stderr pra arquivo de log (esconde console do Windows).
+    let log_path = app_data_dir.join("logs");
+    let _ = std::fs::create_dir_all(&log_path);
+    let log_file = std::fs::File::create(log_path.join("bot-stdout.log")).ok();
+    let log_file_err = std::fs::File::create(log_path.join("bot-stderr.log")).ok();
+    let stdout = log_file.map(|f| Stdio::from(f)).unwrap_or(Stdio::null());
+    let stderr = log_file_err.map(|f| Stdio::from(f)).unwrap_or(Stdio::null());
 
     #[cfg(windows)]
-    let child = Command::new("cmd")
-        .arg("/c").arg("node").arg("dist/bot.js")
-        .current_dir(&app_data_dir)
-        .env("MARCIO_DATA_DIR", &app_data_dir)
-        .env("NODE_ENV", "production")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn();
+    {
+        let mut cmd = Command::new(&node_exe);
+        cmd.arg("dist/bot.js")
+            .current_dir(&app_data_dir)
+            .env("MARCIO_DATA_DIR", &app_data_dir)
+            .env("NODE_ENV", "production")
+            .stdout(stdout)
+            .stderr(stderr);
+        cmd.creation_flags(CREATE_NO_WINDOW); // esconde janela de console
+        let child = cmd.spawn();
+        match child {
+            Ok(c) => {
+                println!("[TAURI] ✅ Bot Node.js iniciado (PID: {}, sem janela de console)", c.id());
+                Some(c)
+            }
+            Err(e) => {
+                eprintln!("[TAURI] ❌ Erro ao iniciar bot: {}", e);
+                None
+            }
+        }
+    }
 
     #[cfg(not(windows))]
-    let child = Command::new("node")
-        .arg("dist/bot.js")
-        .current_dir(&app_data_dir)
-        .env("MARCIO_DATA_DIR", &app_data_dir)
-        .env("NODE_ENV", "production")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn();
-
-    match child {
-        Ok(c) => {
-            println!("[TAURI] ✅ Bot Node.js iniciado (PID: {})", c.id());
-            Some(c)
-        }
-        Err(e) => {
-            eprintln!("[TAURI] ❌ Erro ao iniciar bot: {}", e);
-            eprintln!("[TAURI]    Certifique-se de que Node.js está instalado no PATH.");
-            None
+    {
+        let child = Command::new(&node_exe)
+            .arg("dist/bot.js")
+            .current_dir(&app_data_dir)
+            .env("MARCIO_DATA_DIR", &app_data_dir)
+            .env("NODE_ENV", "production")
+            .stdout(stdout)
+            .stderr(stderr)
+            .spawn();
+        match child {
+            Ok(c) => {
+                println!("[TAURI] ✅ Bot Node.js iniciado (PID: {})", c.id());
+                Some(c)
+            }
+            Err(e) => {
+                eprintln!("[TAURI] ❌ Erro ao iniciar bot: {}", e);
+                None
+            }
         }
     }
 }
@@ -463,50 +513,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(BotProcess(Mutex::new(None)))
         .setup(|app| {
-            // Spawna o bot (dev: detecta; produção: copia resources + npm install + spawn)
-            let bot_child = spawn_bot_process(app.handle());
-            let state: tauri::State<BotProcess> = app.state();
-            *state.0.lock().unwrap() = bot_child;
-
-            // === Decide qual janela mostrar (setup ou main) ===
-            // Em produção: checa setup-state.json no AppData.
-            // Em dev: sempre abre main (setup é testado via URL /setup-wizard.html).
-            let is_dev = is_port_open("127.0.0.1", 3001);
-            let should_show_setup = if is_dev {
-                // Dev: sempre abre main. Setup é acessível via http://localhost:3001/setup-wizard.html
-                false
-            } else {
-                // Produção: checa se setup foi completado
-                let app_data_dir = app.path().app_data_dir().ok();
-                match app_data_dir {
-                    Some(d) => !is_setup_completed(&d),
-                    None => true,  // não conseguiu resolver AppData — mostra setup (primeira vez provável)
-                }
-            };
-
-            if should_show_setup {
-                println!("[TAURI] Setup não completado — abrindo janela de setup");
-                if let Some(setup_window) = app.get_webview_window("setup") {
-                    let _ = setup_window.show();
-                    let _ = setup_window.set_focus();
-                }
-                // Esconde a janela main (já tá invisível por config, mas por garantia)
-                if let Some(main_window) = app.get_webview_window("main") {
-                    let _ = main_window.hide();
-                }
-            } else {
-                println!("[TAURI] Setup já completado (ou dev mode) — abrindo janela main");
-                if let Some(main_window) = app.get_webview_window("main") {
-                    let _ = main_window.show();
-                    let _ = main_window.set_focus();
-                }
-                // Fecha a janela de setup se estiver aberta (não deveria, mas por garantia)
-                if let Some(setup_window) = app.get_webview_window("setup") {
-                    let _ = setup_window.hide();
-                }
-            }
-
-            // Tray icon
+            // Tray icon (cria imediatamente — não precisa esperar setup)
             let show = MenuItem::with_id(app, "show", "Mostrar", true, None::<&str>)?;
             let restart = MenuItem::with_id(app, "restart", "Reiniciar bot", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
@@ -547,6 +554,74 @@ pub fn run() {
                     _ => {}
                 })
                 .build(app)?;
+
+            // === Tela de preparação ===
+            // A janela "preparing" já tá visível (visible: true no config).
+            // Em dev: pula direto pra main (porta 3001 já aberta).
+            // Em produção: roda setup_production_env em background, depois troca pra setup/main.
+
+            let app_handle = app.handle().clone();
+
+            // Listener: quando setup_production_env termina, troca de janela
+            app.handle().listen("env-ready", move |_event| {
+                println!("[TAURI] Ambiente pronto — trocando janela");
+
+                // Decide qual janela mostrar (setup ou main)
+                let is_dev = is_port_open("127.0.0.1", 3001);
+                let should_show_setup = if is_dev {
+                    false
+                } else {
+                    let app_data_dir = app_handle.path().app_data_dir().ok();
+                    match app_data_dir {
+                        Some(d) => !is_setup_completed(&d),
+                        None => true,
+                    }
+                };
+
+                // Fecha janela preparing
+                if let Some(prep) = app_handle.get_webview_window("preparing") {
+                    let _ = prep.close();
+                }
+
+                if should_show_setup {
+                    println!("[TAURI] Abrindo setup wizard");
+                    if let Some(setup_window) = app_handle.get_webview_window("setup") {
+                        let _ = setup_window.show();
+                        let _ = setup_window.set_focus();
+                    }
+                } else {
+                    println!("[TAURI] Abrindo painel principal");
+                    if let Some(main_window) = app_handle.get_webview_window("main") {
+                        let _ = main_window.show();
+                        let _ = main_window.set_focus();
+                    }
+                }
+            });
+
+            // Background thread: roda setup_production_env + spawn bot
+            let app_handle_bg = app.handle().clone();
+            std::thread::spawn(move || {
+                let is_dev = is_port_open("127.0.0.1", 3001);
+
+                if is_dev {
+                    println!("[TAURI] Dev mode — pulando setup_production_env");
+                } else {
+                    // Produção: extrai zips, copia node-portable, aplica patch
+                    let resource_dir = app_handle_bg.path().resource_dir().ok();
+                    let app_data_dir = app_handle_bg.path().app_data_dir().ok();
+                    if let (Some(rd), Some(ad)) = (resource_dir, app_data_dir) {
+                        setup_production_env(&rd, &ad);
+                    }
+                }
+
+                // Spawn bot (em dev, bot já tá rodando; em produção, spawn agora)
+                let bot_child = spawn_bot_process(&app_handle_bg);
+                let state: tauri::State<BotProcess> = app_handle_bg.state();
+                *state.0.lock().unwrap() = bot_child;
+
+                // Notifica main thread que o ambiente tá pronto
+                let _ = app_handle_bg.emit("env-ready", ());
+            });
 
             Ok(())
         })

@@ -1,13 +1,13 @@
-# Márcio App — Fase 1 (Foundation)
+# Márcio App
 
-Refatoração OOP do Robô do PT. **Esta é a Fase 1: esqueleto + WhatsApp conecta.**
+Bot de WhatsApp com IA generativa, memória, figurinhas e painel de controle.
 
-## O que esta fase faz
+## O que o app faz
 
-- ✅ Bot inicializa via TypeScript (`tsx`)
+- ✅ Bot conversa no WhatsApp usando Google Gemini (com fallback)
 - ✅ Conecta no WhatsApp (reaproveitando sessão existente)
-- ✅ Loga mensagens recebidas no terminal (`[DEBUG MSG] recebida: ...`)
-- ✅ Estrutura de diretórios OOP pronta pra Fases 2-5
+- ✅ Memória permanente, figurinhas, comandos, painel web
+- ✅ Estrutura OOP pronta (24 classes, ~13000 linhas)
 - ❌ Não responde mensagens (Fase 2)
 - ❌ Não tem comandos (Fase 3)
 - ❌ Não tem IA/memória (Fase 2)

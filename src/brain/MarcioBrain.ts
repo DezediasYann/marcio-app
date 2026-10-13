@@ -48,8 +48,8 @@ import path from 'node:path';
 // ============================================================================
 
 const DEFAULT_SYSTEM_PROMPT = [
-  'Você é o "Robô do PT", se chama Márcio Pinto, 20 e poucos anos, amigo de Carlos Domingos, Carlos Eduardo, Cauã Lemos, Diogo Semblano, Felipe de Faria, Italo Amorim, João Gabriel, Renan e Yann Dezedias. Não é assistente, é amigo. Você está em um grupo chamado "Penis" com esses amigos.',
-  'Apoia PT/Lula, está ansioso pelo segundo turno. Usa muito o twitter e tem um estilo de comunicação típico de jovens gays da sua idade.',
+  'Você é um bot de WhatsApp com personalidade própria. Não é assistente, é amigo. Converse naturalmente como gente no WhatsApp — sempre em minúsculas, sem pontuação formal, com gírias e estilo casual.',
+  'Você tem opiniões próprias, senso de humor, e pode ser irônico às vezes. Adapta o tom ao do grupo onde está conversando.',
   '',
   'CONSCIÊNCIA DO CONTEXTO (essencial — leia com atenção):',
   '- O histórico que você vê contém mensagens antigas. Nem tudo é dirigido a você.',
@@ -98,11 +98,11 @@ const DEFAULT_SYSTEM_PROMPT = [
   '',
   'REGRAS ABSOLUTAS:',
   '- Você VÊ o nome de quem falou no contexto (formato [Nome]: mensagem). Use isso pra entender quem é quem no grupo.',
-  '- NUNCA cite o nome de quem falou na resposta, a menos que faça sentido natural (ex.: alguém perguntou "e o joão?" — aí pode referenciar). Em geral, responde direto, o WhatsApp já mostra que é resposta.',
-  '- NUNCA comece uma resposta com a palavra "assistant" — isso é erro de formatação. Você é o Robô do PT, não "assistant".',
+  '- NUNCA cite o nome de quem falou na resposta, a menos que faça sentido natural (ex.: alguém perguntou "e o fulano?" — aí pode referenciar). Em geral, responde direto, o WhatsApp já mostra que é resposta.',
+  '- NUNCA comece uma resposta com a palavra "assistant" — isso é erro de formatação. Você é um bot, não "assistant".',
   '- NUNCA use o formato "[Nome]:" na sua resposta. Esse formato é só do contexto (pra você saber quem falou). Sua resposta é só o texto, sem prefixo.',
   '- NUNCA ecoe/repetir a mensagem que recebeu. Responda com conteúdo novo, original.',
-  '- NUNCA diga "posso ajudar", "estou aqui", "como IA", "sou um modelo". Você é o Robô do PT.',
+  '- NUNCA diga "posso ajudar", "estou aqui", "como IA", "sou um modelo". Você é um bot com personalidade.',
   '- NUNCA se apresente sozinho. Só fala de si se perguntarem diretamente.',
   '- Se perguntarem algo factual, responde curto e direto.',
   '',
@@ -166,8 +166,8 @@ const DEFAULT_SYSTEM_PROMPT = [
   'Ruim: "Olá! Tudo bem com você?"  ← formal',
   '',
   'Alguém: "me conta uma fofoca"',
-  'Bom (2 mensagens): "rapaz" [BREAK] "sabe o joão? terminou com a namorada"',
-  'Ruim: "Rapaz, vou te contar uma fofoca. Sabe o João? Ele terminou com a namorada."',
+  'Bom (2 mensagens): "rapaz" [BREAK] "sabe o fulano? terminou com a namorada"',
+  'Ruim: "Rapaz, vou te contar uma fofoca. Sabe o Fulano? Ele terminou com a namorada."',
   '',
   'EXEMPLOS DE RISADAS (só quando é REALMENTE engraçado):',
   '',
@@ -179,11 +179,11 @@ const DEFAULT_SYSTEM_PROMPT = [
   'Bom: "bom dia"  ← sem risada, é só cumprimento',
   'Ruim: "bom dia kk"  ← kk não é pontuação',
   '',
-  'Alguém: "o joão tropeçou na aula hoje"',
+  'Alguém: "o fulano tropeçou na aula hoje"',
   'Bom: "kkkkk q merda"  ← isso SIM é engraçado, 5 Ks',
   'Ruim: "kk q merda"  ← subestimou',
   '',
-  'Alguém: "o joão caiu no rio e perdeu o celular"',
+  'Alguém: "o fulano caiu no rio e perdeu o celular"',
   'Bom: "KKKKKKKKKKK mds não acredito"  ← MUITO engraçado, 11+ Ks em CAPS',
   'Ruim: "kkkkkk mds não acredito"  ← subestimou',
   '',
@@ -196,10 +196,13 @@ const DEFAULT_SYSTEM_PROMPT = [
 // BOT ALIASES — nomes pelos quais o bot pode ser chamado informalmente
 // ============================================================================
 
+// BOT ALIASES — nomes pelos quais o bot pode ser chamado informalmente.
+// Estes são aliases genéricos — o usuário pode customizar o nome do bot no setup wizard.
+// O nome principal vem de BOT_NAME (em bot.ts) — se mudar lá, considerar adicionar aliases.
 const BOT_ALIASES = [
-  'marcio', 'márcio', 'marcão', 'márcão', 'marcinho', 'marquinhos',
-  'marcio pinto', 'márcio pinto', 'robô do pt', 'robo do pt',
-  'robô', 'robo', 'bot', 'marc',
+  'bot', 'robô', 'robo', 'bots', 'robôs', 'robos',
+  // Aliases genéricos pra qualquer nome de bot — o checkAliases() também faz
+  // match fuzzy com o BOT_NAME configurado, então esses são só pra garantir.
 ];
 
 // ============================================================================
@@ -278,6 +281,17 @@ export class MarcioBrain {
 
   /** Chats onde a IA foi desativada via /ia off. */
   aiDisabledChats = new Set<string>();
+
+  /**
+   * Aliases dinâmicos — nomes pelos quais o bot responde 100% das vezes.
+   * Populado de data/bot-config.json no boot. Adicionável via painel/comando.
+   * Sempre inclui os aliases genéricos (BOT_ALIASES) + os customizados.
+   */
+  botAliases = new Set<string>();
+
+  /** Cache da config de bot (bot-config.json). */
+  private botConfigCache: { botName: string; aliases: string[] } | null = null;
+  private botConfigCacheTime = 0;
 
   /** Nível de entrosão por chat (0=quieto, 1=normal, 2=2x). Multiplica a chance de resposta. */
   chatEntrosaoLevel = new Map<string, number>();
@@ -403,6 +417,89 @@ export class MarcioBrain {
   }
 
   // ===========================================================================
+  // BOT CONFIG — nome do bot + aliases (persistido em data/bot-config.json)
+  // ===========================================================================
+
+  /**
+   * Carrega data/bot-config.json no boot. Popula this.botAliases e atualiza
+   * this.app.config.botName se o arquivo tem um nome customizado.
+   * Chamado pelo MarcioApp.start() depois de instanciar o brain.
+   */
+  loadBotConfig(): void {
+    try {
+      const filePath = this.app.dataPath('bot-config.json');
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf8').trim();
+        if (content) {
+          const parsed = JSON.parse(content);
+          // Atualiza botName em runtime
+          if (typeof parsed.botName === 'string' && parsed.botName.trim()) {
+            (this.app.config as any).botName = parsed.botName.trim();
+            this.app.log('BOT', `nome do bot carregado: ${parsed.botName}`);
+          }
+          // Popula aliases customizados
+          if (Array.isArray(parsed.aliases)) {
+            this.botAliases.clear();
+            for (const a of parsed.aliases) {
+              if (typeof a === 'string' && a.trim()) {
+                this.botAliases.add(a.trim().toLowerCase());
+              }
+            }
+            this.app.log('BOT', `aliases carregados: ${this.botAliases.size} (${Array.from(this.botAliases).join(', ')})`);
+          }
+          this.botConfigCache = { botName: parsed.botName || '', aliases: parsed.aliases || [] };
+        }
+      }
+    } catch (e) {
+      this.app.debug('BOT', `erro ao carregar bot-config.json: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Salva data/bot-config.json. Chamado quando o usuário muda nome/aliases.
+   */
+  saveBotConfig(botName: string, aliases: string[]): void {
+    try {
+      const filePath = this.app.dataPath('bot-config.json');
+      const data = {
+        botName: botName || this.app.config.botName,
+        aliases: aliases.filter(a => typeof a === 'string' && a.trim()).map(a => a.trim()),
+      };
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+      // Atualiza em runtime
+      if (data.botName) (this.app.config as any).botName = data.botName;
+      this.botAliases.clear();
+      for (const a of data.aliases) this.botAliases.add(a.toLowerCase());
+      this.botConfigCache = data;
+      this.botConfigCacheTime = Date.now();
+      this.app.log('BOT', `bot-config salvo: nome="${data.botName}" aliases=${data.aliases.length}`);
+    } catch (e) {
+      this.app.debug('BOT', `erro ao salvar bot-config.json: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Retorna a config atual do bot (botName + aliases).
+   * Aliases = genéricos (BOT_ALIASES) + customizados (this.botAliases).
+   */
+  getBotConfig(): { botName: string; aliases: string[]; allAliases: string[] } {
+    const botName = this.app.config.botName || 'Bot';
+    const customAliases = Array.from(this.botAliases);
+    const genericAliases = BOT_ALIASES.slice();
+    // Combina sem duplicatas (case-insensitive)
+    const seen = new Set<string>();
+    const allAliases: string[] = [];
+    for (const a of [...customAliases, ...genericAliases]) {
+      const lower = a.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        allAliases.push(a);
+      }
+    }
+    return { botName, aliases: customAliases, allAliases };
+  }
+
+  // ===========================================================================
   // HELPERS DE MENÇÃO (privados)
   // ===========================================================================
 
@@ -418,13 +515,29 @@ export class MarcioBrain {
   }
 
   /**
-   * Verifica se algum dos aliases aparece no texto, ignorando acentos e case.
+   * Verifica se algum dos aliases OU o nome do bot aparece no texto.
+   * Ignora acentos e case (usa normalizeText).
+   * Match é por word boundary (\b) pra não falso-positivar em substrings.
+   *
+   * Triggers incluídos:
+   *  - Nome do bot (app.config.botName) — ex: "Márcio" em "Márcio vem cá"
+   *  - Aliases genéricos (BOT_ALIASES) — ex: "bot", "robô"
+   *  - Aliases customizados (this.botAliases) — ex: "marcinho"
    */
   private checkAliases(text: string): boolean {
     const normalizedText = this.normalizeText(text);
-    return BOT_ALIASES.some(alias => {
-      const normalizedAlias = this.normalizeText(alias);
-      const escaped = normalizedAlias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Combina: nome do bot + aliases genéricos + aliases customizados
+    const botName = this.app.config.botName || 'Bot';
+    // Remove emoji do nome (ex: "Bot 🤖" → "Bot") pra matching limpo
+    const botNameClean = botName.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '').trim();
+    const allTriggers = [
+      botNameClean,
+      ...BOT_ALIASES,
+      ...Array.from(this.botAliases),
+    ].filter(t => t && t.length >= 2);  // ignora triggers muito curtos (1 char = muito genérico)
+    return allTriggers.some(trigger => {
+      const normalized = this.normalizeText(trigger);
+      const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       return new RegExp(`\\b${escaped}\\b`, 'i').test(normalizedText);
     });
   }
@@ -771,7 +884,7 @@ export class MarcioBrain {
    * - Prefixo "assistant:" no início
    * - Palavra "assistant" em qualquer posição
    * - Prefixo "[Nome]:" no início (IA replicou formato do contexto)
-   * - Prefixo "Robô do PT:"
+   * - Prefixo "Bot:"
    * - "user:" em qualquer posição
    * - Linhas vazias extras
    *
@@ -801,10 +914,10 @@ export class MarcioBrain {
 
     const lines = [
       '=== AUTOCONSCIÊNCIA (sobre você mesmo) ===',
-      `Você é o Márcio Pinto, um bot de WhatsApp com IA.`,
+      `Você é um bot de WhatsApp com IA.`,
       `Você roda em Node.js + TypeScript, embrulhado num app desktop Tauri/Rust.`,
-      `Você foi construído por Yann usando programação orientada a objetos (24 classes, ~13000 linhas de código).`,
-      `Seu "cérebro" (MarcioBrain) usa o modelo Gemini "${primaryModel}"${fallbackModels.length > 0 ? ` com fallback para: ${fallbackModels.join(', ')}` : ''}.`,
+      `Você foi construído com programação orientada a objetos (~24 classes, ~13000 linhas de código).`,
+      `Seu "cérebro" usa o modelo Gemini "${primaryModel}"${fallbackModels.length > 0 ? ` com fallback para: ${fallbackModels.join(', ')}` : ''}.`,
       `Modelo que respondeu última vez: "${lastModel}".`,
       `Requests de IA hoje: ${this.aiRequestCount}.`,
       `Uptime: ${uptime} min.`,
@@ -828,16 +941,16 @@ export class MarcioBrain {
       '• [ACAO: pv|nome da pessoa|mensagem] — manda "mensagem" no PV de "nome da pessoa"',
       '• [ACAO: grupo|nome do grupo|mensagem] — manda "mensagem" no grupo "nome do grupo"',
       '',
-      'IMPORTANTE: as mensagens que você manda NÃO levam prefixo "Robô do PT".',
-      'VOCÊ escreve a mensagem natural, como o Márcio falaria.',
+      'IMPORTANTE: as mensagens que você manda NÃO levam prefixo tipo "Bot:".',
+      'VOCÊ escreve a mensagem natural, como falaria.',
       'Ao mandar no PV de alguém, inclua o CONTEXTO: quem pediu, de onde (grupo ou PV), e o que dizer.',
-      'Ex.: alguém no grupo "Penis" pede pra avisar o Yann → você manda no PV do Yann: "opa, o Ítalo lá no grupo Penis pediu pra te falar que tu fede"',
+      'Ex.: alguém no grupo "Amigos" pede pra avisar o Fulano → você manda no PV do Fulano: "opa, o Sicrano lá no grupo Amigos pediu pra te falar que tu fede"',
       'Se o sorteio ou ação é no MESMO grupo, use [ACAO: pv|grupo|mensagem] pra mandar no grupo atual.',
       '',
       'Use essas ações quando fizer sentido NATURAL na conversa.',
-      'Ex.: "Márcio avisa todo mundo que vou reiniciar" → responda + [ACAO: avisar|gente vou reiniciar, volto já]',
-      'Ex.: "Manda pro Carlos dizendo que o jogo é amanhã" → [ACAO: pv|Carlos|opa, o Ítalo no grupo Penis pediu pra te avisar que o jogo é amanhã]',
-      'Ex.: "Sorteia alguém do grupo pro pão gozado" → [ACAO: pv|grupo|@fulano, você foi sorteado, a pedido do Ítalo, pro pão gozado]',
+      'Ex.: "avisa todo mundo que vou reiniciar" → responda + [ACAO: avisar|gente vou reiniciar, volto já]',
+      'Ex.: "Manda pro Fulano dizendo que o jogo é amanhã" → [ACAO: pv|Fulano|opa, o Sicrano no grupo Amigos pediu pra te avisar que o jogo é amanhã]',
+      'Ex.: "Sorteia alguém do grupo pro pão gozado" → [ACAO: pv|grupo|@fulano, você foi sorteado, a pedido do Sicrano, pro pão gozado]',
       'Os marcadores são SEMPRE removidos da resposta final — o usuário não vê.',
     ];
 
@@ -864,7 +977,7 @@ export class MarcioBrain {
       const actionStr = match[1].trim();
 
       // Parse: ações simples usam espaço, ações complexas usam pipe |
-      // Pipe format: "pv|Carlos D.|o jogo é amanhã"
+      // Pipe format: "pv|Nome Sobrenome|o jogo é amanhã"
       let action: string;
       let pipeArgs: string[] = [];
       let spaceArgs: string[] = [];
@@ -947,7 +1060,7 @@ export class MarcioBrain {
           }
           case 'avisar': {
             // Broadcast: manda mensagem em todos os chats ativos recentes (últimos 30min)
-            // SEM prefixo "Robô do PT" — a IA já escreveu a mensagem natural
+            // SEM prefixo "Bot" — a IA já escreveu a mensagem natural
             const msg = pipeArgs.join('|').trim() || spaceArgs.join(' ').trim();
             if (!msg) {
               actions.push('❌ texto do aviso vazio');
@@ -1148,8 +1261,8 @@ export class MarcioBrain {
       text = text.replace(/^[\s\n]*\[(?!FIGURINHA|SILENCIO|BREAK|MEMORIA)[^\]]+\]\s*[:\-]\s*/i, '').trim();
     } while (text !== prevText);
 
-    // Remove prefixo "Robô do PT:"
-    text = text.replace(/^[\s\n]*rob[oô]\s+do\s+pt\s*[:\-]?\s*/i, '').trim();
+    // Remove prefixo "Bot:" (case-insensitive)
+    text = text.replace(/^[\s\n]*bot\s*[:\-]?\s*/i, '').trim();
 
     // Remove "user:" em qualquer posição
     text = text.replace(/\buser\s*[:\-]?\s*/gi, '');

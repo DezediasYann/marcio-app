@@ -16,10 +16,12 @@
 
 import { Client, LocalAuth, type Message } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { MarcioApp } from '../MarcioApp';
 
 export class WhatsAppClient {
-  readonly client: Client;
+  client!: Client;  // público — ControlPanel precisa recriar. Definitively assigned in createClient()
   private app: MarcioApp;
 
   /**
@@ -49,11 +51,16 @@ export class WhatsAppClient {
   constructor(app: MarcioApp) {
     this.app = app;
     this.app.log('WA', 'Construindo WhatsAppClient...');
+    this.createClient();
+  }
 
-    // LocalAuth: se legacyAuthPath for setado, usa ele (produção: AppData).
-    // Senão, usa o default (.wwebjs_auth/ no cwd — dev mode).
-    const authStrategy = app.config.legacyAuthPath
-      ? new LocalAuth({ dataPath: app.config.legacyAuthPath })
+  /**
+   * Cria um novo Client do whatsapp-web.js.
+   * Chamado no constructor e quando precisa recriar após destroy (reconnect/logout).
+   */
+  createClient(): void {
+    const authStrategy = this.app.config.legacyAuthPath
+      ? new LocalAuth({ dataPath: this.app.config.legacyAuthPath })
       : new LocalAuth();
 
     this.client = new Client({
@@ -63,7 +70,7 @@ export class WhatsAppClient {
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',  // evita crash em containers com pouca RAM
+          '--disable-dev-shm-usage',
           '--disable-accelerated-2d-canvas',
           '--disable-gpu',
         ],
@@ -77,6 +84,9 @@ export class WhatsAppClient {
    */
   async initialize(): Promise<void> {
     this.app.log('WA', 'Inicializando client do WhatsApp...');
+
+    // Mata Chromium órfão de execução anterior (evita "browser already running")
+    await this.killLeftoverChromium();
 
     // === Eventos de conexão ===
 
@@ -177,4 +187,129 @@ export class WhatsAppClient {
       this.app.log('WA', `erro ao fechar client: ${(e as Error).message}`);
     }
   }
+
+  /**
+   * Mata processos Chromium/Chrome órfãos que podem estar segurando o lock
+   * da pasta .wwebjs_auth/session. Isso acontece quando o bot crasha ou
+   * é fechado sem chamar destroy() graciosamente.
+   */
+  private async killLeftoverChromium(): Promise<void> {
+    const { execSync } = require('node:child_process');
+    this.app.debug('WA', 'killLeftoverChromium: limpando processos e locks...');
+
+    try {
+      if (process.platform === 'win32') {
+        // 1. Mata processos de browser que possam estar segurando o lock
+        const names = ['chrome.exe', 'chromium.exe', 'msedge.exe'];
+        const allPids: number[] = [];
+        for (const name of names) {
+          try {
+            const out = execSync(`wmic process where "name='${name}'" get ProcessId,CommandLine /format:csv`, { encoding: 'utf8', timeout: 5000 });
+            const lines = out.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            for (const line of lines) {
+              const lower = line.toLowerCase();
+              if (lower.includes('wwebjs_auth') || lower.includes('com.marcio')) {
+                const parts = line.split(',');
+                const pid = parseInt(parts[parts.length - 1]);
+                if (pid > 0 && !allPids.includes(pid)) {
+                  allPids.push(pid);
+                }
+              }
+            }
+          } catch { /* processo não existe */ }
+        }
+        if (allPids.length > 0) {
+          this.app.log('WA', `matando ${allPids.length} processo(s): ${allPids.join(', ')}`);
+          for (const pid of allPids) {
+            try { execSync(`taskkill /F /PID ${pid}`, { timeout: 3000 }); }
+            catch { /* ignora */ }
+          }
+          await new Promise(r => setTimeout(r, 2000));
+        }
+
+        // 2. Remove arquivos de lock do Chromium (SingletonLock, SingletonCookie, SingletonSocket)
+        const sessionDir = path.join(this.app.config.legacyAuthPath || path.join(this.app.config.rootDir, '.wwebjs_auth'), 'session');
+        const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
+        for (const lock of lockFiles) {
+          const lockPath = path.join(sessionDir, lock);
+          try {
+            if (fs.existsSync(lockPath)) {
+              fs.unlinkSync(lockPath);
+              this.app.debug('WA', `killLeftoverChromium: removido lock ${lock}`);
+            }
+          } catch { /* ignora se não consegue */ }
+        }
+      } else {
+        try { execSync('pkill -f "wwebjs_auth" 2>/dev/null', { timeout: 5000 }); } catch { /* ignora */ }
+        // Remove locks no Linux/Mac também
+        const sessionDir = path.join(this.app.config.legacyAuthPath || path.join(this.app.config.rootDir, '.wwebjs_auth'), 'session');
+        for (const lock of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+          try { fs.unlinkSync(path.join(sessionDir, lock)); } catch { /* ignora */ }
+        }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    } catch (e) {
+      this.app.debug('WA', `killLeftoverChromium erro: ${(e as Error).message}`);
+    }
+  }
+}
+
+// ============================================================================
+// HELPER — encontra Chrome/Edge instalado no PC (evita baixar 1.3GB de Chromium)
+// ============================================================================
+
+/**
+ * Procura por Chrome ou Edge instalado no PC do usuário.
+ * Se encontrar, retorna o caminho do executável (pra usar como executablePath do Puppeteer).
+ * Se não encontrar, retorna undefined (Puppeteer baixa Chromium automaticamente).
+ *
+ * Paths verificados (Windows):
+ *  - Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+ *  - Chrome (x86): C:\Program Files (x86)\Google\Chrome\Application\chrome.exe
+ *  - Edge: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+ *
+ * Paths verificados (Linux):
+ *  - /usr/bin/google-chrome, /usr/bin/chromium-browser, /usr/bin/chromium
+ *
+ * Paths verificados (macOS):
+ *  - /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+ */
+function findBrowserExecutable(): string | undefined {
+  const fs = require('node:fs');
+  const candidates: string[] = [];
+
+  if (process.platform === 'win32') {
+    candidates.push(
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      // LocalAppData (instalação por usuário)
+      `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+    );
+  } else if (process.platform === 'darwin') {
+    candidates.push(
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    );
+  } else {
+    // Linux
+    candidates.push(
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+      '/usr/bin/microsoft-edge',
+    );
+  }
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    } catch { /* ignora */ }
+  }
+  return undefined;
 }

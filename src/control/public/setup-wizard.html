@@ -269,7 +269,7 @@
 <!-- Titlebar custom (sem barra do Windows) -->
 <div class="titlebar">
   <div class="titlebar-left">
-    <div class="titlebar-logo">M</div>
+    <div class="titlebar-logo">🤖</div>
     <div class="titlebar-title">Márcio App — Setup</div>
   </div>
   <button class="titlebar-close" onclick="closeApp()" title="Fechar">✕</button>
@@ -298,7 +298,7 @@
     <!-- STEP 0: Welcome -->
     <div class="step active" data-step="0">
       <div class="welcome">
-        <div class="welcome-logo">M</div>
+        <div class="welcome-logo">🤖</div>
         <h1>Bem-vindo ao Márcio App</h1>
         <p>Seu bot de WhatsApp com IA. Vamos fazer uma configuração inicial rápida — depois você pode ajustar tudo pelo painel.</p>
         <div class="welcome-steps">
@@ -314,19 +314,19 @@
     <!-- STEP 1: Bot Name -->
     <div class="step" data-step="1">
       <div class="bot-preview">
-        <div class="bot-avatar" id="botAvatar">M</div>
+        <div class="bot-avatar" id="botAvatar">🤖</div>
         <div class="bot-info-text">
-          <div class="bot-info-name" id="botNamePreview">Márcio Pinto</div>
+          <div class="bot-info-name" id="botNamePreview">Meu Bot</div>
           <div class="bot-info-status">Preview do nome do bot</div>
         </div>
       </div>
       <div class="form-group">
         <label>Nome do bot <span class="hint">como ele se chama</span></label>
-        <input type="text" id="botName" placeholder="Márcio Pinto" value="Márcio Pinto" oninput="updateBotPreview()">
+        <input type="text" id="botName" placeholder="Meu Bot" value="Meu Bot" oninput="updateBotPreview()">
       </div>
       <div class="form-group">
         <label>Como ele se apresenta <span class="hint">nome informal</span></label>
-        <input type="text" id="botAlias" placeholder="Márcio" value="Márcio">
+        <input type="text" id="botAlias" placeholder="Bot" value="Bot">
       </div>
     </div>
 
@@ -335,7 +335,7 @@
       <div class="form-group">
         <label>Personalidade do bot <span class="hint">system prompt — como ele deve agir</span></label>
         <div style="font-size: 12px; color: rgba(245,245,247,0.5); margin-bottom: 8px;">
-          Deixe vazio pra usar o prompt padrão (Márcio Pinto, grupo "Penis", humorístico, etc.).
+          Deixe vazio pra usar o prompt padrão (personalidade default do bot).
           Ou cole seu próprio prompt personalizado.
         </div>
         <textarea id="systemPrompt" placeholder="Você é o [nome], amigo de [pessoas]... (deixe vazio pra usar default)"></textarea>
@@ -531,7 +531,7 @@ function prevStep() {
 }
 
 function updateBotPreview() {
-  const name = $('#botName').value.trim() || 'Márcio Pinto';
+  const name = $('#botName').value.trim() || 'Meu Bot';
   $('#botNamePreview').textContent = name;
   $('#botAvatar').textContent = name.charAt(0).toUpperCase();
 }
@@ -698,53 +698,59 @@ async function finishSetup() {
   if (!window.__TAURI__) {
     toast('MODO DEV — nada foi salvo. Wizard é só preview visual.', 'info', 4000);
     setTimeout(() => {
-      // Em browser, fecha a aba (ou redireciona pro painel)
-      if (window.opener) {
-        window.close();
-      } else {
-        window.location.href = API_BASE + '/';
-      }
+      if (window.opener) { window.close(); }
+      else { window.location.href = API_BASE + '/'; }
     }, 1500);
     return;
   }
 
-  try {
-    const body = {
-      botName: botName || 'Márcio Pinto',
-      systemPrompt: systemPrompt || '',
-      aiConfig: {
-        model: aiModel || 'gemini-3.5-flash-lite',
-        fallbackModels: [aiFallback || 'gemini-3.1-flash-lite'],
-        apiKey: apiKey,
-        apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-        audioTranscription: {
-          enabled: true,
-          primaryModel: aiModel || 'gemini-3.5-flash-lite',
-          fallbackModel: aiFallback || 'gemini-3.1-flash-lite',
-        },
+  // Tenta o POST com retry (o bot pode ainda estar inicializando o servidor HTTP)
+  const body = {
+    botName: botName || 'Bot',
+    systemPrompt: systemPrompt || '',
+    aiConfig: {
+      model: aiModel || 'gemini-3.5-flash-lite',
+      fallbackModels: [aiFallback || 'gemini-3.1-flash-lite'],
+      apiKey: apiKey,
+      apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+      audioTranscription: {
+        enabled: true,
+        primaryModel: aiModel || 'gemini-3.5-flash-lite',
+        fallbackModel: aiFallback || 'gemini-3.1-flash-lite',
       },
-    };
-    const resp = await fetch(API_BASE + '/api/setup/complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const result = await resp.json().catch(() => ({}));
-    if (!resp.ok || result.devMode) {
-      // Backend bloqueou (modo dev) — não salvou nada
-      toast('Backend em modo dev — nada foi salvo.', 'info', 4000);
-      console.warn('[SETUP] backend bloqueou:', result.error);
-      setTimeout(() => closeApp(), 1500);
-      return;
-    }
-    toast('Setup salvo!', 'success');
+    },
+  };
 
-    // Em Tauri: chama comando Rust pra abrir janela main e fechar setup
+  let success = false;
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    try {
+      const resp = await fetch(API_BASE + '/api/setup/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) {
+        const result = await resp.json().catch(() => ({}));
+        if (!result.devMode) {
+          success = true;
+          break;
+        }
+      }
+      // Se não OK mas não é erro de rede, tenta de novo após 1s
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (e) {
+      // Erro de rede (servidor ainda não tá pronto) — tenta de novo após 1s
+      console.log(`[SETUP] tentativa ${attempt}/10 falhou: ${e.message}`);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  if (success) {
+    toast('Setup salvo! ✓', 'success');
     setTimeout(() => {
       if (window.__TAURI__) {
-        try {
-          window.__TAURI__.core.invoke('open_main_window');
-        } catch (e) {
+        try { window.__TAURI__.core.invoke('open_main_window'); }
+        catch (e) {
           console.error('[SETUP] erro ao chamar open_main_window:', e);
           try {
             const { getCurrentWindow } = window.__TAURI__.window || window.__TAURI__.webviewWindow;
@@ -755,8 +761,12 @@ async function finishSetup() {
         window.location.href = API_BASE + '/';
       }
     }, 800);
-  } catch (e) {
-    toast('Erro ao salvar setup: ' + e.message, 'error');
+  } else {
+    toast('Não consegui salvar — salvando localmente. Reinicie o app.', 'error', 6000);
+    // Fallback: salva direto no localStorage (pelo menos não perde tudo)
+    try {
+      localStorage.setItem('marcio-pending-setup', JSON.stringify(body));
+    } catch {}
   }
 }
 

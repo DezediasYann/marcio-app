@@ -164,9 +164,10 @@ export class MarcioApp {
     this.directives = new Directives(this);
     this.log('BOOT', `Directives inicializado — ${this.directives.all().length} diretiva(s).`);
 
-    // === FASE 2.5: MarcioBrain (o cérebro do Márcio — IA, prompt, fallback) ===
+    // === FASE 2.5: MarcioBrain (o cérebro — IA, prompt, fallback) ===
     this.brain = new MarcioBrain(this);
-    this.log('BOOT', `Brain inicializado — modelo=${this.brain.getAIConfig().model} fallbacks=${this.brain.getAllFallbackModels().length - 1}`);
+    this.brain.loadBotConfig();  // carrega bot-config.json (nome + aliases customizados)
+    this.log('BOOT', `Brain inicializado — modelo=${this.brain.getAIConfig().model} fallbacks=${this.brain.getAllFallbackModels().length - 1} botName=${this.config.botName}`);
 
     // === FASE 6b: ChatSettings (persiste IA/entrosão/mute por chat) ===
     this.chatSettings = new ChatSettings(this);
@@ -221,17 +222,24 @@ export class MarcioApp {
 
     // Router ANTES do WhatsApp initialize (o handler message_create chama router)
     this.router = new MessageRouter(this);
-    // WhatsApp por último (dispara QR/ready/message_create)
-    this.whatsapp = new WhatsAppClient(this);
-    await this.whatsapp.initialize();
-
-    // Starta o timer de verificação retroativa (a cada 10min por default)
-    this.retroactive.setupTimer();
 
     // === FASE 5a: ControlPanel (dashboard web em http://localhost:3001) ===
+    // INICIA ANTES do WhatsApp — assim o painel (e o setup wizard) já consegue
+    // fazer requests HTTP enquanto o WhatsApp ainda tá conectando.
     this.control = new ControlPanel(this);
     this.control.listen(3001);
     this.log('BOOT', 'ControlPanel ouvindo em http://localhost:3001');
+
+    // WhatsApp por último (dispara QR/ready/message_create) — async, demora 10-30s
+    this.whatsapp = new WhatsAppClient(this);
+    // NÃO espera initialize() — roda em background pra não bloquear o boot.
+    // O ControlPanel já tá ouvindo, e o WhatsApp conecta quando conseguir.
+    this.whatsapp.initialize().catch(e => {
+      this.log('BOOT', `Erro ao inicializar WhatsApp: ${e.message}`);
+    });
+
+    // Starta o timer de verificação retroativa (a cada 10min por default)
+    this.retroactive.setupTimer();
 
     // Starta coleta de stats pro gráfico (a cada 60s)
     this.startStatsHistory();

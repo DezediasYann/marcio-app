@@ -1,7 +1,7 @@
 {
   "releases": [
     {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "date": "2025-01-15",
       "title": "🎉 Primeira versão pública!",
       "sections": [
@@ -11,7 +11,7 @@
           "items": [
             "Bot responde mensagens no WhatsApp usando Google Gemini (3.5 Flash Lite + fallback 3.1 Flash Lite)",
             "Personalidade customizável via system prompt (editor no painel)",
-            "Memória permanente de fatos sobre pessoas (ex: 'Yann mora em SP')",
+            "Memória permanente de fatos sobre pessoas (ex: 'Fulano mora em SP')",
             "Aprendizado de estilo de escrita por chat (gírias, maiúsculas, emojis)",
             "Decisão inteligente: cooldown, chance, triggers (pergunta/drama/política/fofoca), entrosão ajustável",
             "Sistema retroativo: volta a mensagens ignoradas e responde se ficar interessante",

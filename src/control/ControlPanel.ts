@@ -52,6 +52,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createZip, readZip } from './ZipBundle';
 
 // ============================================================================
 // TIPOS
@@ -97,27 +98,30 @@ function extractMultipartFile(body: Buffer, contentType: string): Buffer | null 
   // Pega o boundary do header: multipart/form-data; boundary=----WebKitFormBoundaryXXX
   const m = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
   if (!m) return null;
-  const boundary = m[1] || m[2];
+  const boundary = (m[1] || m[2] || '').trim();
   if (!boundary) return null;
 
-  // O delimiter real é \r\n--<boundary>
-  const delim = Buffer.from(`\r\n--${boundary}`);
-  // Acha a primeira ocorrência do delim (depois da primeira linha de boundary).
-  const firstDelim = body.indexOf(`--${boundary}`);
+  // O delimiter real é --<boundary>
+  const delim = Buffer.from(`--${boundary}`);
+  // Acha a primeira ocorrência do delim.
+  const firstDelim = body.indexOf(delim);
   if (firstDelim === -1) return null;
 
-  // Procura por "filename=" no body a partir do primeiro delim.
-  const filenameIdx = body.indexOf('filename=', firstDelim);
-  if (filenameIdx === -1) return null;
-
-  // Os headers da parte terminam com \r\n\r\n. O conteúdo começa depois.
-  const headersEnd = body.indexOf('\r\n\r\n', filenameIdx);
+  // Procura por \r\n\r\n (fim dos headers da parte) a partir do primeiro delim.
+  // O conteúdo começa depois do \r\n\r\n.
+  const headersEnd = body.indexOf('\r\n\r\n', firstDelim);
   if (headersEnd === -1) return null;
   const contentStart = headersEnd + 4;
 
   // O conteúdo termina no próximo \r\n--<boundary>.
-  const contentEnd = body.indexOf(delim, contentStart);
-  if (contentEnd === -1) return null;
+  const endDelim = Buffer.from(`\r\n--${boundary}`);
+  const contentEnd = body.indexOf(endDelim, contentStart);
+  if (contentEnd === -1) {
+    // Tenta sem o \r\n (última parte pode não ter)
+    const altEnd = body.indexOf(delim, contentStart);
+    if (altEnd === -1) return null;
+    return body.subarray(contentStart, altEnd);
+  }
 
   return body.subarray(contentStart, contentEnd);
 }
@@ -612,6 +616,46 @@ export class ControlPanel {
         return this.json(res, { qr });
       }
 
+      // GET /api/bot-config — retorna nome do bot + aliases
+      if (method === 'GET' && pathname === '/api/bot-config') {
+        try {
+          const cfg = this.app.brain.getBotConfig();
+          return this.json(res, cfg);
+        } catch (e) {
+          return this.json(res, { error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/bot-config — salva nome do bot + aliases
+      // Body: { botName: string, aliases: string[] }
+      if (method === 'POST' && pathname === '/api/bot-config') {
+        const body = await this.readJsonBody(req);
+        try {
+          const botName = typeof body?.botName === 'string' ? body.botName.trim() : '';
+          const aliases = Array.isArray(body?.aliases) ? body.aliases : [];
+          this.app.brain.saveBotConfig(botName, aliases);
+          return this.json(res, { ok: true, botName: this.app.config.botName, aliases: Array.from(this.app.brain.botAliases) });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // GET /api/bot/avatar — retorna URL da foto de perfil do bot no WhatsApp
+      if (method === 'GET' && pathname === '/api/bot/avatar') {
+        try {
+          const client = this.app.whatsapp?.client;
+          if (!client || !client.info?.wid?._serialized) {
+            return this.json(res, { url: null, error: 'WhatsApp não conectado' });
+          }
+          const myId = client.info.wid._serialized;
+          const contact = await client.getContactById(myId);
+          const url = await contact.getProfilePicUrl();
+          return this.json(res, { url, id: myId });
+        } catch (e) {
+          return this.json(res, { url: null, error: (e as Error).message });
+        }
+      }
+
       // POST /api/bot/stop
       if (method === 'POST' && pathname === '/api/bot/stop') {
         try {
@@ -645,16 +689,25 @@ export class ControlPanel {
         }
       }
 
-      // POST /api/bot/reconnect  (destroy + initialize no mesmo client)
+      // POST /api/bot/reconnect  (destroy + kill + recreate client + initialize)
       if (method === 'POST' && pathname === '/api/bot/reconnect') {
         try {
-          const client = this.app.whatsapp?.client;
-          if (!client) return this.json(res, { ok: false, error: 'client indisponível' }, 500);
-          // destroy + initialize em background (demora).
+          const wa = this.app.whatsapp;
+          if (!wa) return this.json(res, { ok: false, error: 'WhatsApp client indisponível' }, 500);
           (async () => {
             try {
-              await client.destroy();
-              await client.initialize();
+              this.app.log('PANEL', 'reconnect: destruindo client...');
+              await wa.client.destroy();
+            } catch (e) {
+              this.app.debug('PANEL', `reconnect: destroy falhou: ${(e as Error).message}`);
+            }
+            await killLeftoverChromium(this.app);
+            // Cria um Client NOVO (não dá pra reusar o mesmo após destroy)
+            this.app.log('PANEL', 'reconnect: recriando client...');
+            wa.createClient();
+            try {
+              this.app.log('PANEL', 'reconnect: inicializando...');
+              await wa.initialize();
               this.app.log('PANEL', 'reconnect: client re-inicializado');
             } catch (e) {
               this.app.log('PANEL', `erro em reconnect: ${(e as Error).message}`);
@@ -666,24 +719,49 @@ export class ControlPanel {
         }
       }
 
-      // POST /api/bot/logout  (deleta .wwebjs_auth/ e reconecta → força novo QR)
+      // POST /api/bot/logout  (kill + deleta auth + recreate + initialize)
       if (method === 'POST' && pathname === '/api/bot/logout') {
         try {
+          const wa = this.app.whatsapp;
           const authPath = this.app.config.legacyAuthPath
             || path.join(this.app.config.rootDir, '.wwebjs_auth');
-          this.app.log('PANEL', `logout: removendo auth em ${authPath}`);
-          try {
-            fs.rmSync(authPath, { recursive: true, force: true });
-          } catch (e) {
-            this.app.debug('PANEL', `logout: erro ao remover auth dir: ${(e as Error).message}`);
+          this.app.log('PANEL', `logout: iniciando...`);
+
+          // 1. Destroy o client
+          if (wa) {
+            try {
+              this.app.log('PANEL', 'logout: destruindo client...');
+              await wa.client.destroy();
+            } catch (e) {
+              this.app.debug('PANEL', `logout: destroy falhou: ${(e as Error).message}`);
+            }
           }
-          // Re-inicializa em background (vai gerar novo QR).
-          const client = this.app.whatsapp?.client;
-          if (client) {
+
+          // 2. Mata processos órfãos + remove locks
+          await killLeftoverChromium(this.app);
+
+          // 3. Remove o diretório de auth
+          this.app.log('PANEL', `logout: removendo auth em ${authPath}`);
+          for (let i = 0; i < 5; i++) {
+            try {
+              fs.rmSync(authPath, { recursive: true, force: true });
+              this.app.log('PANEL', 'logout: auth removido ✓');
+              break;
+            } catch (e) {
+              this.app.debug('PANEL', `logout: tentativa ${i+1} falhou: ${(e as Error).message}`);
+              await new Promise(r => setTimeout(r, 1000));
+              await killLeftoverChromium(this.app);
+            }
+          }
+
+          // 4. Cria Client NOVO e inicializa
+          if (wa) {
             (async () => {
               try {
-                await client.destroy();
-                await client.initialize();
+                this.app.log('PANEL', 'logout: recriando client...');
+                wa.createClient();
+                this.app.log('PANEL', 'logout: inicializando...');
+                await wa.initialize();
                 this.app.log('PANEL', 'logout: client re-inicializado — novo QR deve aparecer');
               } catch (e) {
                 this.app.log('PANEL', `logout: erro ao re-inicializar: ${(e as Error).message}`);
@@ -1466,9 +1544,9 @@ export class ControlPanel {
         }
       }
 
-      // POST /api/export — gera backup seletivo
+      // POST /api/export — gera backup como .zip (bundle)
       // Body: { components: ['memories', 'directives', ...] }
-      // Retorna JSON completo (download direto) no formato .marcio.json
+      // Retorna .zip com os arquivos reais dentro (comprime com deflate).
       if (method === 'POST' && pathname === '/api/export') {
         try {
           const body = await this.readJsonBody(req);
@@ -1480,39 +1558,111 @@ export class ControlPanel {
           if (pkg.errors.length > 0 && pkg.data === null) {
             return this.json(res, { ok: false, error: 'todos os componentes falharam', details: pkg.errors }, 500);
           }
-          const fullPkg = {
-            format: 'marcio-backup',
-            version: 2,
+
+          // Gera ZIP
+          const files: Record<string, Buffer> = {};
+          const meta = {
+            format: 'marcio-zip-bundle',
+            version: 1,
             createdAt: new Date().toISOString(),
-            appVersion: '1.0.0',
+            appVersion: this.getCurrentVersion(),
             components: pkg.exported,
-            data: pkg.data || {},
-            errors: pkg.errors,
           };
-          const bodyStr = JSON.stringify(fullPkg, null, 2);
+          files['metadata.json'] = Buffer.from(JSON.stringify(meta, null, 2), 'utf8');
+          if (pkg.data) {
+            for (const [comp, content] of Object.entries(pkg.data)) {
+              if (comp === 'system-prompt') {
+                files['system-prompt.txt'] = Buffer.from(String(content), 'utf8');
+              } else if (comp === 'stickers-vault') {
+                if (typeof content === 'object' && content) {
+                  for (const [fname, b64] of Object.entries(content)) {
+                    files[`stickers-vault/${fname}`] = Buffer.from(b64 as string, 'base64');
+                  }
+                }
+              } else {
+                files[`${comp}.json`] = Buffer.from(JSON.stringify(content, null, 2), 'utf8');
+              }
+            }
+          }
+          const zipBuf = createZip(files);
           res.writeHead(200, {
-            'Content-Type': 'application/json; charset=utf-8',
-            'Content-Disposition': `attachment; filename="marcio-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json"`,
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename="marcio-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip"`,
             'Cache-Control': 'no-store',
+            'Content-Length': zipBuf.length,
           });
-          res.end(bodyStr);
-          this.app.log('PANEL', `export: ${pkg.exported.length} componente(s) — ${pkg.exported.join(', ')}`);
+          res.end(zipBuf);
+          this.app.log('PANEL', `export ZIP: ${pkg.exported.length} componente(s), ${(zipBuf.length / 1024).toFixed(0)}KB — ${pkg.exported.join(', ')}`);
           return;
         } catch (e) {
           return this.json(res, { ok: false, error: (e as Error).message }, 500);
         }
       }
 
-      // POST /api/import — restaura backup seletivo
-      // Aceita: JSON direto, multipart/form-data com file, ou envelope antigo {files}
-      // Body implícito: o pacote .marcio.json completo
+      // POST /api/import — restaura backup de arquivo .zip (bundle)
+      // Body: arquivo .zip cru (Content-Type: application/zip)
       // Query: ?components=memories,directives (opcional — filtra o que restaurar)
       if (method === 'POST' && pathname === '/api/import') {
         try {
-          const parsed = await this.readRestoreBody(req);
-          if (!parsed || typeof parsed !== 'object') {
-            return this.json(res, { ok: false, error: 'JSON inválido' }, 400);
+          // Lê body como Buffer
+          const buf = await new Promise<Buffer>((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            let total = 0;
+            const MAX = 100 * 1024 * 1024;
+            req.on('data', (chunk: Buffer) => {
+              total += chunk.length;
+              if (total > MAX) { reject(new Error('body too large')); req.destroy(); return; }
+              chunks.push(chunk);
+            });
+            req.on('end', () => resolve(Buffer.concat(chunks)));
+            req.on('error', reject);
+          });
+
+          // Detecta ZIP pelos magic bytes (PK\x03\x04)
+          const isZip = buf.length >= 4 && buf.readUInt32LE(0) === 0x04034b50;
+          if (!isZip) {
+            return this.json(res, { ok: false, error: 'Formato inválido. Use um arquivo .zip exportado pelo app.' }, 400);
           }
+
+          this.app.debug('PANEL', `import: ZIP detectado, ${buf.length} bytes`);
+          const files = readZip(buf);
+          this.app.debug('PANEL', `import: ZIP extraído — ${Object.keys(files).length} arquivos`);
+
+          // Lê metadata.json
+          const meta = files['metadata.json'] ? JSON.parse(files['metadata.json'].toString('utf8')) : {};
+          this.app.debug('PANEL', `import: metadata:`, meta);
+
+          // Converte arquivos pra formato interno
+          const data: Record<string, any> = {};
+          for (const [fname, fbuf] of Object.entries(files)) {
+            if (fname === 'metadata.json') continue;
+            if (fname === 'system-prompt.txt') {
+              data['system-prompt'] = fbuf.toString('utf8');
+            } else if (fname.startsWith('stickers-vault/')) {
+              if (!data['stickers-vault']) data['stickers-vault'] = {};
+              const sname = fname.replace('stickers-vault/', '');
+              // Mantém como Buffer — applyImportPackage detecta Buffer e escreve direto
+              data['stickers-vault'][sname] = fbuf;
+            } else if (fname.endsWith('.json')) {
+              const comp = fname.replace('.json', '');
+              try { data[comp] = JSON.parse(fbuf.toString('utf8')); }
+              catch { this.app.debug('PANEL', `import: skip ${fname} (JSON inválido)`); }
+            }
+          }
+
+          const parsed = {
+            format: 'marcio-backup',
+            version: 2,
+            createdAt: meta.createdAt || new Date().toISOString(),
+            components: meta.components || Object.keys(data),
+            data,
+            errors: [],
+          };
+
+          if (!parsed.data || Object.keys(parsed.data).length === 0) {
+            return this.json(res, { ok: false, error: 'ZIP não contém componentes reconhecidos' }, 400);
+          }
+
           // Determina quais componentes restaurar
           const url2 = new URL(req.url || '/', 'http://localhost');
           const filterParam = url2.searchParams.get('components');
@@ -1520,9 +1670,10 @@ export class ControlPanel {
             ? filterParam.split(',').map(s => s.trim()).filter(Boolean)
             : null;
           const result = this.applyImportPackage(parsed, filter);
-          this.app.log('PANEL', `import: ${result.applied.length} componente(s) restaurado(s) — ${result.applied.join(', ') || 'nenhum'}`);
-          return this.json(res, { ok: true, ...result });
+          this.app.log('PANEL', `import ZIP: ${result.applied.length} componente(s) restaurado(s) — ${result.applied.join(', ') || 'nenhum'}`);
+          return this.json(res, { ok: true, format: 'zip', ...result });
         } catch (e) {
+          this.app.debug('PANEL', `import erro: ${(e as Error).message}`);
           return this.json(res, { ok: false, error: (e as Error).message }, 500);
         }
       }
@@ -1867,7 +2018,7 @@ export class ControlPanel {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
       let total = 0;
-      const MAX = 50 * 1024 * 1024; // 50MB — backup pode ser grande
+      const MAX = 50 * 1024 * 1024;
       req.on('data', (chunk: Buffer) => {
         total += chunk.length;
         if (total > MAX) {
@@ -1881,19 +2032,36 @@ export class ControlPanel {
         try {
           const buf = Buffer.concat(chunks);
           const ct = String(req.headers['content-type'] || '').toLowerCase();
-          if (ct.includes('multipart/form-data')) {
-            // Extrai o conteúdo do primeiro campo "file" do multipart.
-            const fileContent = extractMultipartFile(buf, ct);
-            if (fileContent == null) {
-              return reject(new Error('multipart sem arquivo'));
-            }
-            const json = JSON.parse(fileContent.toString('utf8'));
-            return resolve(json);
+          // Tenta JSON direto primeiro (mais comum e confiável)
+          const raw = buf.toString('utf8').trim();
+          if (raw.startsWith('{') || raw.startsWith('[')) {
+            try {
+              return resolve(JSON.parse(raw));
+            } catch { /* não é JSON válido, continua */ }
           }
-          // JSON direto
-          const raw = buf.toString('utf8');
+          // Se é multipart, tenta extrair
+          if (ct.includes('multipart/form-data')) {
+            const fileContent = extractMultipartFile(buf, ct);
+            if (fileContent != null) {
+              try {
+                const json = JSON.parse(fileContent.toString('utf8'));
+                return resolve(json);
+              } catch { /* arquivo não é JSON */ }
+            }
+            // Fallback: tenta parsear o body inteiro como JSON (ignorando multipart headers)
+            try {
+              return resolve(JSON.parse(raw));
+            } catch {
+              return reject(new Error('multipart sem arquivo válido'));
+            }
+          }
+          // Qualquer outro caso: tenta JSON
           if (!raw) return resolve({});
-          resolve(JSON.parse(raw));
+          try {
+            resolve(JSON.parse(raw));
+          } catch {
+            reject(new Error('body não é JSON válido'));
+          }
         } catch (e) {
           reject(e);
         }
@@ -2360,6 +2528,11 @@ export class ControlPanel {
       const i = info('command-overrides.json', d => Object.keys(d || {}).length);
       comps.push({ id: 'command-overrides', label: 'Overrides de comandos', description: 'Configs de ativar/desativar e permissão', icon: '🔧', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
     }
+    // bot-config (nome do bot + aliases customizados)
+    {
+      const i = info('bot-config.json', d => Array.isArray(d?.aliases) ? d.aliases.length : 0);
+      comps.push({ id: 'bot-config', label: 'Config do Bot', description: 'Nome do bot e aliases de resposta', icon: '🤖', count: i.count, sizeBytes: i.sizeBytes, available: i.available });
+    }
     // events
     {
       const i = info('events.json', d => Array.isArray(d) ? d.length : 0);
@@ -2498,6 +2671,12 @@ export class ControlPanel {
             else errors.push('command-overrides: arquivo não encontrado');
             break;
           }
+          case 'bot-config': {
+            const d = readJson('bot-config.json');
+            if (d !== null) { data['bot-config'] = d; exported.push(comp); }
+            else errors.push('bot-config: arquivo não encontrado');
+            break;
+          }
           case 'events': {
             const d = readJson('events.json');
             if (d !== null) { data.events = d; exported.push(comp); }
@@ -2613,15 +2792,17 @@ export class ControlPanel {
             if (writeJson('stickers-meta.json', content)) applied.push(comp);
             break;
           case 'stickers-vault': {
-            // content = { filename: base64 }
+            // content = { filename: Buffer (do ZIP) OU string base64 (do JSON antigo) }
             if (content && typeof content === 'object') {
               const vaultDir = this.app.dataPath('stickers-vault');
               fs.mkdirSync(vaultDir, { recursive: true });
               let n = 0;
-              for (const [fname, b64] of Object.entries(content)) {
+              for (const [fname, val] of Object.entries(content)) {
                 if (!fname || /[\\/]|\.\./.test(fname)) continue;
                 try {
-                  fs.writeFileSync(path.join(vaultDir, fname), Buffer.from(b64 as string, 'base64'));
+                  // Se é Buffer (do ZIP), escreve direto. Se é string (base64 do JSON antigo), converte.
+                  const buf = Buffer.isBuffer(val) ? val : Buffer.from(val as string, 'base64');
+                  fs.writeFileSync(path.join(vaultDir, fname), buf);
                   n++;
                 } catch (e) {
                   errors.push(`stickers-vault/${fname}: ${(e as Error).message}`);
@@ -2643,8 +2824,13 @@ export class ControlPanel {
           case 'command-overrides':
             if (writeJson('command-overrides.json', content)) {
               applied.push(comp);
-              // Recarrega overrides no CommandRegistry
               try { this.app.commands.loadOverrides(); } catch { /* ignora */ }
+            }
+            break;
+          case 'bot-config':
+            if (writeJson('bot-config.json', content)) {
+              applied.push(comp);
+              try { this.app.brain.loadBotConfig(); } catch { /* ignora */ }
             }
             break;
           case 'events':
@@ -2658,10 +2844,70 @@ export class ControlPanel {
       }
     }
 
-    // Invalida cache de memórias se memories foi restaurado
+    // === Invalida TODAS as caches em memória após import ===
+    // Sem isso, o bot continua lendo dados velhos da cache mesmo depois
+    // dos arquivos no disco terem sido atualizados.
+
+    // Memory
     if (applied.some(a => a.startsWith('memories'))) {
       try { (this.app.memory as any).cache = null; } catch { /* ignora */ }
     }
+
+    // Profile (chat-profiles.json) — tem cache interno
+    if (applied.some(a => a.includes('chat-profiles'))) {
+      try { (this.app.profile as any).cache = null; } catch { /* ignora */ }
+    }
+
+    // ProfileBook (profile-book.json) — tem cache interno
+    if (applied.some(a => a.includes('profile-book'))) {
+      try { (this.app.profileBook as any).cache = null; } catch { /* ignora */ }
+    }
+
+    // Retroactive (decision-log.json) — decisionLog é Map em memória
+    if (applied.some(a => a.includes('decision-log'))) {
+      try {
+        // Recarrega do disco
+        this.app.retroactive.load();
+      } catch { /* ignora */ }
+    }
+
+    // ChatSettings — tem cache interno
+    if (applied.some(a => a.includes('chat-settings'))) {
+      try { (this.app.chatSettings as any).cache = null; } catch { /* ignora */ }
+      // Recarrega pro brain
+      try { this.app.chatSettings.loadIntoBrain(); } catch { /* ignora */ }
+    }
+
+    // Stickers meta — StickerVault pode ter cache
+    if (applied.some(a => a.includes('stickers-meta'))) {
+      try {
+        // StickerVault lê do disco a cada chamada, mas invalida por garantia
+        if ((this.app.stickers as any).metaCache) (this.app.stickers as any).metaCache = null;
+      } catch { /* ignora */ }
+    }
+
+    // Bot config (nome + aliases)
+    if (applied.some(a => a.includes('bot-config'))) {
+      try { this.app.brain.loadBotConfig(); } catch { /* ignora */ }
+    }
+
+    // Command overrides
+    if (applied.some(a => a.includes('command-overrides'))) {
+      try { this.app.commands.loadOverrides(); } catch { /* ignora */ }
+    }
+
+    // AI config (sempre invalida — pode ter mudado modelo/key)
+    try { this.app.brain.aiConfigCacheTime = 0; } catch { /* ignora */ }
+    if (this.app.audioTranscriber) {
+      try { this.app.audioTranscriber.invalidateConfigCache(); } catch { /* ignora */ }
+    }
+
+    // System prompt — invalida cache do brain
+    if (applied.some(a => a.includes('system-prompt'))) {
+      try { (this.app.brain as any).systemPromptCache = null; (this.app.brain as any).systemPromptCacheTime = 0; } catch { /* ignora */ }
+    }
+
+    this.app.log('PANEL', `import: caches invalidadas após restore`);
 
     return { applied, skipped, errors };
   }
@@ -2840,5 +3086,80 @@ export class ControlPanel {
         return null;
       },
     };
+  }
+}
+
+// ============================================================================
+// HELPER — mata processos Chromium órfãos (deixa de ter lock na pasta .wwebjs_auth)
+// ============================================================================
+
+/**
+ * Mata processos Chromium/Chrome/Edge órfãos que podem estar segurando o lock
+ * da pasta .wwebjs_auth/session.
+ *
+ * No Windows: procura por chrome.exe, chromium.exe, msedge.exe que tenham
+ * wwebjs_auth ou com.marcio no command line, e mata com taskkill /F.
+ * No Linux/Mac: usa pkill -f "wwebjs_auth".
+ */
+async function killLeftoverChromium(app: MarcioApp): Promise<void> {
+  const { execSync } = require('node:child_process');
+  app.log('PANEL', 'killLeftoverChromium: procurando processos órfãos...');
+
+  try {
+    if (process.platform === 'win32') {
+      const names = ['chrome.exe', 'chromium.exe', 'msedge.exe'];
+      const allPids: number[] = [];
+      for (const name of names) {
+        try {
+          const out = execSync(`wmic process where "name='${name}'" get ProcessId,CommandLine /format:csv`, { encoding: 'utf8', timeout: 5000 });
+          const lines = out.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+          for (const line of lines) {
+            const lower = line.toLowerCase();
+            if (lower.includes('wwebjs_auth') || lower.includes('com.marcio')) {
+              const parts = line.split(',');
+              const pid = parseInt(parts[parts.length - 1]);
+              if (pid > 0 && !allPids.includes(pid)) {
+                allPids.push(pid);
+              }
+            }
+          }
+        } catch { /* processo não existe */ }
+      }
+      if (allPids.length > 0) {
+        app.log('PANEL', `killLeftoverChromium: matando ${allPids.length} processo(s): ${allPids.join(', ')}`);
+        for (const pid of allPids) {
+          try { execSync(`taskkill /F /PID ${pid}`, { timeout: 3000 }); }
+          catch { /* ignora */ }
+        }
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        app.debug('PANEL', 'killLeftoverChromium: nenhum processo órfão encontrado');
+      }
+
+      // Remove arquivos de lock do Chromium (SingletonLock, SingletonCookie, SingletonSocket)
+      const authPath = app.config.legacyAuthPath || path.join(app.config.rootDir, '.wwebjs_auth');
+      const sessionDir = path.join(authPath, 'session');
+      const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
+      for (const lock of lockFiles) {
+        try {
+          const lockPath = path.join(sessionDir, lock);
+          if (fs.existsSync(lockPath)) {
+            fs.unlinkSync(lockPath);
+            app.debug('PANEL', `killLeftoverChromium: removido lock ${lock}`);
+          }
+        } catch { /* ignora */ }
+      }
+    } else {
+      try { execSync('pkill -f "wwebjs_auth" 2>/dev/null', { timeout: 5000 }); } catch { /* ignora */ }
+      // Remove locks no Linux/Mac também
+      const authPath = app.config.legacyAuthPath || path.join(app.config.rootDir, '.wwebjs_auth');
+      const sessionDir = path.join(authPath, 'session');
+      for (const lock of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+        try { fs.unlinkSync(path.join(sessionDir, lock)); } catch { /* ignora */ }
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  } catch (e) {
+    app.debug('PANEL', `killLeftoverChromium erro: ${(e as Error).message}`);
   }
 }

@@ -147,6 +147,13 @@
       display: grid; place-items: center;
       font-size: 22px;
       box-shadow: 0 4px 16px rgba(230, 36, 42, 0.4);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .brand-icon img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
     }
     .brand-text { display: flex; flex-direction: column; gap: 2px; }
     .brand-name {
@@ -1368,9 +1375,9 @@
          ================================================================ -->
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <div class="brand-icon">🤖</div>
+        <div class="brand-icon" id="brandIcon">🤖</div>
         <div class="brand-text">
-          <div class="brand-name">Márcio</div>
+          <div class="brand-name" id="brandName">Bot</div>
           <div class="brand-sub">
             <span class="status-dot offline" id="statusDot"></span>
             <span id="statusText">offline</span>
@@ -1643,6 +1650,47 @@
             </div>
 
             <div id="qrContainer"></div>
+          </div>
+
+          <!-- Card: Identidade do Bot (nome + aliases + foto) -->
+          <div class="glass-card mt-3">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🎭 Identidade do Bot</div>
+                <div class="card-subtitle">Nome, aliases e foto de perfil</div>
+              </div>
+              <button class="ghost sm" onclick="loadBotConfig()">↻</button>
+            </div>
+
+            <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px;">
+              <div style="flex-shrink:0;">
+                <img id="botAvatarImg" src="" alt="Avatar" style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,0.05);display:none;">
+                <div id="botAvatarPlaceholder" style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#0a84ff,#bf5af2);display:flex;align-items:center;justify-content:center;font-size:28px;">🤖</div>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div class="form-row" style="margin-bottom:12px;">
+                  <label>Nome do bot <span class="muted small">(como ele se chama)</span></label>
+                  <input type="text" id="botConfigName" placeholder="Bot 🤖">
+                </div>
+                <div class="form-row">
+                  <label>Aliases <span class="muted small">(nomes pelos quais responde 100% das vezes)</span></label>
+                  <div class="pill-list" id="botConfigAliases" style="margin-bottom:8px;"></div>
+                  <div class="row-flex">
+                    <input type="text" id="botConfigNewAlias" placeholder="ex: marcinho" onkeydown="if(event.key==='Enter'){addBotAlias();event.preventDefault();}">
+                    <button class="ghost sm" onclick="addBotAlias()">+ Add</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="muted small mb-2" style="max-width:400px;">
+              💡 Aliases são nomes que, quando ditos no chat, fazem o bot responder 100% das vezes (sem depender de chance/cooldown). Ex: "marcinho, vem cá" → bot sempre responde.
+            </div>
+
+            <div class="row-flex mt-2">
+              <button class="primary sm" onclick="saveBotConfig()">💾 Salvar</button>
+              <span class="muted small" id="botConfigStatus"></span>
+            </div>
           </div>
         </section>
 
@@ -2029,6 +2077,7 @@
             <div class="muted" style="text-align: center; margin-bottom: 24px;">
               Bot de WhatsApp com IA generativa, memórias, figurinhas, eventos e mais.
             </div>
+
             <div class="card-title" style="margin-bottom: 10px;">🛠 Tech Stack</div>
             <div class="tech-stack">
               <div class="tech-card"><div class="name">Node.js</div><div class="desc">Runtime JS</div></div>
@@ -2041,7 +2090,7 @@
               <div class="tech-card"><div class="name">Vanilla JS</div><div class="desc">Painel sem build</div></div>
             </div>
             <div style="margin-top: 24px; text-align: center;" class="muted">
-              Feito com ❤️ por <strong style="color: var(--text);">Yann</strong>
+              Feito com ❤️ usando IA generativa
             </div>
 
             <div class="card mt-3" style="padding:16px;text-align:center;">
@@ -2790,7 +2839,6 @@
         const s = await apiGet('/api/bot/status');
         renderBotStatus(s);
       } catch (e) {
-        // endpoint may not exist yet — show placeholder
         $('#botRunning').innerHTML = `<span class="badge warn">indisponível</span>`;
         $('#botWaConnected').innerHTML = `<span class="badge warn">indisponível</span>`;
         $('#botUptime').textContent = '—';
@@ -2798,6 +2846,84 @@
         $('#botLastReconnect').textContent = '—';
         $('#botHealth').innerHTML = `<span class="badge bad">endpoint /api/bot/status não existe</span>`;
       }
+      // Também carrega a identidade do bot (nome + aliases + avatar)
+      loadBotConfig();
+      loadBotAvatar();
+    }
+
+    // === Identidade do Bot (nome + aliases) ===
+    let _botConfigAliases = [];
+
+    async function loadBotConfig() {
+      try {
+        const r = await apiGet('/api/bot-config');
+        $('#botConfigName').value = r.botName || '';
+        _botConfigAliases = r.aliases || [];
+        renderBotConfigAliases();
+        $('#botConfigStatus').textContent = 'config carregada ✓';
+        // Atualiza brand da sidebar com o nome do bot
+        updateBrandName(r.botName);
+      } catch (e) {
+        $('#botConfigStatus').textContent = '❌ ' + e.message;
+      }
+    }
+
+    function updateBrandName(botName) {
+      const name = botName || 'Bot';
+      const el = document.getElementById('brandName');
+      if (el) el.textContent = name;
+      // Atualiza título da aba também
+      document.title = `🤖 ${name} — Painel`;
+    }
+
+    function renderBotConfigAliases() {
+      const list = $('#botConfigAliases');
+      if (!list) return;
+      list.innerHTML = _botConfigAliases.map((a, i) =>
+        `<span class="pill">${escapeHtml(a)}<span class="x" onclick="removeBotAlias(${i})">✕</span></span>`
+      ).join('') || '<span class="muted small">nenhum alias customizado (só genéricos: bot, robô)</span>';
+    }
+
+    function addBotAlias() {
+      const v = $('#botConfigNewAlias').value.trim();
+      if (!v) return;
+      if (_botConfigAliases.includes(v)) { toast('já existe', 'warn'); return; }
+      _botConfigAliases.push(v);
+      $('#botConfigNewAlias').value = '';
+      renderBotConfigAliases();
+    }
+
+    function removeBotAlias(idx) {
+      _botConfigAliases.splice(idx, 1);
+      renderBotConfigAliases();
+    }
+
+    async function saveBotConfig() {
+      const botName = $('#botConfigName').value.trim();
+      try {
+        await apiPost('/api/bot-config', { botName, aliases: _botConfigAliases });
+        $('#botConfigStatus').textContent = '✅ salvo';
+        toast('Identidade do bot salva ✓', 'success');
+      } catch (e) {
+        $('#botConfigStatus').textContent = '❌ ' + e.message;
+        toast(e.message, 'error', 5000);
+      }
+    }
+
+    async function loadBotAvatar() {
+      try {
+        const r = await apiGet('/api/bot/avatar');
+        if (r.url) {
+          // Avatar no card de Identidade
+          const img = $('#botAvatarImg');
+          if (img) { img.src = r.url; img.style.display = 'block'; }
+          const ph = $('#botAvatarPlaceholder');
+          if (ph) ph.style.display = 'none';
+          // Avatar no brand da sidebar
+          const brandIcon = document.getElementById('brandIcon');
+          if (brandIcon) brandIcon.innerHTML = `<img src="${r.url}" alt="Bot avatar" onerror="this.parentElement.innerHTML='🤖'">`;
+        }
+      } catch { /* ignora — avatar é best-effort */ }
     }
     function renderBotStatus(s) {
       const running = !!s.running;
@@ -3687,8 +3813,9 @@
 
       try {
         el.innerHTML = conv.messages.map(m => {
-          const isBot = m.fromMe === true || m.senderName === '' || m.senderName === 'Robô do PT 🤖' || m.senderName === 'Márcio Pinto' || m.senderName === 'Márcio';
-          const senderDisplay = isBot ? 'Márcio 🤖' : (m.senderName && m.senderName !== '?' ? m.senderName : 'Desconhecido');
+          // Detecta se é o bot: fromMe=true OU senderName vazio (padrão do bot).
+          const isBot = m.fromMe === true || m.senderName === '';
+          const senderDisplay = isBot ? 'Bot 🤖' : (m.senderName && m.senderName !== '?' ? m.senderName : 'Desconhecido');
 
           const decisionBadge = m.decision === 'responded'
             ? '<span class="conv-msg-badge good">✅ respondido</span>'
@@ -3715,7 +3842,7 @@
           if (m.quotedMsgId) {
             const quoted = msgMap.get(m.quotedMsgId);
             if (quoted) {
-              const quotedSender = quoted.fromMe ? 'Márcio' : (quoted.senderName || 'alguém');
+              const quotedSender = quoted.fromMe ? 'Bot' : (quoted.senderName || 'alguém');
               quoteHtml = `<div class="conv-msg-quote">${escapeHtml(quotedSender)}: ${escapeHtml((quoted.text || '').slice(0, 80))}${quoted.text && quoted.text.length > 80 ? '...' : ''}</div>`;
             }
           }
@@ -4152,11 +4279,15 @@
       return (bytes / 1024 / 1024).toFixed(2) + ' MB';
     }
 
+    // ================================================================
+    // BACKUP — sistema limpo (export + import)
+    // ================================================================
+
     async function loadBackupComponents() {
       dbg('BACKUP', 'loadBackupComponents()');
       const el = $('#backupComponentsList');
       if (!el) return;
-      el.innerHTML = '<div class="muted small">Carregando componentes…</div>';
+      el.innerHTML = '<div class="muted small">Carregando…</div>';
       try {
         const r = await apiGet('/api/export/components');
         _marcio_state.backupComponents = r.components || [];
@@ -4172,12 +4303,12 @@
       const el = $('#backupComponentsList');
       if (!el) return;
       if (!_marcio_state.backupComponents.length) {
-        el.innerHTML = '<div class="muted small">nenhum componente disponível</div>';
+        el.innerHTML = '<div class="muted small">nenhum componente</div>';
         return;
       }
       el.innerHTML = _marcio_state.backupComponents.map(c => {
         const dim = c.available ? '' : 'opacity:0.4;';
-        const countTxt = c.count > 0 ? `${c.count} ${c.id === 'system-prompt' ? 'arquivo' : 'itens'}` : 'vazio';
+        const countTxt = c.count > 0 ? `${c.count} itens` : 'vazio';
         const sizeTxt = c.sizeBytes > 0 ? humanizeBytes(c.sizeBytes) : '—';
         return `<div style="background:var(--bg-glass-light);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;${dim}">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
@@ -4190,10 +4321,11 @@
       }).join('');
     }
 
+    // === EXPORTAR ===
     function openExportModal() {
       if (!_marcio_state.backupComponents.length) {
-        toast('Carregando componentes… tente novamente', 'warn');
         loadBackupComponents();
+        toast('Carregando componentes… tente novamente', 'warn');
         return;
       }
       const checks = _marcio_state.backupComponents.map(c => `
@@ -4215,7 +4347,7 @@
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div class="muted small mb-2">Selecione o que quer exportar. Tudo será salvo num único arquivo <code>.json</code>.</div>
+          <div class="muted small mb-2">Selecione o que quer exportar. Tudo será salvo num arquivo <code>.json</code>.</div>
           <div style="margin-bottom:8px;">
             <button class="ghost sm" onclick="selectAllExport(true)">☑ Todos</button>
             <button class="ghost sm" onclick="selectAllExport(false)">☐ Nenhum</button>
@@ -4241,23 +4373,47 @@
       dbg('BACKUP', 'exporting:', selected);
       toast(`Exportando ${selected.length} componente(s)…`, 'info');
       try {
+        // Exporta como ZIP (bundle — muito menor que JSON)
         const r = await fetch(API_BASE + '/api/export', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ components: selected }),
+          body: JSON.stringify({ components: selected, format: 'zip' }),
         });
         if (!r.ok) {
           const err = await r.json().catch(() => ({ error: r.status }));
           throw new Error(err.error || `export falhou: ${r.status}`);
         }
         const blob = await r.blob();
+        const filename = `marcio-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`;
+
+        // Tenta usar File System Access API (Chrome/Edge) pra escolher onde salvar
+        if (window.showSaveFilePicker) {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: filename,
+              types: [{ description: 'ZIP', accept: { 'application/zip': ['.zip'] } }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            toast(`Backup salvo ✓ — ${selected.length} componente(s)`, 'success', 6000);
+            closeModal();
+            return;
+          } catch (e) {
+            if (e.name === 'AbortError') { toast('Cancelado', 'warn'); return; }
+          }
+        }
+
+        // Fallback: download normal
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `marcio-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
+        a.download = filename;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast(`Backup ✓ — ${selected.length} componente(s)`, 'success', 6000);
+        toast(`Backup baixado ✓ — ${selected.length} componente(s)`, 'success', 6000);
         closeModal();
       } catch (e) {
         dbgErr('BACKUP', 'export failed:', e.message);
@@ -4265,85 +4421,49 @@
       }
     }
 
+    // === IMPORTAR ===
     function openImportModal() {
-      const input = `<input type="file" id="importFileInput" accept=".json" style="display:none" onchange="loadImportFile(event)">`;
       openModal(`
         <div class="modal-header">
-          <div class="modal-title">⬆ Importar dados</div>
+          <div class="modal-title">⬆ Importar backup</div>
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div class="muted small mb-2">Selecione um arquivo de backup <code>.json</code> gerado pelo Márcio.</div>
-          ${input}
-          <div id="importPreview" style="min-height:60px;"></div>
+          <div class="muted small mb-2">Selecione um arquivo <code>.zip</code> de backup.</div>
+          <input type="file" id="importFileInput" accept=".zip,application/zip" onchange="loadImportFile(event)" style="width:100%;margin-bottom:12px;">
+          <div id="importPreview" style="min-height:40px;"></div>
         </div>
       `);
-      setTimeout(() => document.getElementById('importFileInput').click(), 100);
     }
 
-    var pendingImportPkg = null;
+    var _pendingImportPkg = null;
+
+    var _pendingImportFile = null;
 
     async function loadImportFile(ev) {
       const file = ev.target.files[0];
       if (!file) { closeModal(); return; }
+      _pendingImportFile = file;
       const preview = $('#importPreview');
-      preview.innerHTML = '<div class="muted small">Lendo arquivo…</div>';
-      try {
-        const text = await file.text();
-        const pkg = JSON.parse(text);
-        pendingImportPkg = pkg;
-        dbg('BACKUP', 'import file loaded:', { format: pkg.format, version: pkg.version, components: pkg.components || (pkg.files ? Object.keys(pkg.files) : []) });
-
-        // Detecta formato
-        const isLegacy = pkg.files && !pkg.data;
-        const comps = isLegacy ? Object.keys(pkg.files) : (pkg.components || Object.keys(pkg.data || {}));
-
-        if (!comps.length) {
-          preview.innerHTML = '<div class="muted small">❌ arquivo não tem componentes reconhecíveis</div>';
-          return;
-        }
-
-        const created = pkg.createdAt ? new Date(pkg.createdAt).toLocaleString('pt-BR') : '—';
-        const checks = comps.map(c => {
-          // Tenta achar o label/icon na lista de componentes conhecidos
-          const known = _marcio_state.backupComponents.find(k => k.id === c);
-          const icon = known?.icon || '📦';
-          const label = known?.label || c;
-          const desc = known?.description || '';
-          return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--bg-glass-light);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;">
-            <input type="checkbox" class="import-check" value="${escapeHtml(c)}" checked style="margin-top:3px;">
-            <div style="flex:1;">
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span style="font-size:16px;">${icon}</span>
-                <span style="font-weight:600;">${escapeHtml(label)}</span>
-              </div>
-              ${desc ? `<div class="muted small">${escapeHtml(desc)}</div>` : ''}
-            </div>
-          </label>`;
-        }).join('');
-
-        preview.innerHTML = `
-          <div class="muted small mb-1">📦 Arquivo: <strong>${escapeHtml(file.name)}</strong></div>
-          <div class="muted small mb-1">📅 Criado em: ${escapeHtml(created)}</div>
-          <div class="muted small mb-1">📋 Formato: ${escapeHtml(pkg.format || (isLegacy ? 'legacy-v1' : 'marcio-backup'))} v${pkg.version || 1}</div>
-          <div class="muted small mb-2">Selecione o que restaurar (cada item vai SOBRESCREVER o atual):</div>
-          <div style="margin-bottom:8px;">
-            <button class="ghost sm" onclick="selectAllImport(true)">☑ Todos</button>
-            <button class="ghost sm" onclick="selectAllImport(false)">☐ Nenhum</button>
+      preview.innerHTML = `
+        <div style="text-align:center;padding:12px;">
+          <div style="font-size:48px;margin-bottom:8px;">📦</div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:4px;">${escapeHtml(file.name)}</div>
+          <div class="muted small" style="margin-bottom:16px;">${(file.size / 1024).toFixed(1)} KB</div>
+          <div class="muted small" style="margin-bottom:16px;max-width:320px;line-height:1.6;">
+            O conteúdo será extraído no servidor. Cada componente vai <strong>SOBRESCREVER</strong> os dados atuais correspondentes.
           </div>
-          <div style="display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow-y:auto;">
-            ${checks}
+          <div class="row-flex" style="justify-content:center;gap:8px;">
+            <button class="ghost" onclick="cancelImport()">Cancelar</button>
+            <button class="warning" onclick="doImport()">⬆ Restaurar agora</button>
           </div>
-          <div class="row-flex mt-3">
-            <button class="warning" onclick="doImport()">⬆ Restaurar selecionados</button>
-            <button class="ghost" onclick="closeModal()">Cancelar</button>
-          </div>
-        `;
-      } catch (e) {
-        dbgErr('BACKUP', 'loadImportFile failed:', e.message);
-        preview.innerHTML = `<div class="muted small">❌ erro ao ler arquivo: ${escapeHtml(e.message)}</div>`;
-      }
-      ev.target.value = '';
+        </div>
+      `;
+    }
+
+    function cancelImport() {
+      _pendingImportFile = null;
+      closeModal();
     }
 
     function selectAllImport(on) {
@@ -4351,86 +4471,123 @@
     }
 
     async function doImport() {
-      if (!pendingImportPkg) { toast('Nenhum arquivo carregado', 'warn'); return; }
-      const selected = $$('.import-check').filter(c => c.checked).map(c => c.value);
-      if (!selected.length) { toast('Selecione pelo menos 1 componente', 'warn'); return; }
-      if (!confirm(`Restaurar ${selected.length} componente(s)?\n\n⚠️ Isso vai SOBRESCREVER os dados atuais selecionados. Recomendado: exporte o atual antes.`)) return;
+      if (!_pendingImportFile) {
+        toast('Selecione um arquivo .zip primeiro', 'warn');
+        return;
+      }
 
-      dbg('BACKUP', 'importing:', selected);
-      toast(`Importando ${selected.length} componente(s)…`, 'info');
+      const file = _pendingImportFile;
+
+      // Valida extensão
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        toast('O arquivo deve ser .zip (exportado pelo app)', 'error', 5000);
+        return;
+      }
+
+      // Valida tamanho (mínimo 1KB, máximo 100MB)
+      if (file.size < 100) {
+        toast('Arquivo muito pequeno — pode estar vazio ou corrompido', 'error', 5000);
+        return;
+      }
+      if (file.size > 100 * 1024 * 1024) {
+        toast('Arquivo muito grande (máx 100MB)', 'error', 5000);
+        return;
+      }
+
+      // Tela de carregamento
+      const modalContent = $('#modalContent');
+      if (modalContent) {
+        modalContent.innerHTML = `
+          <div style="padding:32px 24px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:16px;">📦</div>
+            <div style="font-weight:600;font-size:16px;margin-bottom:8px;">Importando ${escapeHtml(file.name)}</div>
+            <div id="importProgress" style="text-align:left;max-width:400px;margin:16px auto;font-size:12px;line-height:1.8;">
+              <div class="muted" id="impStep1">⏳ Enviando ${(file.size / 1024).toFixed(0)}KB para o servidor…</div>
+              <div class="muted" id="impStep2" style="opacity:0.4">📥 Extraindo ZIP…</div>
+              <div class="muted" id="impStep3" style="opacity:0.4">📋 Restaurando componentes…</div>
+            </div>
+            <div style="width:240px;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;margin:12px auto;">
+              <div id="impProgressBar" style="height:100%;width:10%;background:linear-gradient(90deg,#0a84ff,#bf5af2);border-radius:2px;transition:width 0.3s;"></div>
+            </div>
+          </div>
+        `;
+      }
+
+      const step1 = document.getElementById('impStep1');
+      const step2 = document.getElementById('impStep2');
+      const step3 = document.getElementById('impStep3');
+      const bar = document.getElementById('impProgressBar');
+      if (bar) bar.style.width = '25%';
+
       try {
-        // Envia o pacote + filtro de componentes via query string
-        const form = new FormData();
-        form.append('file', new Blob([JSON.stringify(pendingImportPkg)], { type: 'application/json' }), 'backup.json');
-        const compsQuery = encodeURIComponent(selected.join(','));
-        const r = await fetch(API_BASE + `/api/import?components=${compsQuery}`, { method: 'POST', body: form });
+        if (step1) step1.textContent = `⏳ Enviando ${(file.size / 1024).toFixed(0)}KB…`;
+        const r = await fetch(API_BASE + '/api/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/zip' },
+          body: file,
+        });
+        if (bar) bar.style.width = '60%';
+        if (step1) step1.innerHTML = '✅ Arquivo enviado';
+        if (step2) { step2.innerHTML = '✅ ZIP extraído'; step2.style.opacity = '1'; }
+
         if (!r.ok) {
-          const err = await r.json().catch(() => ({ error: r.status }));
-          throw new Error(err.error || `import falhou: ${r.status}`);
+          const err = await r.json().catch(() => ({ error: `Servidor respondeu ${r.status}` }));
+          throw new Error(err.error || `Erro do servidor (${r.status})`);
         }
+
+        if (bar) bar.style.width = '90%';
         const data = await r.json();
-        const msg = `Import ✓ — ${data.applied?.length || 0} componente(s): ${(data.applied || []).join(', ')}`;
-        toast(msg, 'success', 8000);
+        if (step3) { step3.innerHTML = `✅ ${data.applied?.length || 0} componente(s) restaurado(s)`; step3.style.opacity = '1'; }
+        if (bar) bar.style.width = '100%';
+
+        dbg('BACKUP', 'import result:', data);
+        const appliedList = (data.applied || []).join(', ');
+        toast(`Import ✓ — ${data.applied?.length || 0} componente(s): ${appliedList}`, 'success', 8000);
         if (data.errors?.length) {
           toast('Avisos: ' + data.errors.join('; ').slice(0, 100), 'warn', 8000);
         }
-        closeModal();
-        pendingImportPkg = null;
-        // Recarrega componentes pra refletir novo estado
-        loadBackupComponents();
-        // Recarrega memórias se estiver na seção
-        if (_marcio_state.currentSection === 'memories') {
-          try { await loadMemories(); } catch { /* ignora */ }
-        }
+
+        _pendingImportFile = null;
+        setTimeout(() => {
+          closeModal();
+          loadBackupComponents();
+          if (_marcio_state.currentSection === 'memories') {
+            try { loadMemories(); } catch { /* ignora */ }
+          }
+        }, 2000);
       } catch (e) {
         dbgErr('BACKUP', 'import failed:', e.message);
+        _pendingImportFile = null;
+        if (modalContent) {
+          // Mensagens mais claras baseadas no erro
+          let errorMsg = e.message;
+          if (e.message.includes('Failed to fetch') || e.message.includes('network')) {
+            errorMsg = 'Não consegui conectar ao servidor. O bot pode estar offline. Verifique se o painel está acessível e tente novamente.';
+          } else if (e.message.includes('Formato inválido')) {
+            errorMsg = 'O arquivo não é um .zip válido. Exporte um backup novo pelo painel (Exportar) e tente novamente.';
+          } else if (e.message.includes('ZIP não contém')) {
+            errorMsg = 'O ZIP não tem componentes reconhecidos. O arquivo pode estar corrompido ou ser de uma versão incompatível.';
+          } else if (e.message.includes('body too large')) {
+            errorMsg = 'O arquivo é maior que 100MB. Remova figurinhas grandes do backup e tente novamente.';
+          }
+
+          modalContent.innerHTML = `
+            <div style="padding:32px 24px;text-align:center;">
+              <div style="font-size:48px;margin-bottom:16px;">❌</div>
+              <div style="font-weight:600;font-size:16px;margin-bottom:8px;">Import falhou</div>
+              <div class="muted small" style="max-width:340px;margin:0 auto 16px;line-height:1.6;">${escapeHtml(errorMsg)}</div>
+              <button class="ghost" onclick="closeModal()">Fechar</button>
+            </div>
+          `;
+        }
         toast('Import falhou: ' + e.message, 'error', 6000);
       }
     }
 
     // Legacy compat (mantém funções antigas chamando as novas)
-    async function downloadBackup() {
-      // Exporta tudo
-      if (!_marcio_state.backupComponents.length) { await loadBackupComponents(); }
-      const all = _marcio_state.backupComponents.filter(c => c.available).map(c => c.id);
-      if (!all.length) { toast('Nenhum componente disponível', 'warn'); return; }
-      toast('Gerando backup completo…', 'info');
-      try {
-        const r = await fetch(API_BASE + '/api/export', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ components: all }),
-        });
-        if (!r.ok) throw new Error(`backup falhou: ${r.status}`);
-        const blob = await r.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `marcio-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast('Backup completo ✓', 'success');
-      } catch (e) { toast('Backup falhou: ' + e.message, 'error', 6000); }
-    }
-    async function uploadRestore(ev) {
-      const file = ev.target.files[0];
-      if (!file) return;
-      if (!confirm(`Restaurar ${file.name}?\n\n⚠️ Isso vai SOBRESCREVER os dados atuais.`)) { ev.target.value = ''; return; }
-      try {
-        const form = new FormData();
-        form.append('file', file);
-        toast('Restaurando…', 'info');
-        const r = await fetch(API_BASE + '/api/import', { method: 'POST', body: form });
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ error: r.status }));
-          throw new Error(err.error || `restore falhou: ${r.status}`);
-        }
-        const data = await r.json();
-        toast(`Restore ✓ — ${data.applied?.length || 0} componente(s). Reinicie o bot.`, 'success', 8000);
-        loadBackupComponents();
-      } catch (e) { toast('Restore falhou: ' + e.message, 'error', 6000); }
-      ev.target.value = '';
-    }
+    async function downloadBackup() { openExportModal(); }
+    async function uploadRestore(ev) { openImportModal(); }
+    async function doUploadRestore() { doImport(); }
     async function exportMemories() {
       // Exporta só memórias
       toast('Exportando memórias…', 'info');
@@ -4442,11 +4599,29 @@
         });
         if (!r.ok) throw new Error(`export falhou: ${r.status}`);
         const blob = await r.blob();
+        const filename = `marcio-memories-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
+        if (window.showSaveFilePicker) {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: filename,
+              types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            toast('Memórias salvas ✓', 'success');
+            return;
+          } catch (e) {
+            if (e.name === 'AbortError') { toast('Cancelado', 'warn'); return; }
+          }
+        }
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `marcio-memories-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
+        a.download = filename;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
         toast('Memórias exportadas ✓', 'success');
       } catch (e) { toast('Export falhou: ' + e.message, 'error', 6000); }
@@ -4456,16 +4631,19 @@
       if (!file) return;
       if (!confirm(`Importar memórias de ${file.name}?\n\n⚠️ Vai SUBSTITUIR todas as memórias atuais.`)) { ev.target.value = ''; return; }
       try {
-        const form = new FormData();
-        form.append('file', file);
+        const text = await file.text();
+        const pkg = JSON.parse(text);
         toast('Importando memórias…', 'info');
-        const r = await fetch(API_BASE + '/api/import?components=memories', { method: 'POST', body: form });
+        const r = await fetch(API_BASE + '/api/import?components=memories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pkg),
+        });
         if (!r.ok) {
           const err = await r.json().catch(() => ({ error: r.status }));
           throw new Error(err.error || `import falhou: ${r.status}`);
         }
-        const data = await r.json();
-        toast(`Memórias importadas ✓`, 'success', 8000);
+        toast('Memórias importadas ✓', 'success', 8000);
         if (_marcio_state.currentSection === 'memories') { try { await loadMemories(); } catch { /* ignora */ } }
       } catch (e) { toast('Import falhou: ' + e.message, 'error', 6000); }
       ev.target.value = '';
@@ -4665,6 +4843,9 @@
 
         // Initial loads
         loadStats();
+        // Carrega nome + foto do bot pro brand da sidebar (no boot)
+        loadBotConfig();
+        loadBotAvatar();
         // Start polling stats every 10s (backup)
         _marcio_state.statsInterval = setInterval(loadStats, 10000);
         // Start bot status polling every 30s (when on bot section)
@@ -4690,12 +4871,18 @@
     }
 
     // === CHANGELOG ("O que há de novo?") ===
+    let _changelogData = null;
+    let _changelogCurrentIdx = 0;
+
     async function checkChangelog() {
       try {
         const r = await apiGet('/api/changelog');
+        _changelogData = r;
         if (r.hasNew && r.releases && r.releases.length > 0) {
           dbg('CHANGELOG', `novidades disponíveis — versão atual: ${r.currentVersion}, última vista: ${r.lastSeenVersion}`);
-          showChangelogModal(r.releases, r.currentVersion);
+          // Mostra a versão mais nova primeiro
+          _changelogCurrentIdx = 0;
+          showChangelogModal(r.releases, r.currentVersion, true);
         } else {
           dbg('CHANGELOG', `sem novidades — versão atual: ${r.currentVersion}, última vista: ${r.lastSeenVersion}`);
         }
@@ -4704,48 +4891,86 @@
       }
     }
 
-    function showChangelogModal(releases, currentVersion) {
-      // Filtra só releases mais novos que a última versão vista
-      // (se lastSeenVersion = '0.0.0', mostra todos)
+    function showChangelogModal(releases, currentVersion, hasNew) {
+      if (!_changelogData) return;
       const modalContent = $('#modalContent');
       if (!modalContent) return;
 
-      const releasesHtml = releases.map(release => {
-        const sectionsHtml = (release.sections || []).map(section => {
-          const itemsHtml = (section.items || []).map(item => `<li>${escapeHtml(item)}</li>`).join('');
-          return `
-            <div class="changelog-section">
-              <div class="changelog-section-header">
-                <span class="changelog-section-icon">${section.icon || '✨'}</span>
-                <span>${escapeHtml(section.title || '')}</span>
-              </div>
-              <ul class="changelog-items">${itemsHtml}</ul>
-            </div>
-          `;
-        }).join('');
+      // Se chamado sem hasNew (botão manual), mostra todas as versões com navegação
+      const showAll = !hasNew;
+      renderChangelogVersion(_changelogCurrentIdx);
+    }
 
+    function renderChangelogVersion(idx) {
+      const r = _changelogData;
+      if (!r || !r.releases || r.releases.length === 0) return;
+      if (idx < 0) idx = 0;
+      if (idx >= r.releases.length) idx = r.releases.length - 1;
+      _changelogCurrentIdx = idx;
+
+      const release = r.releases[idx];
+      const modalContent = $('#modalContent');
+      if (!modalContent) return;
+
+      const sectionsHtml = (release.sections || []).map(section => {
+        const itemsHtml = (section.items || []).map(item => `<li>${escapeHtml(item)}</li>`).join('');
         return `
-          <div class="changelog-hero">
-            <div class="changelog-hero-icon">${release.title?.includes('🎉') ? release.title.split(' ')[0] : '✨'}</div>
-            <div class="changelog-hero-title">${escapeHtml(release.title || `v${release.version}`)}</div>
-            <div class="changelog-hero-version">v${escapeHtml(release.version)}</div>
-            ${release.date ? `<div class="changelog-hero-date">${escapeHtml(formatDate(release.date))}</div>` : ''}
+          <div class="changelog-section">
+            <div class="changelog-section-header">
+              <span class="changelog-section-icon">${section.icon || '✨'}</span>
+              <span>${escapeHtml(section.title || '')}</span>
+            </div>
+            <ul class="changelog-items">${itemsHtml}</ul>
           </div>
-          <div class="changelog-content">${sectionsHtml}</div>
         `;
       }).join('');
 
-      modalContent.innerHTML = `
-        ${releasesHtml}
+      // Botões de navegação entre versões
+      const totalVersions = r.releases.length;
+      const hasPrev = idx < totalVersions - 1;  // releases[0] = mais nova, então "anterior" = idx+1
+      const hasNext = idx > 0;                  // "próxima" (mais nova) = idx-1
+      const isLatest = idx === 0;
+      const isCurrentVersion = release.version === r.currentVersion;
+
+      const navHtml = totalVersions > 1 ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 16px;border-top:1px solid var(--border);">
+          <button class="ghost sm" onclick="navChangelog(${idx + 1})" ${hasPrev ? '' : 'disabled style="opacity:0.3"'}>← versão anterior</button>
+          <span class="muted small">${idx + 1} de ${totalVersions} ${isCurrentVersion ? '· <strong style="color:var(--success)">versão atual</strong>' : ''}</span>
+          <button class="ghost sm" onclick="navChangelog(${idx - 1})" ${hasNext ? '' : 'disabled style="opacity:0.3"'}>versão mais nova →</button>
+        </div>
+      ` : '';
+
+      const footerHtml = isLatest && r.hasNew ? `
         <div class="changelog-footer">
           <span class="changelog-dismiss-label">Não mostrar isso de novo</span>
           <div class="row-flex" style="gap:8px;">
             <button class="ghost" onclick="closeModal()">Ver depois</button>
-            <button class="primary" onclick="dismissChangelog('${escapeHtml(currentVersion)}')">Entendi ✓</button>
+            <button class="primary" onclick="dismissChangelog('${escapeHtml(r.currentVersion)}')">Entendi ✓</button>
           </div>
         </div>
+      ` : `
+        <div class="changelog-footer">
+          <span class="muted small">${isLatest ? 'Esta é a versão mais recente' : 'Versão antiga'}</span>
+          <button class="ghost" onclick="closeModal()">Fechar</button>
+        </div>
+      `;
+
+      modalContent.innerHTML = `
+        <div class="changelog-hero">
+          <div class="changelog-hero-icon">${release.title?.includes('🎉') ? release.title.split(' ')[0] : '✨'}</div>
+          <div class="changelog-hero-title">${escapeHtml(release.title || `v${release.version}`)}</div>
+          <div class="changelog-hero-version">v${escapeHtml(release.version)}</div>
+          ${release.date ? `<div class="changelog-hero-date">${escapeHtml(formatDate(release.date))}</div>` : ''}
+        </div>
+        <div class="changelog-content">${sectionsHtml}</div>
+        ${navHtml}
+        ${footerHtml}
       `;
       $('#modalOverlay').classList.add('show');
+    }
+
+    function navChangelog(idx) {
+      renderChangelogVersion(idx);
     }
 
     async function dismissChangelog(version) {
@@ -4836,6 +5061,10 @@
       handleConsoleKey: () => typeof handleConsoleKey !== 'undefined' ? handleConsoleKey : null,
       loadBotStatus: () => typeof loadBotStatus !== 'undefined' ? loadBotStatus : null,
       botAction: () => typeof botAction !== 'undefined' ? botAction : null,
+      loadBotConfig: () => typeof loadBotConfig !== 'undefined' ? loadBotConfig : null,
+      saveBotConfig: () => typeof saveBotConfig !== 'undefined' ? saveBotConfig : null,
+      addBotAlias: () => typeof addBotAlias !== 'undefined' ? addBotAlias : null,
+      removeBotAlias: () => typeof removeBotAlias !== 'undefined' ? removeBotAlias : null,
       loadQr: () => typeof loadQr !== 'undefined' ? loadQr : null,
       loadProfiles: () => typeof loadProfiles !== 'undefined' ? loadProfiles : null,
       switchProfileTab: () => typeof switchProfileTab !== 'undefined' ? switchProfileTab : null,
@@ -4892,6 +5121,8 @@
       resetCommandOverride: () => typeof resetCommandOverride !== 'undefined' ? resetCommandOverride : null,
       downloadBackup: () => typeof downloadBackup !== 'undefined' ? downloadBackup : null,
       uploadRestore: () => typeof uploadRestore !== 'undefined' ? uploadRestore : null,
+      doUploadRestore: () => typeof doUploadRestore !== 'undefined' ? doUploadRestore : null,
+      cancelImport: () => typeof cancelImport !== 'undefined' ? cancelImport : null,
       exportMemories: () => typeof exportMemories !== 'undefined' ? exportMemories : null,
       importMemories: () => typeof importMemories !== 'undefined' ? importMemories : null,
       loadBackupComponents: () => typeof loadBackupComponents !== 'undefined' ? loadBackupComponents : null,
@@ -4912,6 +5143,7 @@
       resetSetupState: () => typeof resetSetupState !== 'undefined' ? resetSetupState : null,
       checkChangelog: () => typeof checkChangelog !== 'undefined' ? checkChangelog : null,
       dismissChangelog: () => typeof dismissChangelog !== 'undefined' ? dismissChangelog : null,
+      navChangelog: () => typeof navChangelog !== 'undefined' ? navChangelog : null,
       closeModal: () => typeof closeModal !== 'undefined' ? closeModal : null,
     };
     var _ok = 0, _fail = 0;

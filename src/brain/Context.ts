@@ -138,7 +138,7 @@ export class Context {
    *  4. Captura imagem (se < 500KB) pra mandar pra IA (visão).
    *  5. Captura mensagem respondida (quote/reply).
    *  6. Trunca pro maxLen do AI_CONFIG.
-   *  7. Se fromMe (bot): pula saídas de comando (prefixo "Robô do PT:"), senão push assistant.
+   *  7. Se fromMe (bot): pula saídas de comando (prefixo "Bot:"), senão push assistant.
    *  8. Se user: push user + updateProfileWithMessage + maybeExtractMemory.
    *  9. Mantém só as últimas N (AI_CONFIG.contextMessages).
    */
@@ -228,9 +228,13 @@ export class Context {
     // --- 7 ou 8. Push no contexto ---
     if (msg.fromMe) {
       // Pula saídas de comando do bot (não são conversa natural)
+      // Detecta pelo prefixo "${botName}:" — usa nome configurado dinamicamente.
+      const botName = this.app.config.botName || 'Bot';
+      const botNameEsc = botName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const botPrefixRegex = new RegExp(`^${botNameEsc}\\s*🤖?\\s*:`, 'i');
       if (text && (
-        /^rob[oô]\s+do\s+pt\s*🤖\s*:/i.test(text) ||
-        /^rob[oô]\s+do\s+pt\s*:/i.test(text) ||
+        botPrefixRegex.test(text) ||
+        /^bot\s*:/i.test(text) ||
         /^\*.*\*:/.test(text.trim())
       )) {
         this.app.debug('AI-CTX', `pulando resposta de comando do bot: "${text.slice(0, 40)}..."`);
@@ -422,8 +426,11 @@ export class Context {
 
         // Pula saídas de comando do bot
         if (oldMsg.fromMe && oldMsg.body) {
-          if (/^rob[oô]\s+do\s+pt\s*🤖\s*:/i.test(oldMsg.body) ||
-              /^rob[oô]\s+do\s+pt\s*:/i.test(oldMsg.body) ||
+          // Detecta saídas de comando do bot (prefixo "${botName}:")
+          const _bn = (this.app.config.botName || 'Bot').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const _botRegex = new RegExp(`^${_bn}\\s*🤖?\\s*:`, 'i');
+          if (_botRegex.test(oldMsg.body) ||
+              /^bot\s*:/i.test(oldMsg.body) ||
               /^\*.*\*$/m.test(oldMsg.body.trim())) {
             continue;
           }
@@ -551,8 +558,11 @@ export class Context {
         const body = oldMsg.body || '';
         if (body && (body.startsWith('!') || body.startsWith('/'))) { skip('comando'); continue; }
         if (oldMsg.fromMe && body) {
-          if (/^rob[oô]\s+do\s+pt\s*🤖\s*:/i.test(body) ||
-              /^rob[oô]\s+do\s+pt\s*:/i.test(body) ||
+          // Detecta saídas de comando do bot (prefixo "${botName}:")
+          const _bn2 = (this.app.config.botName || 'Bot').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const _botRegex2 = new RegExp(`^${_bn2}\\s*🤖?\\s*:`, 'i');
+          if (_botRegex2.test(body) ||
+              /^bot\s*:/i.test(body) ||
               /^\*.*\*$/m.test(body.trim())) {
             skip('bot-comando-output'); continue;
           }

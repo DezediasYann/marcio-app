@@ -72,7 +72,7 @@ const config: AppConfig = {
   rootDir,
   dataDir: path.join(baseDir, 'data'),
   logDir: path.join(baseDir, 'logs'),
-  botName: 'Robô do PT 🤖',
+  botName: 'Bot 🤖',
 
   // Auth do WhatsApp: usa .wwebjs_auth/ dentro do baseDir
   // (em produção: %APPDATA%\MarcioApp\.wwebjs_auth)

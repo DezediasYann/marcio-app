@@ -38,4 +38,3 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
-src-tauri/node_modules.zip.hash

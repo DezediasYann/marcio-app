@@ -87,9 +87,29 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      # ⚠️ CONVERTER A CHAVE PRIVADA PRA BASE64 ANTES DO BUILD.
+      # O `tauri build` espera a chave em BASE64 (não raw multi-linha).
+      # Se passar a chave raw, o erro é "Invalid symbol 32, offset 9"
+      # (espaço depois de "untrusted" no cabeçalho).
+      # Documentação: TAURI_SIGNING_PRIVATE_KEY aceita "string or path",
+      # mas na prática o bundler espera base64.
+      - name: Converter chave privada pra base64
+        id: key-base64
+        shell: bash
+        env:
+          SK: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SK" ]; then
+            echo "❌ TAURI_SIGNING_PRIVATE_KEY não configurado"
+            exit 1
+          fi
+          # Converte a chave raw (multi-linha) pra base64 (uma linha só)
+          KEY_BASE64=$(printf '%s' "$SK" | base64 -w 0)
+          echo "✅ Chave convertida pra base64 (tamanho: ${#KEY_BASE64} chars)"
+          # Salva em $GITHUB_ENV pra usar nos próximos steps
+          echo "TAURI_SIGNING_PRIVATE_KEY_B64=$KEY_BASE64" >> $GITHUB_ENV
+
       # ⚠️ DIAGNÓSTICO DE SIGNING — verifica se os secrets tão configurados
-      # ANTES do build. Se não tiverem, o build vai completar mas latest.json
-      # não vai ser gerado. Isso nos dá info útil sem precisar esperar 20min.
       - name: Diagnóstico de signing (debug)
         shell: bash
         env:
@@ -151,7 +171,10 @@ jobs:
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # ⚠️ Usa a versão BASE64 da chave (convertida no step anterior).
+          # O `tauri build` espera base64 — se passar raw, falha com
+          # "Invalid symbol 32, offset 9" (espaço no cabeçalho minisign).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY_B64 }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -194,7 +217,8 @@ jobs:
         if: always() && matrix.platform == 'windows-latest'
         shell: bash
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # Usa a versão BASE64 da chave (mesma do build)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY_B64 }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -226,18 +250,10 @@ jobs:
             exit 0
           fi
           
-          # Converte a chave privada pra base64 (uma linha só, sem newlines).
-          # Isso é necessário porque:
-          # - Passar o caminho do arquivo falha (Tauri tenta decodificar caminho como base64, falha no ":")
-          # - Passar o conteúdo direto (multi-linha) falha (bash quebra em vários argumentos)
-          # - Passar base64 funciona (uma linha só, decodificável pelo Tauri)
-          KEY_BASE64=$(printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | base64 -w 0)
-          echo "🔑 Chave privada convertida pra base64 (tamanho: ${#KEY_BASE64} chars)"
-          
-          # Assina usando tauri signer sign com a chave em base64
-          # Sintaxe: npx tauri signer sign --private-key <KEY_BASE64> --password <PWD> <FILE>
+          # A env var TAURI_SIGNING_PRIVATE_KEY já tá em BASE64 (convertida no step anterior).
+          # O `npx tauri signer sign --private-key` aceita base64 direto.
           echo "🔑 Assinando o .exe com npx tauri signer sign..."
-          npx tauri signer sign --private-key "$KEY_BASE64" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$EXE_PATH" 2>&1
+          npx tauri signer sign --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$EXE_PATH" 2>&1
           SIGN_EXIT=$?
           
           if [ $SIGN_EXIT -ne 0 ]; then

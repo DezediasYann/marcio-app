@@ -57,11 +57,9 @@ jobs:
     needs: generate-changelog
     strategy:
       matrix:
-        # Build pra Windows, macOS e Linux
+        # Build pra Windows e Linux (macOS desativado — muito problemático)
         include:
           - platform: windows-latest
-            args: ''
-          - platform: macos-latest
             args: ''
           - platform: ubuntu-22.04
             args: ''
@@ -106,9 +104,6 @@ jobs:
           # ⚠️ releaseDraft: false — PRECISA ser false pro updater funcionar!
           releaseDraft: false
           prerelease: false
-          # ⚠️ Força usar `npm` em vez de `bun` (bun tem bug com top-level await
-          # no bundle webpack do tauri-action no macOS).
-          tauriScript: npm run tauri --
           args: ${{ matrix.args }}
 
       - name: Upload latest.json (pro updater encontrar)

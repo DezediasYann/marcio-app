@@ -87,6 +87,63 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      # ⚠️ DIAGNÓSTICO DE SIGNING — verifica se os secrets tão configurados
+      # ANTES do build. Se não tiverem, o build vai completar mas latest.json
+      # não vai ser gerado. Isso nos dá info útil sem precisar esperar 20min.
+      - name: Diagnóstico de signing (debug)
+        shell: bash
+        env:
+          SK: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          SP: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          echo "=== DIAGNÓSTICO DE SIGNING ==="
+          echo ""
+          echo "Secret TAURI_SIGNING_PRIVATE_KEY:"
+          if [ -z "$SK" ]; then
+            echo "  ❌ VAZIO! Configure em Settings → Secrets → Actions"
+          else
+            # Mostra tamanho + primeiros caracteres (não expõe a chave)
+            LEN=${#SK}
+            FIRST=${SK:0:30}
+            LAST=${SK: -10}
+            echo "  ✅ Configurado (tamanho: $LEN chars)"
+            echo "  Início: $FIRST..."
+            echo "  Fim: ...$LAST"
+            # Verifica se começa com o cabeçalho esperado
+            if [[ "$SK" == *"BEGIN ENCRYPTED PRIVATE KEY"* ]] || [[ "$SK" == *"untrusted comment"* ]]; then
+              echo "  ✅ Formato parece correto (tem cabeçalho minisign/PEM)"
+            elif [[ "$SK" == /* ]] || [[ "$SK" == *":\\"* ]] || [[ "$SK" == "$HOME"* ]]; then
+              echo "  ⚠️ Parece um CAMINHO de arquivo, não o conteúdo"
+              echo "     → No GitHub Actions, cole o CONTEÚDO do arquivo .key, não o caminho"
+            else
+              echo "  ⚠️ Formato desconhecido — pode ser base64 ou ter sido corrompido"
+              echo "     → Cole o conteúdo DIRETO do arquivo .key (começa com -----BEGIN...)"
+            fi
+            # Verifica se tem newlines (crítico pra chave funcionar)
+            if [[ "$SK" == *$'\n'* ]]; then
+              echo "  ✅ Tem newlines (multiline) — formato correto"
+            else
+              echo "  ⚠️ NÃO tem newlines — foi colado como uma linha só"
+              echo "     → Isso pode causar falha no parsing pelo minisign"
+            fi
+          fi
+          echo ""
+          echo "Secret TAURI_SIGNING_PRIVATE_KEY_PASSWORD:"
+          if [ -z "$SP" ]; then
+            echo "  ❌ VAZIO! Configure a senha usada em 'npm run signer:generate'"
+          else
+            LEN_PWD=${#SP}
+            echo "  ✅ Configurado (tamanho: $LEN_PWD chars)"
+          fi
+          echo ""
+          echo "=== RESUMO ==="
+          if [ -z "$SK" ] || [ -z "$SP" ]; then
+            echo "❌ Signing NÃO vai funcionar — secrets faltando"
+            echo "   Vá em: https://github.com/DezediasYann/marcio-app/settings/secrets/actions"
+          else
+            echo "✅ Secrets parecem configurados. Vamos ver se o build consegue usar..."
+          fi
+
       # beforeBuildCommand (no tauri.conf.json) já roda:
       #   precopy.js + npm run build + prepare-bundle.js
       # prepare-bundle.js cria node_modules.zip, dist-bundle.zip e copia node-portable
@@ -124,6 +181,98 @@ jobs:
       # Usa `if: always()` pra rodar mesmo se o build do tauri-action falhar
       # parcialmente — só vai ter sucesso se o latest.json existir em disco.
       - name: Garantir latest.json na release (updater asset)
+        if: always() && matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/nsis/latest.json
+
+      # ⚠️ FALLBACK MANUAL: se o tauri-action não gerou o latest.json (signing falhou),
+      # geramos manualmente usando a CLI do Tauri + minisign.
+      # Esse step só roda se o latest.json NÃO existir.
+      - name: Fallback — gerar latest.json manualmente se signing falhou
+        if: always() && matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          $latestPath = "src-tauri/target/release/bundle/nsis/latest.json"
+          if (Test-Path $latestPath) {
+            Write-Host "✅ latest.json já existe — pulando fallback"
+            return
+          }
+          
+          Write-Host "⚠️ latest.json NÃO existe — tentando gerar manualmente..."
+          
+          # Verifica que o .exe foi gerado
+          $exePath = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exePath) {
+            Write-Host "❌ .exe não encontrado — não dá pra gerar latest.json sem ele"
+            return
+          }
+          Write-Host "✅ .exe encontrado: $($exePath.Name)"
+          
+          # Verifica que os secrets tão configurados
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Host "❌ TAURI_SIGNING_PRIVATE_KEY não configurado — não dá pra assinar"
+            return
+          }
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
+            Write-Host "❌ TAURI_SIGNING_PRIVATE_KEY_PASSWORD não configurado"
+            return
+          }
+          
+          Write-Host "🔑 Tentando assinar o .exe manualmente com tauri signer..."
+          
+          # Tenta assinar usando tauri signer sign
+          try {
+            $sigPath = "$($exePath.FullName).sig"
+            npx tauri signer sign --private-key "$env:TAURI_SIGNING_PRIVATE_KEY" --password "$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$($exePath.FullName)" 2>&1 | Write-Host
+            if (Test-Path $sigPath) {
+              Write-Host "✅ .sig gerado: $sigPath"
+              $signature = Get-Content $sigPath -Raw
+            } else {
+              Write-Host "❌ Falha ao gerar .sig"
+              return
+            }
+          } catch {
+            Write-Host "❌ Erro ao assinar: $_"
+            return
+          }
+          
+          # Gera o latest.json manualmente
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $url = "https://github.com/DezediasYann/marcio-app/releases/download/$env:GITHUB_REF_NAME/$($exePath.Name)"
+          $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          
+          $latest = @{
+            version = "v$version"
+            notes = "Márcio App v$version"
+            pub_date = $pubDate
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = $signature
+                url = $url
+              }
+            }
+          }
+          
+          $latestJson = $latest | ConvertTo-Json -Depth 10
+          New-Item -ItemType Directory -Force -Path "src-tauri/target/release/bundle/nsis" | Out-Null
+          $latestJson | Out-File -FilePath $latestPath -Encoding utf8 -NoNewline
+          Write-Host "✅ latest.json gerado manualmente!"
+          Write-Host "Conteúdo:"
+          Get-Content $latestPath
+          
+          # Faz upload do latest.json e do .sig pra release
+          # (softprops/action-gh-release já rodou antes, mas agora temos o arquivo)
+          Write-Host ""
+          Write-Host "📦 Fazendo upload manual do latest.json..."
+          
+      # Upload manual do latest.json gerado no fallback (se ele foi criado)
+      - name: Upload latest.json (fallback)
         if: always() && matrix.platform == 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:

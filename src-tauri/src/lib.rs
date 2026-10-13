@@ -193,7 +193,7 @@ fn setup_production_env(resource_dir: &PathBuf, app_data_dir: &PathBuf) {
         let src_node = resource_dir.join("node-portable");
         if src_node.exists() {
             let _ = std::fs::copy(&src_node, app_data_dir.join("node-portable"));
-            let _ = std::fs::permissions(app_data_dir.join("node-portable"), std::os::unix::fs::PermissionsExt::from_mode(0o755));
+            let _ = std::fs::set_permissions(app_data_dir.join("node-portable"), std::os::unix::fs::PermissionsExt::from_mode(0o755));
             println!("[TAURI] ✅ node-portable copiado");
         }
     }

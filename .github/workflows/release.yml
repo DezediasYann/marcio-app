@@ -1,7 +1,7 @@
 name: Release
 
-# Trigger: quando você criar uma tag tipo "v1.0.1"
-# O GitHub Actions compila o .exe/.dmg/.AppImage, assina, e publica um release
+# Trigger: quando você criar uma tag tipo "v1.0.2"
+# O GitHub Actions compila o .exe/.AppImage, assina, e publica um release
 # O updater do Tauri busca o latest.json em releases/latest/download/latest.json
 on:
   push:
@@ -81,7 +81,8 @@ jobs:
           sudo apt-get update
           # NOTA: libappindicator3-dev e libayatana-appindicator3-dev CONFLITAM.
           # Instalamos só o libayatana (versão moderna usada pelo Tauri 2).
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev libgtk-3-dev zip
+          # unzip é fallback do extract_zip em runtime (na maioria dos casos o crate nativo resolve).
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev libgtk-3-dev zip unzip
 
       - name: Install npm dependencies
         run: npm install
@@ -110,10 +111,38 @@ jobs:
           tauriScript: npm run tauri --
           args: ${{ matrix.args }}
 
-      - name: Upload latest.json (pro updater encontrar)
-        if: matrix.platform == 'windows-latest'
+      # ⚠️ CORREÇÃO CRÍTICA DO UPDATER:
+      # O tauri-action@v0 JÁ sobe o latest.json automaticamente quando
+      # TAURI_SIGNING_PRIVATE_KEY está configurado. MAS em alguns casos
+      # o asset é sobrescrito ou vai com nome errado (latest.json do NSIS
+      # vs latest.json do MSI — conflito de nome).
+      #
+      # Este step ROBUSTO faz upload EXPLÍCITO do latest.json gerado pelo
+      # bundle NSIS (formato padrão Windows), garantindo que o asset
+      # "latest.json" exista na release com o conteúdo certo.
+      #
+      # Usa `if: always()` pra rodar mesmo se o build do tauri-action falhar
+      # parcialmente — só vai ter sucesso se o latest.json existir em disco.
+      - name: Garantir latest.json na release (updater asset)
+        if: always() && matrix.platform == 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
           files: |
             src-tauri/target/release/bundle/nsis/latest.json
-            src-tauri/target/release/bundle/msi/latest.json
+
+      # Debug: lista os arquivos gerados pra podermos confirmar que o
+      # latest.json foi criado (caso contrário, o updater não vai funcionar).
+      - name: Debug — listar bundles gerados
+        if: always() && matrix.platform == 'windows-latest'
+        run: |
+          echo "=== BUNDLE DIRS ==="
+          ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "bundle dir não existe"
+          echo ""
+          echo "=== NSIS BUNDLE ==="
+          ls -la src-tauri/target/release/bundle/nsis/ 2>/dev/null || echo "nsis dir não existe"
+          echo ""
+          echo "=== MSI BUNDLE ==="
+          ls -la src-tauri/target/release/bundle/msi/ 2>/dev/null || echo "msi dir não existe"
+          echo ""
+          echo "=== LATEST.JSON CONTEÚDO (se existir) ==="
+          cat src-tauri/target/release/bundle/nsis/latest.json 2>/dev/null || echo "latest.json não encontrado"

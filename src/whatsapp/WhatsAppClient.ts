@@ -108,6 +108,11 @@ export class WhatsAppClient {
 
     this.client.on('auth_failure', (msg: string) => {
       this.app.log('WA', `❌ Falha de autenticação: ${msg}`);
+      // Reporta pro ErrorTracker — usuário precisa saber que a sessão caiu
+      this.app.errors.report('WA', `Falha de autenticação: ${msg}`, undefined, {
+        userMessage: 'A sessão do WhatsApp caiu. Vá em Painel → Bot & WhatsApp → Desconectar e reconecte com o QR code.',
+        severity: 'critical',
+      });
     });
 
     this.client.on('ready', () => {
@@ -121,6 +126,11 @@ export class WhatsAppClient {
 
     this.client.on('disconnected', (reason: string) => {
       this.app.log('WA', `⚠️ Desconectado: ${reason}`);
+      // Reporta — usuário pode não estar olhando o painel
+      this.app.errors.report('WA', `WhatsApp desconectado: ${reason}`, undefined, {
+        userMessage: 'O WhatsApp desconectou. Tentando reconectar automaticamente.',
+        severity: 'warn',
+      });
     });
 
     // === Eventos de mensagem ===
@@ -200,23 +210,28 @@ export class WhatsAppClient {
     try {
       if (process.platform === 'win32') {
         // 1. Mata processos de browser que possam estar segurando o lock
+        // ⚠️ wmic foi DEPRECIADO no Windows 11 — usar PowerShell Get-CimInstance
         const names = ['chrome.exe', 'chromium.exe', 'msedge.exe'];
         const allPids: number[] = [];
         for (const name of names) {
           try {
-            const out = execSync(`wmic process where "name='${name}'" get ProcessId,CommandLine /format:csv`, { encoding: 'utf8', timeout: 5000 });
+            // PowerShell: lista PID + CommandLine, filtra por nome
+            // Usamos powershell em vez de wmic (deprecated Win11)
+            const psCmd = `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name='${name}'\\" | Select-Object ProcessId,CommandLine | ConvertTo-Csv -NoTypeInformation"`;
+            const out = execSync(psCmd, { encoding: 'utf8', timeout: 8000 });
             const lines = out.split('\n').map(l => l.trim()).filter(l => l.length > 0);
             for (const line of lines) {
               const lower = line.toLowerCase();
               if (lower.includes('wwebjs_auth') || lower.includes('com.marcio')) {
-                const parts = line.split(',');
-                const pid = parseInt(parts[parts.length - 1]);
+                // PowerShell CSV: "Pid","CommandLine" ou só "Pid"
+                const match = line.match(/"(\d+)"/);
+                const pid = match ? parseInt(match[1]) : NaN;
                 if (pid > 0 && !allPids.includes(pid)) {
                   allPids.push(pid);
                 }
               }
             }
-          } catch { /* processo não existe */ }
+          } catch { /* processo não existe ou powershell falhou */ }
         }
         if (allPids.length > 0) {
           this.app.log('WA', `matando ${allPids.length} processo(s): ${allPids.join(', ')}`);
@@ -225,6 +240,8 @@ export class WhatsAppClient {
             catch { /* ignora */ }
           }
           await new Promise(r => setTimeout(r, 2000));
+        } else {
+          this.app.debug('WA', 'killLeftoverChromium: nenhum processo órfão encontrado');
         }
 
         // 2. Remove arquivos de lock do Chromium (SingletonLock, SingletonCookie, SingletonSocket)

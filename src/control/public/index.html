@@ -1360,6 +1360,286 @@
       aspect-ratio: 1;
       object-fit: contain;
     }
+
+    /* === DIAGNÓSTICO === */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .health-card {
+      padding: 16px;
+      background: rgba(0,0,0,0.25);
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(255,255,255,0.06);
+      text-align: center;
+    }
+    .health-icon {
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+    .health-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+    .health-value {
+      font-size: 13px;
+      font-weight: 500;
+      word-break: break-word;
+    }
+    .health-icon.ok { color: #22c55e; }
+    .health-icon.warn { color: #eab308; }
+    .health-icon.err { color: #ef4444; }
+
+    .error-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .error-item {
+      padding: 12px;
+      border-radius: var(--radius-md);
+      border-left: 3px solid;
+      background: rgba(0,0,0,0.25);
+      font-size: 13px;
+    }
+    .error-item.critical { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+    .error-item.error { border-color: #f97316; }
+    .error-item.warn { border-color: #eab308; }
+    .error-item.info { border-color: #3b82f6; }
+    .error-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+    .error-tag {
+      font-family: monospace;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.08);
+    }
+    .error-time {
+      font-size: 11px;
+      opacity: 0.6;
+    }
+    .error-msg {
+      font-weight: 500;
+      word-break: break-word;
+    }
+    .error-user-msg {
+      margin-top: 4px;
+      opacity: 0.85;
+      font-style: italic;
+    }
+    .error-count {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      background: rgba(239,68,68,0.2);
+      border-radius: 8px;
+      font-size: 10px;
+      color: #fca5a5;
+    }
+    .error-stack {
+      margin-top: 6px;
+      padding: 8px;
+      background: rgba(0,0,0,0.4);
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+      white-space: pre-wrap;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .info-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-row .mono {
+      font-family: monospace;
+      font-size: 11px;
+      word-break: break-all;
+      text-align: right;
+      max-width: 60%;
+    }
+
+    .nav-badge {
+      display: inline-block;
+      background: #ef4444;
+      color: white;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      margin-left: 4px;
+      font-weight: 600;
+    }
+
+    /* === MENU SECRETO (dev/beta) === */
+    .secret-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .secret-modal {
+      background: linear-gradient(135deg, rgba(60,30,90,0.95), rgba(30,15,50,0.95));
+      border: 1px solid rgba(168,85,247,0.4);
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 600px;
+      width: 90vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 0 60px rgba(168,85,247,0.3);
+      color: #f3e8ff;
+    }
+    .secret-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(168,85,247,0.3);
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .secret-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #c084fc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .secret-channel {
+      font-size: 11px;
+      padding: 2px 8px;
+      background: rgba(168,85,247,0.2);
+      border-radius: 8px;
+      color: #d8b4fe;
+      font-family: monospace;
+    }
+    .secret-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .secret-action {
+      padding: 14px 16px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(168,85,247,0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: left;
+      color: #f3e8ff;
+      font-family: inherit;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 70px;
+      overflow: hidden;
+      word-break: break-word;
+    }
+    .secret-action:hover {
+      background: rgba(168,85,247,0.15);
+      border-color: rgba(168,85,247,0.6);
+      transform: translateY(-1px);
+    }
+    .secret-action.danger {
+      border-color: rgba(239,68,68,0.3);
+    }
+    .secret-action.danger:hover {
+      background: rgba(239,68,68,0.15);
+      border-color: rgba(239,68,68,0.7);
+    }
+    .secret-action-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .secret-action-desc {
+      font-size: 11px;
+      opacity: 0.8;
+      color: #d8b4fe;
+      line-height: 1.4;
+    }
+    .secret-hint {
+      margin-top: 16px;
+      padding: 12px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      font-size: 12px;
+      opacity: 0.85;
+      color: #d8b4fe;
+    }
+    .secret-hint kbd {
+      background: rgba(168,85,247,0.2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+    }
+    .secret-close-btn {
+      background: none;
+      border: none;
+      color: #d8b4fe;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .secret-close-btn:hover {
+      background: rgba(168,85,247,0.2);
+    }
+
+    /* Badge de canal (no topo do painel) */
+    .channel-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .channel-badge.dev { background: #3b82f6; color: white; }
+    .channel-badge.beta { background: #eab308; color: black; }
+    .channel-badge.stable { background: #22c55e; color: white; }
+
+    /* Feature flag hidden (esconde elemento da DOM em stable) */
+    [data-feature].feature-hidden {
+      display: none !important;
+    }
   </style>
   <script src="/chart.min.js?v=1"></script>
 </head>
@@ -1377,7 +1657,9 @@
       <div class="brand">
         <div class="brand-icon" id="brandIcon">🤖</div>
         <div class="brand-text">
-          <div class="brand-name" id="brandName">Bot</div>
+          <div class="brand-name" id="brandName">Bot
+            <span class="channel-badge dev" id="channelBadge" style="display:none;">DEV</span>
+          </div>
           <div class="brand-sub">
             <span class="status-dot offline" id="statusDot"></span>
             <span id="statusText">offline</span>
@@ -1441,6 +1723,10 @@
         </button>
 
         <div class="nav-group">Ajuda</div>
+        <button class="nav-item" data-section="diagnostic" onclick="showSection('diagnostic')">
+          <span class="icon">🩺</span><span>Diagnóstico</span>
+          <span class="nav-badge" id="diagBadge" style="display:none;"></span>
+        </button>
         <button class="nav-item" data-section="about" onclick="showSection('about')">
           <span class="icon">❓</span><span>Sobre</span>
         </button>
@@ -2035,7 +2321,7 @@
                 <br>• Erro crítico
                 <br>• Tweet aguardando aprovação
               </div>
-              <button class="ghost sm mt-2" onclick="testNotification()">🔔 Testar notificação</button>
+              <div class="muted small mt-2">💡 Use o menu secreto (<kbd>↑↑↓↓←→←→BA</kbd>) pra testar notificações.</div>
             </div>
           </div>
         </section>
@@ -2067,6 +2353,66 @@
         <!-- ============================================================
              16. SOBRE
              ============================================================ -->
+        <section class="section" id="section-diagnostic">
+          <div class="glass-card">
+            <div class="card-title">🩺 Diagnóstico do Sistema</div>
+            <div class="card-subtitle">Status de saúde + erros capturados pelo app</div>
+
+            <!-- Status de Saúde (cards visuais) -->
+            <div id="healthStatus" class="health-grid mt-3">
+              <div class="health-card">
+                <div class="health-icon" id="healthWhatsApp">⏳</div>
+                <div class="health-label">WhatsApp</div>
+                <div class="health-value" id="healthWhatsAppText">Verificando…</div>
+              </div>
+              <div class="health-card">
+                <div class="health-icon" id="healthAI">⏳</div>
+                <div class="health-label">IA</div>
+                <div class="health-value" id="healthAIText">Verificando…</div>
+              </div>
+              <div class="health-card">
+                <div class="health-icon" id="healthPort">⏳</div>
+                <div class="health-label">Painel</div>
+                <div class="health-value" id="healthPortText">Verificando…</div>
+              </div>
+              <div class="health-card">
+                <div class="health-icon" id="healthUptime">⏳</div>
+                <div class="health-label">Uptime</div>
+                <div class="health-value" id="healthUptimeText">Verificando…</div>
+              </div>
+            </div>
+
+            <!-- Resumo de Erros -->
+            <div class="card mt-3" style="padding:16px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <div>
+                  <div class="card-title">📋 Erros Capturados</div>
+                  <div class="card-subtitle" id="errorSummary">Carregando…</div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <button class="ghost sm" onclick="loadErrors()">🔄 Atualizar</button>
+                  <button class="ghost sm" onclick="exportErrors()">📋 Copiar tudo</button>
+                  <button class="danger sm" onclick="clearErrors()" id="btnClearErrors" style="display:none;">🗑️ Limpar</button>
+                </div>
+              </div>
+              <div id="errorList" class="error-list mt-3" style="max-height:400px;overflow-y:auto;">
+                <div class="empty-state"><div class="icon">🩺</div><div class="text">Carregando erros…</div></div>
+              </div>
+            </div>
+
+            <!-- Info técnica -->
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title">🔧 Info Técnica</div>
+              <div class="info-grid mt-2" id="techInfo">
+                <div class="info-row"><span>Versão do app:</span><span id="techVersion">—</span></div>
+                <div class="info-row"><span>Diretório de dados:</span><span id="techDataDir" class="mono">—</span></div>
+                <div class="info-row"><span>Modo manutenção:</span><span id="techMaintenance">—</span></div>
+                <div class="info-row"><span>Debug ativo:</span><span id="techDebug">—</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="section" id="section-about">
           <div class="glass-card">
             <div class="about-hero">
@@ -2106,18 +2452,13 @@
               <div class="card-title">🧙 Setup Wizard</div>
               <div class="card-subtitle">Refaz o wizard de configuração inicial</div>
               <div class="row-flex mt-2" style="justify-content:center;gap:8px;flex-wrap:wrap;">
-                <button class="ghost" onclick="openSetupWizard()">🧙 Abrir wizard (preview dev)</button>
-                <button class="danger" onclick="resetSetupState()" id="btnResetSetup" style="display:none;">↺ Resetar setup-state</button>
-                <button class="ghost" onclick="checkChangelog()">📋 O que há de novo?</button>
+                <button class="ghost" onclick="openChangelogManual()">📋 O que há de novo?</button>
               </div>
-              <div class="muted small mt-2" style="max-width:380px;margin:8px auto 0;" id="setupHintDev">
-                💡 Em DEV, o wizard é só <strong>preview visual</strong> — nada é salvo. Seus dados (API key, prompt, etc.) não são afetados.
-                Em produção (após <code>npm run tauri:build</code>), o wizard salva de verdade.
-              </div>
-              <div class="muted small mt-2" style="max-width:380px;margin:8px auto 0;display:none;" id="setupHintProd">
-                💡 "Resetar setup-state" marca como não-completado — próxima vez que abrir o app, vai mostrar o wizard de novo. Seus dados NÃO são afetados.
+              <div class="muted small mt-2" style="max-width:380px;margin:8px auto 0;">
+                💡 Em <strong>dev/beta</strong>, use o menu secreto (<kbd>↑↑↓↓←→←→BA</kbd>) pra acessar o Setup Wizard e outras ferramentas de teste.
               </div>
             </div>
+
           </div>
         </section>
 
@@ -2191,7 +2532,9 @@
     // Expose for debugging in dev tools
     window.__MARCIO_ENV__ = { isTauri: MARCIO_TAURI_MODE, API_BASE: API_BASE, WS_BASE: WS_BASE, PANEL_PORT: PANEL_PORT };
     console.log('[MARCIO] env:', window.__MARCIO_ENV__);
-    console.log('[MARCIO] build: 1.0.3-renamed');
+    // Versão do painel — buscada do backend via /api/health depois do init.
+    // Aqui é só um placeholder; o valor real vem do backend.
+    console.log('[MARCIO] panel: marcio-app (canal será detectado via feature-flags)');
     // state será exposto depois de declarado
 
     // ================================================================
@@ -2433,6 +2776,7 @@
         case 'directives': loadDirectives(); break;
         case 'theme': loadMaintenance(); loadAutostartStatus(); break;
         case 'backup': loadBackupComponents(); break;
+        case 'diagnostic': loadHealth(); loadErrors(); break;
       }
     }
     function toggleSidebar(force) {
@@ -2533,6 +2877,12 @@
             scheduleConvRefresh(msg.data.chatId);
           }
           break;
+        case 'open-setup-wizard':
+          // Vem do menu secreto (executeSecretAction('open-setup-wizard'))
+          // Abre o wizard como se o botão tivesse sido clicado.
+          console.log('[WS] open-setup-wizard recebido — abrindo wizard');
+          openSetupWizard();
+          break;
         case 'notification':
           // Notificação nativa — se tiver Tauri, usa invoke; senão, browser API
           if (msg.data) {
@@ -2549,7 +2899,31 @@
           }
           break;
         case 'error':
-          appendLogLine('WS-ERR', msg.data?.error || 'erro', { cls: 'error' });
+          // Erro capturado pelo ErrorTracker — atualiza log + seção de diagnóstico
+          if (msg.data) {
+            const sev = msg.data.severity || 'error';
+            const cls = sev === 'critical' ? 'error' : sev === 'error' ? 'error' : sev === 'warn' ? 'warn' : 'system';
+            appendLogLine(`ERR-${msg.data.tag || '?'}`, msg.data.message || 'erro', { cls });
+            // Se a seção de diagnóstico tá visível, atualiza em tempo real
+            const diagSection = $('#section-diagnostic');
+            if (diagSection && diagSection.classList.contains('active')) {
+              loadErrors();
+            } else {
+              // Atualiza badge mesmo se a seção não tá visível
+              const badge = $('#diagBadge');
+              if (badge) {
+                badge.style.display = '';
+                const cur = parseInt(badge.textContent) || 0;
+                badge.textContent = String(cur + 1);
+              }
+            }
+            // Toast pra erros críticos (chama atenção do usuário)
+            if (sev === 'critical') {
+              toast(`❌ ${msg.data.tag || 'Erro'}: ${msg.data.message || ''}`.slice(0, 100), 'error', 6000);
+            }
+          } else {
+            appendLogLine('WS-ERR', msg.data?.error || 'erro', { cls: 'error' });
+          }
           break;
         default:
           appendLogLine('WS', JSON.stringify(msg), { cls: 'system' });
@@ -4654,6 +5028,104 @@
     // ================================================================
 
     // === Update via GitHub ===
+    // Diagnóstico completo de erros comuns do updater:
+    //   - "Could not fetch a valid release JSON from the remote" →
+    //       latest.json não foi subido na release, OU está em formato inválido,
+    //       OU os secrets TAURI_SIGNING_PRIVATE_KEY não estão configurados.
+    //   - "Failed to verify signature" →
+    //       pubkey no tauri.conf.json não bate com a private key do secret.
+    //   - "Network error" → sem internet ou firewall bloqueando github.com.
+
+    // === Sair completamente do app (Tauri só) ===
+    // Mata o bot Node.js + fecha o app Tauri de vez (não fica em background).
+    async function quitAppCompletely() {
+      if (!window.__TAURI__) {
+        toast('Só funciona no app desktop', 'warn');
+        return;
+      }
+      try {
+        toast('Saindo do app…', 'info', 2000);
+        await window.__TAURI__.core.invoke('quit_app');
+      } catch (e) {
+        console.error('[QUIT] erro:', e);
+        toast('Erro ao sair: ' + e.message, 'error');
+      }
+    }
+
+    // === Modal de confirmação ao fechar janela (Tauri só) ===
+    // Quando o usuário clica no X da janela main, abre este modal perguntando:
+    // "Desligar o bot?" ou "Minimizar pro tray?"
+    function openCloseConfirmModal() {
+      // Se já tá aberto, não abre de novo
+      if (document.getElementById('closeConfirmOverlay')) return;
+      const overlay = document.createElement('div');
+      overlay.id = 'closeConfirmOverlay';
+      // NÃO usa classe 'modal-overlay' (que tem display:none por padrão).
+      // Usa estilo inline pra garantir que aparece imediatamente.
+      overlay.style.cssText = [
+        'position:fixed',
+        'inset:0',
+        'background:rgba(0,0,0,0.7)',
+        'backdrop-filter:blur(8px)',
+        '-webkit-backdrop-filter:blur(8px)',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'z-index:10001',
+        'padding:24px',
+        'box-sizing:border-box',
+        'animation:fadeIn 0.2s ease',
+      ].join(';');
+      overlay.onclick = (e) => { if (e.target === overlay) closeCloseConfirm('cancel'); };
+      overlay.innerHTML = `
+        <div style="box-sizing:border-box;background:#1a1530;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;max-width:400px;width:100%;color:#fff;box-shadow:0 8px 32px rgba(0,0,0,0.4);overflow:hidden;">
+          <div style="font-size:48px;margin:0 0 8px;text-align:center;">🚪</div>
+          <div style="font-size:18px;font-weight:700;margin:0 0 8px;text-align:center;">Fechar aplicativo</div>
+          <p style="opacity:0.7;margin:0 0 20px;font-size:14px;text-align:center;">O que você quer fazer?</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button type="button" onclick="closeCloseConfirm('minimize')" style="box-sizing:border-box;width:100%;padding:14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:inherit;cursor:pointer;font-family:inherit;font-size:13px;text-align:left;display:flex;align-items:center;gap:10px;line-height:1.4;">
+              <span style="font-size:20px;flex-shrink:0;">📥</span>
+              <span style="flex:1;min-width:0;">
+                <strong style="display:block;">Minimizar pro tray</strong>
+                <span style="opacity:0.6;font-size:11px;display:block;">Bot continua rodando em background</span>
+              </span>
+            </button>
+            <button type="button" onclick="closeCloseConfirm('quit')" style="box-sizing:border-box;width:100%;padding:14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:inherit;cursor:pointer;font-family:inherit;font-size:13px;text-align:left;display:flex;align-items:center;gap:10px;line-height:1.4;">
+              <span style="font-size:20px;flex-shrink:0;">🚪</span>
+              <span style="flex:1;min-width:0;">
+                <strong style="display:block;">Desligar o bot</strong>
+                <span style="opacity:0.6;font-size:11px;display:block;">Para tudo e fecha o app</span>
+              </span>
+            </button>
+            <button type="button" onclick="closeCloseConfirm('cancel')" style="margin-top:8px;padding:10px;background:transparent;border:none;color:inherit;cursor:pointer;font-family:inherit;font-size:13px;opacity:0.7;">Cancelar</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      console.log('[CLOSE] modal aberto');
+    }
+
+    async function closeCloseConfirm(action) {
+      // Remove o modal primeiro
+      const overlay = document.getElementById('closeConfirmOverlay');
+      if (overlay) overlay.remove();
+      if (action === 'cancel') return;
+      if (action === 'minimize') {
+        // Esconde a janela main
+        try {
+          const win = window.__TAURI__?.window?.getCurrent?.();
+          if (win) await win.hide();
+          toast('App minimizado pro tray 📥', 'info', 2000);
+        } catch (e) {
+          console.error('[CLOSE] erro ao minimizar:', e);
+          toast('Erro ao minimizar: ' + e.message, 'error');
+        }
+      } else if (action === 'quit') {
+        // Mata o bot e sai
+        await quitAppCompletely();
+      }
+    }
+
     async function checkForUpdates() {
       const status = $('#updateStatus');
       if (!window.__TAURI__) {
@@ -4666,8 +5138,8 @@
         const { check } = await import('/js/tauri-updater.min.js');
         const update = await check();
         if (update) {
-          if (status) status.textContent = `Nova versão: ${update.version} — ${update.body?.slice(0, 100) || ''}`;
-          if (confirm(`Nova versão disponível: ${update.version}\n\n${update.body || ''}\n\nBaixar e instalar agora?`)) {
+          if (status) status.textContent = `Nova versão: ${update.version}`;
+          if (confirm(`Nova versão disponível: ${update.version}\n\n${update.body || '(sem notas de versão)'}\n\nBaixar e instalar agora?`)) {
             if (status) status.textContent = 'Baixando e instalando…';
             await update.downloadAndInstall();
             toast('✅ Atualizado! Reiniciando…', 'success');
@@ -4688,8 +5160,30 @@
           toast('App atualizado ✅', 'success');
         }
       } catch (e) {
-        if (status) status.textContent = '❌ Erro: ' + e;
-        toast('Erro ao verificar: ' + e, 'error', 5000);
+        // Diagnóstico detalhado do erro (atende Bug #3: reportar erros melhor)
+        const errMsg = String(e?.message || e || '');
+        let userHint = '';
+        if (errMsg.includes('Could not fetch a valid release JSON')) {
+          userHint = '\n\nCausas possíveis:\n' +
+            '• A release no GitHub pode não ter o arquivo latest.json (verifique em\n' +
+            '  https://github.com/DezediasYann/marcio-app/releases/latest)\n' +
+            '• Os secrets TAURI_SIGNING_PRIVATE_KEY / _PASSWORD podem não estar\n' +
+            '  configurados no repo (Settings → Secrets and variables → Actions)\n' +
+            '• O latest.json pode estar em formato inválido';
+        } else if (errMsg.includes('signature') || errMsg.includes('verify')) {
+          userHint = '\n\nA assinatura do update não confere. A chave pública (pubkey)\n' +
+            'no tauri.conf.json não bate com a privada usada no build.\n' +
+            'Gere uma chave nova com `npm run signer:generate` e atualize a pubkey.';
+        } else if (errMsg.includes('Network') || errMsg.includes('fetch')) {
+          userHint = '\n\nSem conexão com github.com.\n' +
+            'Verifique sua internet ou firewall.';
+        } else if (errMsg.includes('plugin:updater')) {
+          userHint = '\n\nO plugin updater não está carregado.\n' +
+            'Pode ser que o app foi compilado sem o tauri-plugin-updater.';
+        }
+        console.error('[UPDATE] erro completo:', e);
+        if (status) status.textContent = '❌ Erro: ' + errMsg;
+        toast('Erro ao verificar atualização: ' + errMsg + userHint, 'error', 8000);
       }
     }
 
@@ -4697,6 +5191,158 @@
     // Abre o wizard de configuração inicial sem afetar dados (pra testar).
     // Em Tauri: chama comando Rust que abre a janela setup.
     // Em browser: abre setup-wizard.html em nova aba.
+
+    // === DIAGNÓSTICO — carrega status de saúde + erros ===
+    // Carrega /api/health e atualiza os cards de status visual.
+    async function loadHealth() {
+      try {
+        const h = await apiGet('/api/health');
+        // WhatsApp
+        const waIcon = $('#healthWhatsApp');
+        const waText = $('#healthWhatsAppText');
+        if (h.whatsapp.connected) {
+          waIcon.textContent = '✅'; waIcon.className = 'health-icon ok';
+          waText.textContent = h.whatsapp.info || 'Conectado';
+        } else {
+          waIcon.textContent = '❌'; waIcon.className = 'health-icon err';
+          waText.textContent = 'Desconectado';
+        }
+        // IA
+        const aiIcon = $('#healthAI');
+        const aiText = $('#healthAIText');
+        if (h.ai.hasApiKey) {
+          aiIcon.textContent = '✅'; aiIcon.className = 'health-icon ok';
+          aiText.textContent = h.ai.model || 'Configurado';
+        } else {
+          aiIcon.textContent = '⚠️'; aiIcon.className = 'health-icon warn';
+          aiText.textContent = 'Sem API key';
+        }
+        // Porta
+        const portIcon = $('#healthPort');
+        const portText = $('#healthPortText');
+        if (h.port.listening) {
+          portIcon.textContent = '✅'; portIcon.className = 'health-icon ok';
+          portText.textContent = `:${h.port.port}`;
+        } else {
+          portIcon.textContent = '❌'; portIcon.className = 'health-icon err';
+          portText.textContent = 'Offline';
+        }
+        // Uptime
+        const upIcon = $('#healthUptime');
+        const upText = $('#healthUptimeText');
+        if (h.uptime < 60) {
+          upIcon.textContent = '🟢'; upText.textContent = `${h.uptime}s`;
+        } else if (h.uptime < 3600) {
+          upIcon.textContent = '🟢'; upText.textContent = `${Math.floor(h.uptime/60)}min`;
+        } else {
+          upIcon.textContent = '🟢'; upText.textContent = `${Math.floor(h.uptime/3600)}h ${Math.floor((h.uptime%3600)/60)}min`;
+        }
+        // Info técnica
+        $('#techVersion').textContent = h.version || '—';
+        $('#techDataDir').textContent = h.dataDir || '—';
+        $('#techMaintenance').textContent = h.maintenanceMode ? '🟡 Ativo' : '✅ Inativo';
+        $('#techDebug').textContent = h.debugEnabled ? '🟢 Ligado' : '⚫ Desligado';
+      } catch (e) {
+        toast('Erro ao carregar saúde: ' + e.message, 'error', 5000);
+      }
+    }
+
+    // Carrega erros do /api/errors e renderiza na lista.
+    async function loadErrors() {
+      try {
+        const r = await apiGet('/api/errors');
+        const errors = r.errors || [];
+        const summary = r.summary || {};
+        // Atualiza resumo
+        const parts = [];
+        if (summary.criticalCount > 0) parts.push(`🔴 ${summary.criticalCount} crítico(s)`);
+        if (summary.errorCount > 0) parts.push(`🟠 ${summary.errorCount} erro(s)`);
+        if (summary.warnCount > 0) parts.push(`🟡 ${summary.warnCount} aviso(s)`);
+        if (summary.infoCount > 0) parts.push(`🔵 ${summary.infoCount} info(s)`);
+        if (parts.length === 0) {
+          $('#errorSummary').textContent = `✅ Nenhum erro capturado (${errors.length} total)`;
+        } else {
+          $('#errorSummary').textContent = parts.join(' · ') + ` — ${summary.totalErrors} no total`;
+        }
+        // Botão limpar
+        $('#btnClearErrors').style.display = errors.length > 0 ? '' : 'none';
+        // Renderiza lista
+        const list = $('#errorList');
+        if (errors.length === 0) {
+          list.innerHTML = '<div class="empty-state"><div class="icon">✅</div><div class="text">Nenhum erro capturado ainda.</div></div>';
+          // Atualiza badge
+          const badge = $('#diagBadge');
+          badge.style.display = 'none';
+          return;
+        }
+        list.innerHTML = errors.map(e => {
+          const sev = e.severity || 'error';
+          const time = new Date(e.timestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+          const count = e.count > 1 ? `<span class="error-count">×${e.count}</span>` : '';
+          const userMsg = e.userMessage ? `<div class="error-user-msg">→ ${escapeHtml(e.userMessage)}</div>` : '';
+          const stack = e.stack ? `<details><summary class="muted small" style="cursor:pointer;margin-top:4px;">Ver stack trace</summary><pre class="error-stack">${escapeHtml(e.stack)}</pre></details>` : '';
+          const ctx = e.context ? `<div class="muted small" style="margin-top:4px;">Contexto: <code>${escapeHtml(JSON.stringify(e.context))}</code></div>` : '';
+          return `<div class="error-item ${sev}">
+            <div class="error-header">
+              <span><span class="error-tag">${escapeHtml(e.tag)}</span>${count}</span>
+              <span class="error-time">${time}</span>
+            </div>
+            <div class="error-msg">${escapeHtml(e.message)}</div>
+            ${userMsg}
+            ${ctx}
+            ${stack}
+          </div>`;
+        }).join('');
+        // Atualiza badge (só conta errors+critical)
+        const criticalCount = (summary.criticalCount || 0) + (summary.errorCount || 0);
+        const badge = $('#diagBadge');
+        if (criticalCount > 0) {
+          badge.style.display = '';
+          badge.textContent = criticalCount > 99 ? '99+' : String(criticalCount);
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) {
+        toast('Erro ao carregar erros: ' + e.message, 'error', 5000);
+      }
+    }
+
+    // Limpa todos os erros.
+    async function clearErrors() {
+      if (!confirm('Limpar TODOS os erros capturados?\nIsso não afeta o funcionamento do bot.')) return;
+      try {
+        await apiDelete('/api/errors');
+        await loadErrors();
+        toast('Erros limpos ✅', 'success');
+      } catch (e) {
+        toast('Erro ao limpar: ' + e.message, 'error', 5000);
+      }
+    }
+
+    // Exporta erros em texto (baixa arquivo .txt).
+    async function exportErrors() {
+      try {
+        const r = await fetch(API_BASE + '/api/errors/export');
+        const text = await r.text();
+        // Tenta copiar pra clipboard (mais prático que download)
+        try {
+          await navigator.clipboard.writeText(text);
+          toast('📋 Erros copiados pra área de transferência!', 'success', 4000);
+        } catch {
+          // Fallback: download
+          const blob = new Blob([text], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = `marcio-errors-${new Date().toISOString().slice(0, 19)}.txt`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast('📋 Erros baixados como .txt', 'success', 4000);
+        }
+      } catch (e) {
+        toast('Erro ao exportar: ' + e.message, 'error', 5000);
+      }
+    }
+
     function openSetupWizard() {
       if (window.__TAURI__) {
         try {
@@ -4821,24 +5467,28 @@
     function init() {
       console.log('[MARCIO] init() start');
       try {
-        // Detecta modo dev vs produção (Tauri)
-        const isDev = !window.__TAURI__;
-        if (isDev) {
-          // Em dev: esconde botão "Resetar setup-state" (não tem efeito)
-          const btnReset = document.getElementById('btnResetSetup');
-          if (btnReset) btnReset.style.display = 'none';
-          const hintDev = document.getElementById('setupHintDev');
-          if (hintDev) hintDev.style.display = 'block';
-          const hintProd = document.getElementById('setupHintProd');
-          if (hintProd) hintProd.style.display = 'none';
-        } else {
-          // Em produção: mostra botão "Resetar setup-state"
-          const btnReset = document.getElementById('btnResetSetup');
-          if (btnReset) btnReset.style.display = 'inline-flex';
-          const hintDev = document.getElementById('setupHintDev');
-          if (hintDev) hintDev.style.display = 'none';
-          const hintProd = document.getElementById('setupHintProd');
-          if (hintProd) hintProd.style.display = 'block';
+        // === Feature Flags — detecta canal (dev/beta/stable) ===
+        // Carrega via /api/feature-flags e aplica mascaramento nos elementos com data-feature.
+        // Em stable: elementos com data-feature="dev-only" somem da DOM.
+        // Em dev/beta: botões de testes aparecem.
+        loadFeatureFlags().then(() => {
+          console.log('[MARCIO] Feature flags aplicadas');
+        });
+
+        // Registra Konami code listener (só funciona se canal != stable)
+        registerKonamiCode();
+
+        // Listener pro evento de "fechar janela" (Tauri only).
+        // Quando o usuário clica no X da janela main, o Tauri emite "close-requested".
+        // Em vez de esconder direto, perguntamos: desligar bot ou minimizar pro tray?
+        // ⚠️ O Windows pode disparar múltiplos eventos CloseRequested por clique.
+        // Por isso o openCloseConfirmModal tem check de "já tá aberto" — só abre 1x.
+        if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
+          window.__TAURI__.event.listen('close-requested', (event) => {
+            console.log('[TAURI] close-requested recebido — abrindo modal');
+            openCloseConfirmModal();
+          });
+          console.log('[MARCIO] Listener close-requested registrado');
         }
 
         // Initial loads
@@ -4870,18 +5520,224 @@
       }
     }
 
+    // ================================================================
+    // FEATURE FLAGS — sistema de mascaramento entre canais
+    // ================================================================
+
+    var _marcio_channel = 'stable';  // default conservador
+    var _marcio_features = {};
+
+    async function loadFeatureFlags() {
+      try {
+        console.log('[MARCIO] loadFeatureFlags: chamando /api/feature-flags...');
+        const r = await apiGet('/api/feature-flags');
+        console.log('[MARCIO] loadFeatureFlags: resposta recebida:', r);
+        _marcio_channel = r.channel || 'stable';
+        _marcio_features = r.features || {};
+        console.log('[MARCIO] Feature flags carregadas — canal:', _marcio_channel, 'features:', _marcio_features);
+
+        // Atualiza badge de canal no header
+        const badge = $('#channelBadge');
+        if (badge) {
+          if (_marcio_channel !== 'stable') {
+            badge.style.display = '';
+            badge.textContent = _marcio_channel.toUpperCase();
+            badge.className = 'channel-badge ' + _marcio_channel;
+            console.log('[MARCIO] Badge de canal atualizado:', _marcio_channel);
+          } else {
+            badge.style.display = 'none';
+          }
+        } else {
+          console.warn('[MARCIO] Elemento #channelBadge não encontrado no DOM');
+        }
+
+        // Aplica mascaramento: percorre TODOS os elementos com data-feature
+        // e esconde os que não tão habilitados no canal atual.
+        const allFeatureEls = document.querySelectorAll('[data-feature]');
+        console.log('[MARCIO] Elementos com data-feature encontrados:', allFeatureEls.length);
+        allFeatureEls.forEach(el => {
+          const feature = el.getAttribute('data-feature');
+          if (feature && !_marcio_features[feature]) {
+            el.classList.add('feature-hidden');
+            console.log('[FEATURE] ocultando:', feature);
+          } else {
+            el.classList.remove('feature-hidden');
+            console.log('[FEATURE] exibindo:', feature);
+          }
+        });
+      } catch (e) {
+        console.error('[MARCIO] ERRO ao carregar feature flags:', e.message || e, e);
+        // ⚠️ Em caso de 404 (endpoint não existe — backend antigo), assume DEV
+        // (mais permissivo) em vez de esconde tudo. Isso evita que botões
+        // legítimos somem quando o usuário roda painel novo com backend velho.
+        const is404 = (e.message || '').includes('404') || (e.message || '').includes('Not Found');
+        if (is404) {
+          console.warn('[MARCIO] /api/feature-flags retornou 404 — backend antigo. Assumindo canal=dev (permissivo).');
+          _marcio_channel = 'dev';
+          _marcio_features = {};  // vazio = não esconde nada (todos botões aparecem)
+          // Não esconde NADA — deixa todos os data-feature visíveis
+        } else {
+          // Outro erro (rede, JSON inválido, etc) — também assume dev pra não quebrar UX
+          console.warn('[MARCIO] Erro não-404, assumindo dev pra não quebrar UX.');
+          _marcio_channel = 'dev';
+          _marcio_features = {};
+        }
+      }
+    }
+
+    // ================================================================
+    // MENU SECRETO — abre com Konami code ou 7 cliques no logo
+    // ================================================================
+
+    var _konami_buffer = [];
+    var _konami_target = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+    var _logo_clicks = 0;
+    var _logo_click_timer = null;
+
+    function registerKonamiCode() {
+      console.log('[MARCIO] Registrando Konami code listener...');
+      // Konami code: ↑↑↓↓←→←→BA
+      document.addEventListener('keydown', (e) => {
+        // Só registra se NÃO tá digitando num input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        _konami_buffer.push(e.key);
+        if (_konami_buffer.length > _konami_target.length) {
+          _konami_buffer.shift();
+        }
+        // Log pra debug (só mostrar os últimos 10)
+        if (_konami_buffer.length === _konami_target.length) {
+          const match = _konami_buffer.every((k, i) => k.toLowerCase() === _konami_target[i].toLowerCase());
+          if (match) {
+            console.log('[KONAMI] ✓ código correto detectado!');
+            _konami_buffer = [];
+            openSecretMenu();
+          }
+        }
+      });
+      console.log('[MARCIO] Konami code listener registrado');
+
+      // 7 cliques no logo do bot (brand-icon) também abre
+      const brandIcon = document.getElementById('brandIcon');
+      if (brandIcon) {
+        brandIcon.addEventListener('click', () => {
+          _logo_clicks++;
+          console.log('[SECRET] clique no logo:', _logo_clicks);
+          if (_logo_click_timer) clearTimeout(_logo_click_timer);
+          _logo_click_timer = setTimeout(() => { _logo_clicks = 0; }, 2000);
+          if (_logo_clicks >= 7) {
+            _logo_clicks = 0;
+            console.log('[SECRET] 7 cliques no logo — abrindo menu secreto');
+            openSecretMenu();
+          }
+        });
+        console.log('[MARCIO] Listener de clique no logo registrado');
+      } else {
+        console.warn('[MARCIO] brandIcon não encontrado no DOM');
+      }
+    }
+
+    function openSecretMenu() {
+      // Em stable, menu secreto não existe
+      if (_marcio_channel === 'stable') {
+        toast('Menu secreto desativado em stable', 'warn');
+        return;
+      }
+      // Se o modal já tá aberto, fecha
+      if (document.getElementById('secretOverlay')) {
+        closeSecretMenu();
+        return;
+      }
+      const actions = [
+        { id: 'open-setup-wizard', icon: '🧙', title: 'Abrir Setup Wizard', desc: 'Abre o wizard de configuração (preview dev)', danger: false, feature: 'dev-only' },
+        { id: 'reset-setup-state', icon: '↺', title: 'Resetar setup-state', desc: 'Força mostrar wizard na próxima vez', danger: false, feature: 'dev-only' },
+        { id: 'test-notification', icon: '🔔', title: 'Testar notificação', desc: 'Dispara notificação nativa do sistema', danger: false, feature: 'dev-only' },
+        { id: 'inject-test-error', icon: '🧪', title: 'Injetar erro de teste', desc: 'Adiciona um erro warn no ErrorTracker', danger: false, feature: 'dev-only' },
+        { id: 'inject-critical-error', icon: '🚨', title: 'Injetar erro CRÍTICO', desc: 'Adiciona erro crítico + dispara notificação', danger: false, feature: 'dev-only' },
+        { id: 'force-wa-disconnect', icon: '⚠️', title: 'Simular WA desconectou', desc: 'Reporta desconexão (não desconecta de verdade)', danger: false, feature: 'dev-only' },
+        { id: 'clear-errors', icon: '🧹', title: 'Limpar erros', desc: 'Apaga todos os erros do ErrorTracker', danger: false, feature: 'dev-only' },
+        { id: 'clear-memories', icon: '🧠', title: 'Limpar TODAS memórias', desc: 'Apaga memories.json (irreversível!)', danger: true, feature: 'dev-only' },
+        { id: 'clear-stickers', icon: '🎭', title: 'Limpar TODAS figurinhas', desc: 'Apaga vault + meta (irreversível!)', danger: true, feature: 'dev-only' },
+        { id: 'refresh-feature-flags', icon: '🔄', title: 'Refresh feature flags', desc: 'Re-detecta canal (dev/beta/stable)', danger: false, feature: 'dev-only' },
+      ];
+      const overlay = document.createElement('div');
+      overlay.id = 'secretOverlay';
+      overlay.className = 'secret-overlay';
+      overlay.onclick = (e) => { if (e.target === overlay) closeSecretMenu(); };
+      overlay.innerHTML = `
+        <div class="secret-modal">
+          <div class="secret-header">
+            <div class="secret-title">
+              <span>🧪</span>
+              <span>Menu Secreto de Testes</span>
+              <span class="secret-channel">canal: ${_marcio_channel}</span>
+            </div>
+            <button class="secret-close-btn" onclick="closeSecretMenu()" title="Fechar">✕</button>
+          </div>
+          <div class="secret-actions">
+            ${actions.map(a => `
+              <button class="secret-action ${a.danger ? 'danger' : ''}" onclick="executeSecretAction('${a.id}')">
+                <div class="secret-action-title"><span>${a.icon}</span><span>${escapeHtml(a.title)}</span></div>
+                <div class="secret-action-desc">${escapeHtml(a.desc)}</div>
+              </button>
+            `).join('')}
+          </div>
+          <div class="secret-hint">
+            💡 Este menu só existe em <strong>dev/beta</strong>. Em stable, ele é completamente removido da DOM.<br>
+            Atalho: <kbd>↑↑↓↓←→←→BA</kbd> ou 7 cliques no logo do bot.
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      console.log('[SECRET] menu aberto');
+    }
+
+    function closeSecretMenu() {
+      const overlay = document.getElementById('secretOverlay');
+      if (overlay) overlay.remove();
+    }
+
+    async function executeSecretAction(action) {
+      // Confirma ações perigosas
+      const dangerActions = ['clear-memories', 'clear-stickers', 'inject-critical-error'];
+      if (dangerActions.includes(action)) {
+        if (!confirm(`Confirmar execução de: ${action}?\n\nEsta ação é IRREVERSÍVEL.`)) return;
+      }
+      try {
+        const r = await apiPost('/api/dev/secret-action', { action });
+        if (r.ok) {
+          toast(`✅ ${r.result || 'Ação executada'}`, 'success');
+          // Se foi ação de erro, atualiza lista de erros
+          if (action.startsWith('inject') || action === 'clear-errors') {
+            loadErrors();
+          }
+        } else {
+          toast(`❌ ${r.error || 'Erro'}`, 'error');
+        }
+      } catch (e) {
+        toast(`❌ Erro: ${e.message}`, 'error');
+      }
+    }
+
     // === CHANGELOG ("O que há de novo?") ===
     let _changelogData = null;
     let _changelogCurrentIdx = 0;
 
+    // checkChangelog: chamada AUTOMÁTICA no boot.
+    // Só abre o modal se tem versão nova (hasNew=true).
     async function checkChangelog() {
       try {
         const r = await apiGet('/api/changelog');
+        // ⚠️ IMPORTANTE: inverte a ordem das releases pra que releases[0] seja a MAIS NOVA.
+        // No changelog.json, a primeira entrada é a mais antiga (1.0.1).
+        // No painel, queremos mostrar a mais atual primeiro (idx=0).
+        if (r && r.releases && Array.isArray(r.releases)) {
+          r.releases = [...r.releases].reverse();
+        }
         _changelogData = r;
         if (r.hasNew && r.releases && r.releases.length > 0) {
           dbg('CHANGELOG', `novidades disponíveis — versão atual: ${r.currentVersion}, última vista: ${r.lastSeenVersion}`);
-          // Mostra a versão mais nova primeiro
-          _changelogCurrentIdx = 0;
+          // Depois do reverse(), releases[0] = mais nova. Começa nela.
+          _changelogCurrentIdx = findReleaseIndex(r.releases, r.currentVersion);
           showChangelogModal(r.releases, r.currentVersion, true);
         } else {
           dbg('CHANGELOG', `sem novidades — versão atual: ${r.currentVersion}, última vista: ${r.lastSeenVersion}`);
@@ -4889,6 +5745,51 @@
       } catch (e) {
         dbgErr('CHANGELOG', 'erro ao checar changelog:', e.message);
       }
+    }
+
+    // openChangelogManual: chamada pelo botão "📋 O que há de novo?" na seção Sobre.
+    // SEMPRE abre o modal, independente de hasNew.
+    // Se _changelogData ainda não foi carregado, faz request primeiro.
+    async function openChangelogManual() {
+      try {
+        if (!_changelogData) {
+          console.log('[CHANGELOG] carregando dados do /api/changelog...');
+          const r = await apiGet('/api/changelog');
+          // ⚠️ Inverte ordem: releases[0] = mais nova (1.0.2), releases[1] = mais antiga (1.0.1)
+          if (r && r.releases && Array.isArray(r.releases)) {
+            r.releases = [...r.releases].reverse();
+          }
+          _changelogData = r;
+        }
+        if (!_changelogData || !_changelogData.releases || _changelogData.releases.length === 0) {
+          toast('Nenhuma versão de changelog encontrada', 'warn');
+          return;
+        }
+        console.log('[CHANGELOG] abrindo modal manual — releases:', _changelogData.releases.length);
+        // Depois do reverse(), releases[0] = mais nova. Começa nela.
+        _changelogCurrentIdx = findReleaseIndex(_changelogData.releases, _changelogData.currentVersion);
+        showChangelogModal(_changelogData.releases, _changelogData.currentVersion, false);
+      } catch (e) {
+        console.error('[CHANGELOG] erro ao abrir manual:', e);
+        toast('Erro ao carregar changelog: ' + e.message, 'error');
+      }
+    }
+
+    // Acha o índice de uma release pelo número de versão.
+    // Retorna 0 se não achar (fallback: 0 = mais nova após o reverse()).
+    function findReleaseIndex(releases, version) {
+      if (!releases || !version) return 0;
+      // Tenta match exato primeiro
+      for (let i = 0; i < releases.length; i++) {
+        if (releases[i].version === version) return i;
+      }
+      // Fallback: remove prefixo 'v' se tiver
+      const verNoV = String(version).replace(/^v/, '');
+      for (let i = 0; i < releases.length; i++) {
+        if (String(releases[i].version).replace(/^v/, '') === verNoV) return i;
+      }
+      // Não achou — retorna 0 (mais nova após reverse)
+      return 0;
     }
 
     function showChangelogModal(releases, currentVersion, hasNew) {
@@ -5139,11 +6040,21 @@
       loadAutostartStatus: () => typeof loadAutostartStatus !== 'undefined' ? loadAutostartStatus : null,
       testNotification: () => typeof testNotification !== 'undefined' ? testNotification : null,
       checkForUpdates: () => typeof checkForUpdates !== 'undefined' ? checkForUpdates : null,
+      quitAppCompletely: () => typeof quitAppCompletely !== 'undefined' ? quitAppCompletely : null,
       openSetupWizard: () => typeof openSetupWizard !== 'undefined' ? openSetupWizard : null,
       resetSetupState: () => typeof resetSetupState !== 'undefined' ? resetSetupState : null,
       checkChangelog: () => typeof checkChangelog !== 'undefined' ? checkChangelog : null,
+      openChangelogManual: () => typeof openChangelogManual !== 'undefined' ? openChangelogManual : null,
       dismissChangelog: () => typeof dismissChangelog !== 'undefined' ? dismissChangelog : null,
       navChangelog: () => typeof navChangelog !== 'undefined' ? navChangelog : null,
+      loadHealth: () => typeof loadHealth !== 'undefined' ? loadHealth : null,
+      loadErrors: () => typeof loadErrors !== 'undefined' ? loadErrors : null,
+      clearErrors: () => typeof clearErrors !== 'undefined' ? clearErrors : null,
+      exportErrors: () => typeof exportErrors !== 'undefined' ? exportErrors : null,
+      loadFeatureFlags: () => typeof loadFeatureFlags !== 'undefined' ? loadFeatureFlags : null,
+      openSecretMenu: () => typeof openSecretMenu !== 'undefined' ? openSecretMenu : null,
+      closeSecretMenu: () => typeof closeSecretMenu !== 'undefined' ? closeSecretMenu : null,
+      executeSecretAction: () => typeof executeSecretAction !== 'undefined' ? executeSecretAction : null,
       closeModal: () => typeof closeModal !== 'undefined' ? closeModal : null,
     };
     var _ok = 0, _fail = 0;

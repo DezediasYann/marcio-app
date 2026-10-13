@@ -186,6 +186,11 @@ export class AudioTranscriber {
 
     // Ambos modelos falharam
     this.app.log('AUDIO', `❌ transcrição falhou em todos modelos. Último erro: ${lastError}`);
+    // Reporta pro ErrorTracker — usuário pode não saber que os áudios tão falhando
+    this.app.errors.report('AUDIO', `Transcrição falhou: ${lastError}`, undefined, {
+      userMessage: 'Não consegui transcrever um áudio. Verifique sua chave da API do Gemini em Configurações → IA.',
+      severity: 'warn',
+    });
     return null;
   }
 

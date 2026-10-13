@@ -169,6 +169,65 @@ export class ControlPanel {
     // WebSocket Server anexado ao mesmo HTTP server (upgrade automático).
     this.wss = new WebSocketServer({ server: this.httpServer });
 
+    // Configura handlers do WS (extraído pra poder re-criar em caso de EADDRINUSE)
+    this.setupWsHandlers();
+
+    // ⚠️ CRÍTICO: registra o error handler ANTES de chamar listen().
+    // Se registrar DEPOIS (como era antes), o erro EADDRINUSE dispara no próximo
+    // tick ANTES do handler ser registrado, vira uncaughtException, e o bot crasha.
+    this.httpServer.on('error', (e: NodeJS.ErrnoException) => {
+      if (e.code === 'EADDRINUSE') {
+        // Porta já em uso — provavelmente outra instância do bot ficou rodando.
+        // Em vez de crashar o app (uncaughtException), tenta matar o processo
+        // órfão e retentar uma vez.
+        this.app.log('PANEL', `porta ${port} em uso — tentando matar processo órfão...`);
+        this.killProcessOnPort(port).then((killed) => {
+          if (killed) {
+            this.app.log('PANEL', `processo órfão morto — tentando ouvir porta ${port} de novo...`);
+            // Tenta de novo depois de 2s (dá tempo pro SO liberar a porta)
+            setTimeout(() => {
+              try {
+                // Cria NOVO server (não reusa o que já falhou — ele fica marcado)
+                this.httpServer = createServer((req, res) => this.handleHttp(req, res));
+                this.wss = new WebSocketServer({ server: this.httpServer });
+                this.setupWsHandlers();
+                this.httpServer.on('error', (e2) => {
+                  this.app.log('PANEL', `erro no servidor HTTP (retry): ${e2.message}`);
+                });
+                this.httpServer.listen(port, () => {
+                  this.app.log('PANEL', `✅ Painel de controle ouvindo em http://localhost:${port} (após matar órfão)`);
+                });
+              } catch (e2) {
+                this.app.errors.report('PANEL', `EADDRINUSE persistente em porta ${port}`, e, {
+                  userMessage: 'Já existe outro bot rodando. Feche todas as instâncias e tente de novo.',
+                  severity: 'critical',
+                });
+                this.app.log('PANEL', `❌ Não conseguiu ouvir porta ${port} nem após matar órfão: ${(e2 as Error).message}`);
+              }
+            }, 2000);
+          } else {
+            this.app.errors.report('PANEL', `Porta ${port} em uso por outro processo que não foi possível matar`, e, {
+              userMessage: 'Já existe outro bot rodando em http://localhost:3001. Feche ele e tente de novo.',
+              severity: 'critical',
+            });
+            this.app.log('PANEL', `❌ Não conseguiu matar processo na porta ${port}. Outra instância do bot está rodando?`);
+          }
+        });
+      } else {
+        this.app.log('PANEL', `erro no servidor HTTP: ${e.message}`);
+      }
+    });
+
+    this.httpServer.listen(port, () => {
+      this.app.log('PANEL', `Painel de controle ouvindo em http://localhost:${port}`);
+    });
+  }
+
+  /**
+   * Configura os handlers do WebSocket server (extraído pra poder re-criar depois).
+   */
+  private setupWsHandlers(): void {
+    if (!this.wss) return;
     this.wss.on('connection', (ws: WebSocket) => {
       this.clients.add(ws);
       this.app.debug('PANEL', `cliente WS conectado — total=${this.clients.size}`);
@@ -195,14 +254,59 @@ export class ControlPanel {
         // ignora — já tratado no close
       });
     });
+  }
 
-    this.httpServer.listen(port, () => {
-      this.app.log('PANEL', `Painel de controle ouvindo em http://localhost:${port}`);
-    });
-
-    this.httpServer.on('error', (e: NodeJS.ErrnoException) => {
-      this.app.log('PANEL', `erro no servidor HTTP: ${e.message}`);
-    });
+  /**
+   * Mata o processo que tá ouvindo numa porta específica.
+   * Em Windows: usa netstat + taskkill.
+   * Em Linux/Mac: usa lsof + kill.
+   * Retorna true se matou, false se não achou ou falhou.
+   */
+  private async killProcessOnPort(port: number): Promise<boolean> {
+    const { execSync } = require('node:child_process');
+    try {
+      if (process.platform === 'win32') {
+        // netstat -ano | findstr :3001
+        // Linha: TCP    127.0.0.1:3001    0.0.0.0:0    LISTENING    12345
+        const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8', timeout: 5000 });
+        const lines = out.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const pids = new Set<number>();
+        for (const line of lines) {
+          if (line.includes('LISTENING')) {
+            const parts = line.split(/\s+/);
+            const pid = parseInt(parts[parts.length - 1]);
+            if (pid > 0 && pid !== process.pid) pids.add(pid);
+          }
+        }
+        if (pids.size === 0) return false;
+        this.app.debug('PANEL', `matando ${pids.size} processo(s) na porta ${port}: ${[...pids].join(', ')}`);
+        for (const pid of pids) {
+          try {
+            execSync(`taskkill /F /PID ${pid}`, { timeout: 3000 });
+            this.app.debug('PANEL', `processo ${pid} morto`);
+          } catch (e) {
+            this.app.debug('PANEL', `falha ao matar PID ${pid}: ${(e as Error).message}`);
+          }
+        }
+        return true;
+      } else {
+        // Linux/Mac: lsof -ti:3001
+        try {
+          const out = execSync(`lsof -ti:${port}`, { encoding: 'utf8', timeout: 5000 });
+          const pids = out.split('\n').map(s => parseInt(s.trim())).filter(p => p > 0 && p !== process.pid);
+          if (pids.length === 0) return false;
+          for (const pid of pids) {
+            try { execSync(`kill -9 ${pid}`, { timeout: 3000 }); } catch { /* ignora */ }
+          }
+          return true;
+        } catch {
+          return false; // lsof não achou
+        }
+      }
+    } catch (e) {
+      this.app.debug('PANEL', `killProcessOnPort erro: ${(e as Error).message}`);
+      return false;
+    }
   }
 
   // ===========================================================================
@@ -496,6 +600,56 @@ export class ControlPanel {
         return this.json(res, { lines: this.readLastLogLines(100) });
       }
 
+      // GET /api/errors — lista erros capturados pelo ErrorTracker
+      // Retorna: { errors: TrackedError[], summary: HealthSummary }
+      if (method === 'GET' && pathname === '/api/errors') {
+        return this.json(res, {
+          errors: this.app.errors.list(),
+          summary: this.app.errors.healthSummary(),
+        });
+      }
+
+      // DELETE /api/errors — limpa todos os erros
+      if (method === 'DELETE' && pathname === '/api/errors') {
+        this.app.errors.clear();
+        return this.json(res, { ok: true });
+      }
+
+      // GET /api/errors/export — retorna erros em texto formatado (pra copiar)
+      if (method === 'GET' && pathname === '/api/errors/export') {
+        const text = this.app.errors.toText();
+        res.writeHead(200, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Content-Disposition': `attachment; filename="marcio-errors-${new Date().toISOString().slice(0, 19)}.txt"`,
+          'Cache-Control': 'no-store',
+        });
+        res.end(text);
+        return;
+      }
+
+      // GET /api/health — status de saúde do app (WA conectado, IA online, etc.)
+      if (method === 'GET' && pathname === '/api/health') {
+        return this.json(res, this.getHealthStatus());
+      }
+
+      // GET /api/feature-flags — retorna canal atual + features habilitadas
+      // O painel usa pra mascarar botões que não devem aparecer em release estável.
+      if (method === 'GET' && pathname === '/api/feature-flags') {
+        return this.json(res, this.app.features.getConfig());
+      }
+
+      // POST /api/dev/secret-action — executa ação secreta (só em dev/beta)
+      // Body: { action: 'force-error' | 'force-ia-offline' | 'clear-memories' | ... }
+      // Em stable: retorna 403 (menu secreto não existe).
+      if (method === 'POST' && pathname === '/api/dev/secret-action') {
+        if (this.app.features.getChannel() === 'stable') {
+          return this.json(res, { ok: false, error: 'Menu secreto desativado em stable' }, 403);
+        }
+        const body = await this.readJsonBody(req);
+        const action = String(body?.action || '');
+        return this.json(res, await this.executeSecretAction(action, body));
+      }
+
       // GET /api/context/:chatId  (chatId é URL-encoded)
       if (method === 'GET' && pathname.startsWith('/api/context/')) {
         const chatId = decodeURIComponent(pathname.slice('/api/context/'.length));
@@ -737,21 +891,40 @@ export class ControlPanel {
             }
           }
 
+          // 1.5. Espera 3s pra Chromium liberar os arquivos (.db, .db-journal)
+          // O EBUSY acontece porque o Chromium mantém arquivos SQLite abertos
+          // mesmo depois de destroy(). Damos tempo pra ele fechar tudo.
+          this.app.log('PANEL', 'logout: esperando 3s pro Chromium liberar arquivos...');
+          await new Promise(r => setTimeout(r, 3000));
+
           // 2. Mata processos órfãos + remove locks
           await killLeftoverChromium(this.app);
 
+          // Espera mais 2s depois de matar (pra SO liberar handles)
+          await new Promise(r => setTimeout(r, 2000));
+
           // 3. Remove o diretório de auth
           this.app.log('PANEL', `logout: removendo auth em ${authPath}`);
+          let removed = false;
           for (let i = 0; i < 5; i++) {
             try {
               fs.rmSync(authPath, { recursive: true, force: true });
               this.app.log('PANEL', 'logout: auth removido ✓');
+              removed = true;
               break;
             } catch (e) {
-              this.app.debug('PANEL', `logout: tentativa ${i+1} falhou: ${(e as Error).message}`);
-              await new Promise(r => setTimeout(r, 1000));
-              await killLeftoverChromium(this.app);
+              const msg = (e as Error).message;
+              this.app.debug('PANEL', `logout: tentativa ${i+1} falhou: ${msg}`);
+              // Se for EBUSY, tenta matar de novo os processos que tão segurando
+              if (msg.includes('EBUSY') || msg.includes('resource busy')) {
+                this.app.debug('PANEL', `logout: EBUSY — matando processos Chromium de novo...`);
+                await killLeftoverChromium(this.app);
+              }
+              await new Promise(r => setTimeout(r, 2000));
             }
+          }
+          if (!removed) {
+            this.app.log('PANEL', `logout: ⚠️ não conseguiu remover auth dir depois de 5 tentativas — pode ter arquivo travado`);
           }
 
           // 4. Cria Client NOVO e inicializa
@@ -2205,6 +2378,184 @@ export class ControlPanel {
   }
 
   // ===========================================================================
+  // HEALTH STATUS  (GET /api/health)
+  // ===========================================================================
+
+  /**
+   * Retorna o status de saúde do app — usado pela seção "Diagnóstico" do painel.
+   * Verifica: WhatsApp conectado, IA online, porta livre, uptime, etc.
+   */
+  private getHealthStatus(): {
+    whatsapp: { connected: boolean; info?: string };
+    ai: { enabled: boolean; hasApiKey: boolean; model: string | null; info?: string };
+    port: { listening: boolean; port: number };
+    uptime: number;
+    errorSummary: any;
+    maintenanceMode: boolean;
+    debugEnabled: boolean;
+    version: string;
+    dataDir: string;
+  } {
+    // Status do WhatsApp
+    let waConnected = false;
+    let waInfo: string | undefined;
+    try {
+      waConnected = !!(this.app.whatsapp?.client?.info);
+      if (this.app.whatsapp?.client?.info) {
+        const info = this.app.whatsapp.client.info;
+        waInfo = `${info.pushname || 'Bot'} (${info.wid?.user || '?'})`;
+      }
+    } catch (e) {
+      waInfo = `erro ao verificar: ${(e as Error).message}`;
+    }
+
+    // Status da IA
+    const cfg = this.app.brain?.getAIConfig();
+    const aiEnabled = !!(cfg && cfg.apiKey);
+    const aiModel = cfg?.model || null;
+
+    // Status do ErrorTracker
+    const errorSummary = this.app.errors ? this.app.errors.healthSummary() : null;
+
+    return {
+      whatsapp: { connected: waConnected, info: waInfo },
+      ai: {
+        enabled: aiEnabled,
+        hasApiKey: !!(cfg && cfg.apiKey),
+        model: aiModel,
+        info: !aiEnabled ? 'Configure a API key em Configurações → IA' : undefined,
+      },
+      port: { listening: true, port: 3001 },  // porta padrão do painel (hardcoded em MarcioApp.start())
+      uptime: Math.floor((Date.now() - this.app.startTime) / 1000),
+      errorSummary,
+      maintenanceMode: this.app.maintenanceMode,
+      debugEnabled: this.app.debugEnabled,
+      version: this.getCurrentVersion(),
+      dataDir: this.app.config.dataDir,
+    };
+  }
+
+  // ===========================================================================
+  // SECRET ACTIONS  (POST /api/dev/secret-action)
+  // ===========================================================================
+
+  /**
+   * Executa uma ação secreta do menu de testes.
+   * SÓ funciona em dev/beta — em stable retorna erro 403 (checagem no endpoint).
+   * Usado pra testar o funcionamento do app sem precisar rodar cenários reais.
+   */
+  private async executeSecretAction(action: string, body: any): Promise<{ ok: boolean; result?: string; error?: string }> {
+    const channel = this.app.features.getChannel();
+    if (channel === 'stable') {
+      return { ok: false, error: 'Menu secreto desativado em stable' };
+    }
+
+    try {
+      switch (action) {
+        case 'open-setup-wizard':
+          // Em Tauri: emite evento pra abrir a janela setup
+          // Em browser: o frontend abre setup-wizard.html em nova aba
+          if (this.app.control) {
+            this.app.control.broadcast('open-setup-wizard', {});
+          }
+          return { ok: true, result: 'Comando pra abrir Setup Wizard enviado' };
+
+        case 'reset-setup-state':
+          // Marca setup-state como não-completado
+          try {
+            const setupStatePath = this.app.dataPath('setup-state.json');
+            this.app.debug('PANEL', `reset-setup-state: escrevendo em ${setupStatePath}`);
+            fs.writeFileSync(setupStatePath, JSON.stringify({ completed: false, resetAt: new Date().toISOString() }), 'utf8');
+            return { ok: true, result: 'setup-state resetado — wizard vai abrir na próxima vez' };
+          } catch (e) {
+            return { ok: false, error: `Erro ao resetar setup-state: ${(e as Error).message}` };
+          }
+
+        case 'inject-test-error':
+          this.app.errors.report('TEST', 'Erro de teste injetado pelo menu secreto', new Error('Stack de teste'), {
+            userMessage: 'Este é um erro de teste — pode ignororar.',
+            severity: 'warn',
+            context: { source: 'secret-menu' },
+          });
+          return { ok: true, result: 'Erro de teste injetado no ErrorTracker' };
+
+        case 'inject-critical-error':
+          this.app.errors.report('TEST', 'ERRO CRÍTICO de teste', new Error('Stack de teste crítico'), {
+            userMessage: 'Erro crítico de teste — em produção, isso dispararia notificação nativa.',
+            severity: 'critical',
+            context: { source: 'secret-menu' },
+          });
+          return { ok: true, result: 'Erro crítico de teste injetado' };
+
+        case 'test-notification':
+          if (this.app.control) {
+            this.app.control.broadcast('notification', {
+              title: '🔔 Teste de notificação',
+              body: `Notificação gerada pelo menu secreto (${channel}).`,
+            });
+          }
+          return { ok: true, result: 'Notificação enviada' };
+
+        case 'force-wa-disconnect':
+          // Simula desconexão do WhatsApp (dispara o evento sem desconectar de verdade)
+          this.app.log('TEST', 'Simulando desconexão do WhatsApp (menu secreto)');
+          this.app.errors.report('WA', 'Teste: simulação de desconexão', undefined, {
+            userMessage: 'Teste: simulação de desconexão do WhatsApp.',
+            severity: 'warn',
+            context: { source: 'secret-menu' },
+          });
+          return { ok: true, result: 'Simulação de desconexão registrada' };
+
+        case 'clear-errors':
+          this.app.errors.clear();
+          return { ok: true, result: 'Lista de erros limpa' };
+
+        case 'clear-memories':
+          this.app.log('TEST', 'Limpando TODAS as memórias (menu secreto)');
+          try {
+            const memPath = this.app.dataPath('memories.json');
+            fs.writeFileSync(memPath, '{}', 'utf8');
+            if (this.app.memory) {
+              // Recarrega memórias em runtime
+              this.app.memory['load']?.();
+            }
+            return { ok: true, result: 'Todas as memórias foram limpas' };
+          } catch (e) {
+            return { ok: false, error: `Erro ao limpar memórias: ${(e as Error).message}` };
+          }
+
+        case 'clear-stickers':
+          this.app.log('TEST', 'Limpando TODAS as figurinhas (menu secreto)');
+          try {
+            const vaultDir = this.app.dataPath('stickers-vault');
+            if (fs.existsSync(vaultDir)) {
+              const files = fs.readdirSync(vaultDir).filter(f => /\.(webp|png|jpg|jpeg)$/.test(f));
+              for (const f of files) {
+                try { fs.unlinkSync(path.join(vaultDir, f)); } catch { /* ignora */ }
+              }
+            }
+            const metaPath = this.app.dataPath('stickers-meta.json');
+            if (fs.existsSync(metaPath)) {
+              fs.writeFileSync(metaPath, '{}', 'utf8');
+            }
+            return { ok: true, result: `${0} figurinhas limpas (vault resetado)` };
+          } catch (e) {
+            return { ok: false, error: `Erro ao limpar figurinhas: ${(e as Error).message}` };
+          }
+
+        case 'refresh-feature-flags':
+          this.app.features.refresh();
+          return { ok: true, result: `FeatureFlags re-detectado — canal=${this.app.features.getChannel()}` };
+
+        default:
+          return { ok: false, error: `Ação desconhecida: "${action}"` };
+      }
+    } catch (e) {
+      return { ok: false, error: `Erro ao executar ação: ${(e as Error).message}` };
+    }
+  }
+
+  // ===========================================================================
   // BOT STATUS  (GET /api/bot/status)
   // ===========================================================================
 
@@ -2265,11 +2616,29 @@ export class ControlPanel {
         // vault dir não existe → sem figurinhas
         return [];
       }
-      // Ordena por nome (timestamp decrescente) — mais recente primeiro.
-      files.sort().reverse();
-      // Cap em 100 (aumentado de 50 pra 100)
-      const capped = files.slice(0, 100);
-      return capped.map(filename => {
+      // Ordena: figurinhas nomeadas/favoritas PRIMEIRO, depois por timestamp decrescente.
+      // Isso garante que figurinhas marcadas pelo usuário sempre apareçam no painel,
+      // mesmo que o vault esteja cheio (limite 200) e elas sejam antigas.
+      // Antes, o cap de 100 + ordenação por timestamp cortava figurinhas nomeadas antigas.
+      const stickerMeta = (filename: string) => meta[filename] || {};
+      files.sort((a, b) => {
+        const ma = stickerMeta(a);
+        const mb = stickerMeta(b);
+        // 1. Favoritas primeiro
+        const favA = mb.favorite ? 1 : 0;
+        const favB = ma.favorite ? 1 : 0;
+        if (favA !== favB) return favA - favB;
+        // 2. Nomeadas antes de sem-nome
+        const nameA = mb.name ? 1 : 0;
+        const nameB = ma.name ? 1 : 0;
+        if (nameA !== nameB) return nameA - nameB;
+        // 3. Por timestamp decrescente (mais recente primeiro)
+        return b.localeCompare(a);
+      });
+      // Sem cap — o vault já é limitado a 200 figurinhas (VAULT_MAX_SIZE no StickerVault).
+      // 200 thumbnails webp ~ 4-10MB, aceitável pra uma chamada local.
+      // Se um dia precisar paginar, fazer via query param ?offset=0&limit=200.
+      return files.map(filename => {
         let thumbnail: string | null = null;
         try {
           const buf = fs.readFileSync(path.join(vaultDir, filename));

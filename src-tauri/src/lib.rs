@@ -266,9 +266,19 @@ fn get_node_executable(app_data_dir: &PathBuf) -> String {
 }
 
 /// Extrai um arquivo .zip num diretório destino.
-/// Usa descompactação nativa SEM mostrar janela (CREATE_NO_WINDOW no Windows).
+/// Usa crate `zip` nativo (cross-platform, sem dependências do sistema).
+/// Fallback: tenta PowerShell (Windows) ou unzip (Linux/macOS) se nativo falhar.
 fn extract_zip(zip_path: &PathBuf, dest: &PathBuf) {
     let _ = std::fs::create_dir_all(dest);
+
+    // 1. Tenta extração nativa primeiro (cross-platform, sem deps externas)
+    if extract_zip_native(zip_path, dest) {
+        println!("[TAURI] ✅ extração nativa concluída: {}", zip_path.display());
+        return;
+    }
+    eprintln!("[TAURI] ⚠️ extração nativa falhou — tentando fallback externo");
+
+    // 2. Fallback: PowerShell (Windows) ou unzip (Linux/macOS)
     #[cfg(windows)]
     {
         let mut cmd = Command::new("powershell");
@@ -296,6 +306,60 @@ fn extract_zip(zip_path: &PathBuf, dest: &PathBuf) {
             .stderr(Stdio::null())
             .output();
     }
+}
+
+/// Extração nativa de ZIP usando crate `zip` (sem depender de comando externo).
+/// Funciona em Windows, macOS e Linux. Retorna true se sucesso.
+fn extract_zip_native(zip_path: &PathBuf, dest: &PathBuf) -> bool {
+    let file = match std::fs::File::open(zip_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("[TAURI] não conseguiu abrir zip: {}", e);
+            return false;
+        }
+    };
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("[TAURI] não conseguiu ler zip: {}", e);
+            return false;
+        }
+    };
+    for i in 0..archive.len() {
+        let mut entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let outpath = match entry.enclosed_name() {
+            Some(p) => dest.join(p),
+            None => continue,
+        };
+        // Cria diretório pai se não existe
+        if let Some(parent) = outpath.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if entry.is_dir() {
+            let _ = std::fs::create_dir_all(&outpath);
+        } else {
+            let mut outfile = match std::fs::File::create(&outpath) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            let _ = std::io::copy(&mut entry, &mut outfile);
+            // Em Unix, aplica permissões do arquivo do zip
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Some(mode) = entry.unix_mode() {
+                    let _ = std::fs::set_permissions(
+                        &outpath,
+                        std::fs::Permissions::from_mode(mode),
+                    );
+                }
+            }
+        }
+    }
+    true
 }
 
 /// Lê setup-state.json do AppData — flag que indica se o wizard já foi completado.
@@ -495,6 +559,25 @@ fn relaunch_app(app: tauri::AppHandle) {
     app.restart();
 }
 
+/// Sair completamente do app (mata bot + fecha Tauri).
+/// Diferente de fechar a janela (que só esconde pro tray), este comando
+/// mata o processo do bot Node.js E fecha o app Tauri de verdade.
+/// Usado pelo botão "Sair completamente" no painel.
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    println!("[TAURI] Quit app solicitado — matando bot e saindo…");
+    let state: tauri::State<BotProcess> = app.state();
+    let mut guard = state.0.lock().unwrap();
+    if let Some(ref mut child) = *guard {
+        let _ = child.kill();
+        let _ = child.wait();
+        println!("[TAURI] ✅ Bot Node.js morto");
+    }
+    *guard = None;
+    // Fecha todas as janelas e sai do processo Tauri
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -528,7 +611,18 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .tooltip("Márcio App")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon({
+                    // Usa o ícone default do app (definido em tauri.conf.json).
+                    // Fallback: imagem 1x1 transparente (RGBA) se não tiver ícone.
+                    // Evita panic em plataformas onde default_window_icon() pode retornar None.
+                    const FALLBACK_RGBA: [u8; 4] = [0, 0, 0, 0];
+                    app.default_window_icon()
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            eprintln!("[TAURI] ⚠️ default_window_icon() retornou None — usando fallback");
+                            tauri::image::Image::new(&FALLBACK_RGBA, 1, 1)
+                        })
+                })
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
@@ -549,13 +643,20 @@ pub fn run() {
                         }
                     }
                     "quit" => {
+                        println!("[TAURI] Tray menu: Sair — matando bot e saindo...");
                         let state: tauri::State<BotProcess> = app.state();
                         let mut guard = state.0.lock().unwrap();
                         if let Some(ref mut child) = *guard {
+                            println!("[TAURI] Matando processo do bot (PID: {})", child.id());
                             let _ = child.kill();
                             let _ = child.wait();
+                            println!("[TAURI] ✅ Bot morto");
+                        } else {
+                            println!("[TAURI] ⚠️ Nenhum bot em execução para matar");
                         }
-                        app.exit(0);
+                        *guard = None;
+                        // Em Windows, garante que o processo sai mesmo se tiver threads presas
+                        std::process::exit(0);
                     }
                     _ => {}
                 })
@@ -633,8 +734,18 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                window.hide().unwrap_or_default();
-                api.prevent_close();
+                // Só pergunta pra janela main (a principal do app).
+                // Setup wizard e preparing não perguntam — apenas escondem.
+                if window.label() == "main" {
+                    // Emite evento pro frontend abrir modal "Desligar bot ou minimizar?"
+                    // O frontend decide: se "minimizar" → window.hide()
+                    //                  se "sair" → invoke('quit_app')
+                    let _ = window.app_handle().emit("close-requested", ());
+                    api.prevent_close();
+                } else {
+                    window.hide().unwrap_or_default();
+                    api.prevent_close();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -643,7 +754,8 @@ pub fn run() {
             toggle_autostart,
             open_main_window,
             reopen_setup,
-            relaunch_app
+            relaunch_app,
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("erro ao rodar Márcio App");

@@ -151,6 +151,94 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.2",
+      "date": "2025-10-13",
+      "title": "🔧 Correções de bugs + sistema de diagnósticos + feature flags",
+      "sections": [
+        {
+          "icon": "🎭",
+          "title": "Figurinhas no Painel",
+          "items": [
+            "Corrigido: figurinhas nomeadas/favoritas não apareciam no painel quando o vault tinha mais de 100 itens",
+            "Removido cap de 100 figurinhas no endpoint /api/stickers",
+            "Nova ordenação: favoritas primeiro, depois nomeadas, depois por timestamp",
+            "Figurinhas marcadas pelo usuário agora sempre aparecem no painel"
+          ]
+        },
+        {
+          "icon": "🔄",
+          "title": "Updater e Build",
+          "items": [
+            "Workflow do GitHub Actions corrigido: upload robusto do latest.json (apenas NSIS, evita conflito de nome)",
+            "Removido macOS do build (problemático no CI)",
+            "Forçado uso do npm em vez de bun no tauri-action (bug de top-level await)",
+            "Removido libappindicator3-dev que conflitava com libayatana no Ubuntu",
+            "Mensagens de erro detalhadas com dicas específicas por tipo de falha",
+            "Step de debug no workflow lista bundles gerados pra diagnóstico",
+            "Removida permissão core:http do capabilities (não existe sem tauri-plugin-http)"
+          ]
+        },
+        {
+          "icon": "📦",
+          "title": "Build Cross-Platform",
+          "items": [
+            "Adicionado crate zip nativo (extração sem depender de unzip externo)",
+            "extract_zip usa extração nativa primeiro, fallback PowerShell/unzip",
+            "Tray icon com fallback (não panic mais se default_window_icon retornar None)",
+            "Permissões de arquivo do zip preservadas em Unix (chmod automático)",
+            "wmic depreciado no Win11 substituído por PowerShell Get-CimInstance"
+          ]
+        },
+        {
+          "icon": "🩺",
+          "title": "Diagnóstico",
+          "items": [
+            "Nova seção 'Diagnóstico' no painel com cards de status visual",
+            "Status de saúde em tempo real: WhatsApp, IA, Painel, Uptime",
+            "Sistema central de captura de erros (ErrorTracker)",
+            "Persistência em data/error-log.json (rotativo, últimos 100)",
+            "Dedupe: erros recorrentes incrementam count (não spamma)",
+            "4 níveis de severidade: info, warn, error, critical",
+            "Captura global de unhandledRejection e uncaughtException",
+            "Broadcast em tempo real via WebSocket (atualiza painel sem refresh)",
+            "Notificação nativa do sistema pra erros críticos",
+            "Botão 'Copiar tudo' copia erros pra área de transferência (fallback download .txt)",
+            "Captura explícita em 8 pontos críticos: WA auth_failure, WA disconnected, IA offline, IA erro, áudio falhou, boot WA, uncaughtException, start falhou"
+          ]
+        },
+        {
+          "icon": "🧪",
+          "title": "Dev vs Release (Feature Flags)",
+          "items": [
+            "Sistema de feature flags com 3 canais: dev, beta, stable",
+            "Detecção automática: NODE_ENV, MARCIO_DEV, versão -beta/-rc, tsx detection",
+            "13 features definidas em 3 categorias (dev-only, dev+beta, estável)",
+            "Mascaramento automático via atributo data-feature nos botões",
+            "Em stable: botões de teste somem da DOM (display:none !important)",
+            "Badge de canal visível no header (DEV/BETA) — escondido em stable",
+            "Menu secreto abre com Konami code (↑↑↓↓←→←→BA) ou 7 cliques no logo",
+            "Menu secreto tem 10 ações: Setup Wizard, Reset setup, Testar notificação, Injetar erro, Simular WA desconectado, Limpar erros, Limpar memórias, Limpar figurinhas, Refresh flags",
+            "Botões de teste movidos pro menu secreto (não ficam mais visíveis na UI)",
+            "Ações perigosas pedem confirmação antes de executar",
+            "Endpoint POST /api/dev/secret-action retorna 403 em stable"
+          ]
+        },
+        {
+          "icon": "🚪",
+          "title": "Fechar App e Logout",
+          "items": [
+            "Fechar a janela no X agora pergunta: desligar o bot ou minimizar pro tray?",
+            "Modal de confirmação com 3 opções: Minimizar, Desligar, Cancelar",
+            "Sair no menu do tray agora mata o bot de verdade (std::process::exit)",
+            "Logout do WhatsApp: espera 3s pro Chromium liberar arquivos SQLite antes de deletar (corrige EBUSY)",
+            "Logout com retry de 5 tentativas se arquivo SQLite ainda estiver travado",
+            "Auto-matar processo órfão na porta 3001 se já tiver outra instância rodando (corrige EADDRINUSE)",
+            "Changelog agora abre na versão mais nova primeiro (1 de X), não na mais antiga"
+          ]
+        }
+      ]
     }
   ]
 }

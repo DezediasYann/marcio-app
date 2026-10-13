@@ -1,6 +1,6 @@
 [package]
 name = "marcio-app"
-version = "1.0.1"
+version = "1.0.2"
 description = "Márcio App — bot do WhatsApp com IA"
 authors = []
 edition = "2021"
@@ -23,6 +23,9 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Crate nativo pra extrair ZIPs sem depender de comando externo (unzip/powershell).
+# Funciona em Windows, macOS e Linux sem dependências do sistema.
+zip = "2"
 
 [features]
 # Esta feature é usada pra produção (gera .exe standalone).

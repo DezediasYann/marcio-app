@@ -97,14 +97,29 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('uncaughtException', (err) => {
   app.log('FATAL', `uncaughtException: ${err.stack ?? err.message}`);
+  // ErrorTracker já vai capturar via seu próprio handler, mas garantimos
+  // que o erro seja reportado aqui também antes do shutdown.
+  try {
+    app.errors.report('UNCAUGHT', `Exceção não capturada: ${err.message}`, err, {
+      userMessage: 'Erro crítico interno. O app vai reiniciar.',
+      severity: 'critical',
+    });
+  } catch { /* evita recursão */ }
   shutdown('uncaughtException');
 });
 process.on('unhandledRejection', (reason) => {
   app.log('FATAL', `unhandledRejection: ${String(reason)}`);
+  // ErrorTracker já captura isso via handler próprio.
 });
 
 // Inicia
 app.start().catch((err) => {
   console.error('Erro fatal ao iniciar:', err);
+  try {
+    app.errors.report('BOOT', `Erro fatal ao iniciar app: ${err.message}`, err, {
+      userMessage: 'O app não conseguiu iniciar. Verifique os logs em /diagnostic.',
+      severity: 'critical',
+    });
+  } catch { /* evita erro duplo */ }
   process.exit(1);
 });

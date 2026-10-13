@@ -1803,9 +1803,19 @@ export class MarcioBrain {
           this.app.log('AI', `Serviço de IA offline. Bot continua funcionando.`);
           this.lastAutoResponse.set('_ai_offline_log', Date.now());
         }
+        // Reporta como aviso (não é crítico — bot ainda funciona)
+        this.app.errors.report('AI', 'Serviço de IA offline', error, {
+          userMessage: 'O Gemini não está respondendo. Verifique sua internet ou a chave de API em Configurações → IA.',
+          severity: 'warn',
+        });
       } else {
         this.app.log('AI', `Erro IA auto-respond: ${error.message}`);
         this.app.debug('AI', `erro: ${error.message}`);
+        // Reporta erros de IA que não sejam "offline"
+        this.app.errors.report('AI', `Erro IA: ${error.message}`, error, {
+          userMessage: 'A IA encontrou um erro ao responder. Tente novamente em alguns segundos.',
+          severity: 'error',
+        });
       }
     }
   }

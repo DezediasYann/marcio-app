@@ -38,6 +38,8 @@ import { AdminCommands } from './commands/AdminCommands';
 import { Scheduler } from './scheduler/Scheduler';
 import { AssistiveCommands } from './commands/AssistiveCommands';
 import { ControlPanel } from './control/ControlPanel';
+import { ErrorTracker } from './control/ErrorTracker';
+import { FeatureFlags } from './control/FeatureFlags';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -99,6 +101,8 @@ export class MarcioApp {
 
   scheduler!: Scheduler;
   control!: ControlPanel;
+  errors!: ErrorTracker;
+  features!: FeatureFlags;
 
   // Todos os subsistemas estão instanciados (Fase 3 + 4 + 5a completa).
 
@@ -223,6 +227,18 @@ export class MarcioApp {
     // Router ANTES do WhatsApp initialize (o handler message_create chama router)
     this.router = new MessageRouter(this);
 
+    // === FeatureFlags — detecta canal (dev/beta/stable) ===
+    // Inicializa ANTES do ControlPanel pra que os endpoints já tenham acesso.
+    this.features = new FeatureFlags();
+    this.log('BOOT', `FeatureFlags inicializado — canal=${this.features.getChannel()}`);
+
+    // === ErrorTracker — captura erros de todos os subsistemas ===
+    // Inicializa ANTES do ControlPanel pra que ele já possa capturar erros
+    // durante a inicialização dos próximos subsistemas.
+    this.errors = new ErrorTracker(this);
+    this.errors.init();
+    this.log('BOOT', 'ErrorTracker inicializado (captura de erros centralizada)');
+
     // === FASE 5a: ControlPanel (dashboard web em http://localhost:3001) ===
     // INICIA ANTES do WhatsApp — assim o painel (e o setup wizard) já consegue
     // fazer requests HTTP enquanto o WhatsApp ainda tá conectando.
@@ -234,8 +250,12 @@ export class MarcioApp {
     this.whatsapp = new WhatsAppClient(this);
     // NÃO espera initialize() — roda em background pra não bloquear o boot.
     // O ControlPanel já tá ouvindo, e o WhatsApp conecta quando conseguir.
-    this.whatsapp.initialize().catch(e => {
+    this.whatsapp.initialize().catch((e: Error) => {
       this.log('BOOT', `Erro ao inicializar WhatsApp: ${e.message}`);
+      this.errors.report('WA', `Erro ao inicializar WhatsApp: ${e.message}`, e, {
+        userMessage: 'Não consegui inicializar o WhatsApp. Verifique sua conexão de internet.',
+        severity: 'critical',
+      });
     });
 
     // Starta o timer de verificação retroativa (a cada 10min por default)

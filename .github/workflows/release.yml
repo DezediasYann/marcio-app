@@ -226,30 +226,24 @@ jobs:
             exit 0
           fi
           
-          # Salva a chave privada num arquivo temporário (npx tauri signer
-          # espera --private-key que pode ser conteúdo OU caminho).
-          # Em bash, passar a chave com newlines direto no CLI pode quebrar.
-          # Solução: salva num arquivo e passa o caminho.
-          KEY_FILE=$(mktemp)
-          printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" > "$KEY_FILE"
-          echo "🔑 Chave privada salva em arquivo temporário"
+          # Converte a chave privada pra base64 (uma linha só, sem newlines).
+          # Isso é necessário porque:
+          # - Passar o caminho do arquivo falha (Tauri tenta decodificar caminho como base64, falha no ":")
+          # - Passar o conteúdo direto (multi-linha) falha (bash quebra em vários argumentos)
+          # - Passar base64 funciona (uma linha só, decodificável pelo Tauri)
+          KEY_BASE64=$(printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | base64 -w 0)
+          echo "🔑 Chave privada convertida pra base64 (tamanho: ${#KEY_BASE64} chars)"
           
-          # Tenta assinar usando tauri signer sign
-          # Sintaxe: npx tauri signer sign --private-key <KEY> --password <PWD> <FILE>
-          # O --private-key aceita caminho de arquivo OU conteúdo.
-          # Passar caminho é mais seguro (lida com newlines automaticamente).
-          echo "🔑 Tentando assinar o .exe com npx tauri signer sign..."
-          npx tauri signer sign --private-key "$KEY_FILE" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$EXE_PATH" 2>&1 || {
-            echo "❌ Falha ao assinar com arquivo de chave"
-            # Tenta com conteúdo direto (caso o problema seja caminho com barra invertida)
-            echo "🔑 Tentando novamente com conteúdo direto..."
-            npx tauri signer sign --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$EXE_PATH" 2>&1 || {
-              echo "❌ Falha ao gerar .sig nas duas tentativas"
-              rm -f "$KEY_FILE"
-              exit 0
-            }
-          }
-          rm -f "$KEY_FILE"
+          # Assina usando tauri signer sign com a chave em base64
+          # Sintaxe: npx tauri signer sign --private-key <KEY_BASE64> --password <PWD> <FILE>
+          echo "🔑 Assinando o .exe com npx tauri signer sign..."
+          npx tauri signer sign --private-key "$KEY_BASE64" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$EXE_PATH" 2>&1
+          SIGN_EXIT=$?
+          
+          if [ $SIGN_EXIT -ne 0 ]; then
+            echo "❌ Falha ao assinar (exit code: $SIGN_EXIT)"
+            exit 0
+          fi
           
           # Verifica que o .sig foi gerado
           SIG_PATH="${EXE_PATH}.sig"

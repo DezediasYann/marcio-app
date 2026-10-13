@@ -12,9 +12,7 @@ dist/
 logs/
 *.log
 
-# Estado runtime (opcional — descomente pra gitignore)
-# data/memories.json
-# data/decision-log.json
+# Estado runtime (NUNCA commitar — pode ter API key, memórias, figurinhas, etc.)
 data/*
 !data/.gitkeep
 !data/stickers-vault/.gitkeep

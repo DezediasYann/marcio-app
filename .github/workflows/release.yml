@@ -104,6 +104,10 @@ jobs:
           # ⚠️ releaseDraft: false — PRECISA ser false pro updater funcionar!
           releaseDraft: false
           prerelease: false
+          # ⚠️ Força usar `npm` em vez de `bun` (bun tem bug com top-level await
+          # no bundle webpack do tauri-action — afeta Ubuntu e macOS runners
+          # onde o bun vem pré-instalado).
+          tauriScript: npm run tauri --
           args: ${{ matrix.args }}
 
       - name: Upload latest.json (pro updater encontrar)

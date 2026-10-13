@@ -15,6 +15,9 @@ logs/
 # Estado runtime (opcional — descomente pra gitignore)
 # data/memories.json
 # data/decision-log.json
+data/*
+!data/.gitkeep
+!data/stickers-vault/.gitkeep
 
 # Rust / Tauri — build artifacts (NUNCA commitar, é tipo node_modules)
 src-tauri/target/

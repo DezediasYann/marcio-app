@@ -86,11 +86,9 @@ Baixe o instalador da sua plataforma em:
 | Plataforma | Arquivo |
 |---|---|
 | Windows | `Márcio App_1.0.1_x64-setup.exe` |
-| macOS (Apple Silicon) | `Márcio App_1.0.1_aarch64.dmg` |
-| macOS (Intel) | `Márcio App_1.0.1_x64.dmg` |
 | Linux | `marcio-app_1.0.1_amd64.AppImage` |
 
-Se você já tem uma versão anterior instalada, o app detecta a atualização sozinho.
+> ℹ️ macOS não é suportado no momento. Se você já tem uma versão anterior instalada, o app detecta a atualização sozinho (Windows e Linux apenas).
 
 ---
 

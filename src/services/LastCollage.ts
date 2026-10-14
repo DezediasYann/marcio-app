@@ -104,13 +104,25 @@ export class LastCollage {
 
     const data = await response.json() as any;
 
+    // Verifica erro da API do Last.fm
     if (data.error) {
-      throw new Error(`Last.fm: ${data.message || data.error}`);
+      const apiError = String(data.message || data.error || '');
+      // Last.fm retorna erro 6 quando usuário não existe
+      if (data.error === 6 || apiError.toLowerCase().includes('user not found')) {
+        throw new Error(`Usuário "${username}" não existe no Last.fm. Confira se digitou corretamente.`);
+      }
+      // Erro de API key inválida
+      if (data.error === 10 || apiError.toLowerCase().includes('api key')) {
+        throw new Error('API key do Last.fm inválida. Configure uma key válida no painel → IA → Last.fm.');
+      }
+      // Outro erro genérico
+      throw new Error(`Last.fm retornou erro: ${apiError}`);
     }
 
     const albums = data?.topalbums?.album;
     if (!albums || !Array.isArray(albums) || albums.length === 0) {
-      throw new Error(`Nenhum álbum encontrado pra ${username} no período ${period}.`);
+      // Usuário existe mas não tem scrobbles no período — provável Spotify desconectou
+      throw new Error(`"${username}" não tem scrobbles no período ${period}. Isso costuma acontecer quando o Spotify desconecta do Last.fm (a cada 3 meses). Reconecte em last.fm/settings/applications`);
     }
 
     const result: LastFmAlbum[] = [];
@@ -183,16 +195,20 @@ export class LastCollage {
     username: string,
     gridSize: number = 3,
     period: string = '7d'
-  ): Promise<{ media: MessageMedia; caption: string } | null> {
+  ): Promise<{ media: MessageMedia; caption: string } | { error: string } | null> {
     try {
       gridSize = Math.max(2, Math.min(6, Math.floor(gridSize)));
       const limit = gridSize * gridSize;
 
       const albums = await this.getTopAlbums(username, period, limit);
-      if (albums.length === 0) return null;
+      if (albums.length === 0) {
+        return { error: `nenhum scrobble encontrado pra ${username} no período ${period}. Pode ser que o Spotify desconectou do Last.fm (acontece a cada 3 meses). Reconecte em last.fm/settings/applications` };
+      }
 
       const imageBuffer = await this.createCollage(albums, gridSize);
-      if (!imageBuffer) return null;
+      if (!imageBuffer) {
+        return { error: 'não consegui montar a imagem do collage. Tente novamente.' };
+      }
 
       const media = new MessageMedia('image/png', imageBuffer.toString('base64'), 'lastfm-collage.png');
 
@@ -207,13 +223,10 @@ export class LastCollage {
       this.app.log('LASTFM', `collage gerado pra ${username} (${gridSize}x${gridSize}, ${period})`);
       return { media, caption };
     } catch (e) {
-      this.app.debug('LASTFM', `erro ao gerar collage: ${(e as Error).message}`);
-      this.app.errors?.report('LASTFM', `Erro ao gerar collage de ${username}: ${(e as Error).message}`, e, {
-        userMessage: `Não consegui criar o collage do Last.fm. ${(e as Error).message}`,
-        severity: 'warn',
-        context: { username, gridSize, period },
-      });
-      return null;
+      const errMsg = (e as Error).message;
+      this.app.debug('LASTFM', `erro ao gerar collage: ${errMsg}`);
+      // Retorna erro específico pro chamador decidir o que fazer
+      return { error: errMsg };
     }
   }
 }

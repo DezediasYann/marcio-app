@@ -241,9 +241,9 @@
       ]
     },
     {
-      "version": "1.0.3-2",
-      "date": "2025-10-13",
-      "title": "🧪 Beta — Figurinhas no painel + update wizard + correções",
+      "version": "1.0.3-3",
+      "date": "2025-10-14",
+      "title": "🧪 Beta — Figurinhas no painel + update wizard + Last.fm + correções",
       "sections": [
         {
           "icon": "🎭",
@@ -271,26 +271,29 @@
           "icon": "🧙",
           "title": "Setup Wizard",
           "items": [
-            "Corrigido: setup wizard abria sempre ao iniciar o app (bug do JSON parsing)",
-            "is_setup_completed agora remove espaços antes de procurar a flag"
+            "Corrigido: setup wizard abria sempre ao iniciar o app (incompatibilidade de formato JSON entre JS e Rust)",
+            "is_setup_completed agora remove espaços antes de procurar a flag completed:true"
           ]
         },
         {
           "icon": "📋",
           "title": "Changelog",
           "items": [
-            "Corrigido: 'O que há de novo?' agora aparece ao atualizar o app",
-            "Comparação de versão agora respeita semver (1.0.3 > 1.0.3-beta-1)",
-            "Modal abre na versão mais recente primeiro (1 de X)"
+            "Corrigido: 'O que há de novo?' agora aparece ao atualizar o app (hasNew comparava com releases ao invés da versão atual)",
+            "Comparação de versão agora respeita semver (1.0.3 > 1.0.3-1)",
+            "Modal abre na versão mais recente primeiro (1 de X, não X de X)"
           ]
         },
         {
           "icon": "🧪",
-          "title": "Canal Beta",
+          "title": "Canal Beta e Feature Flags",
           "items": [
             "Toggle 'Aceitar versões beta' na seção Atualizações",
             "Persistido em data/update-settings.json",
-            "CompareVersions corrigido pra suportar pre-release tags (-beta, -rc, -alpha)"
+            "CompareVersions suporta pre-release tags (-1, -beta, -rc, -alpha)",
+            "FeatureFlags detecta versão com hífen como canal beta",
+            "Menu secreto (Konami code) SÓ existe em dev — não aparece em beta/stable",
+            "Badge de canal (DEV/BETA) no header do painel"
           ]
         },
         {
@@ -298,11 +301,39 @@
           "title": "Last.fm Collage",
           "items": [
             "Comando !last cria colagens de álbuns do Last.fm",
-            "Sintaxe: !last <user> [grid] [período] (ex: !last rjanhs 4x4 7d)",
+            "Sintaxe: !last <user> [grid] [período] (ex: !last user 4x4 7d)",
             "IA também pode criar collages via linguagem natural ([LASTCOLLAGE: user, grid, periodo])",
+            "IA sempre consulta memórias antes de pedir o usuário do Last.fm (não chuta)",
             "Configuração de API key do Last.fm no painel (seção IA)",
             "Grid suportado: 2x2 até 6x6",
-            "Períodos: 7d, 1m, 3m, 6m, 12m, overall"
+            "Períodos: 7d, 1m, 3m, 6m, 12m, overall",
+            "Erros explicam o motivo: usuário não existe, sem scrobbles (Spotify desconectou), API key inválida"
+          ]
+        },
+        {
+          "icon": "⚙️",
+          "title": "Ajustes e Melhorias",
+          "items": [
+            "Cooldown de figurinha ajustável pelo painel (0 = sem cooldown, default 60s)",
+            "Dev mode pode usar dados de produção (MARCIO_USE_PROD_DATA=1)",
+            "Modal 'Desligar ou Minimizar' ao fechar janela com X",
+            "Sair no tray mata o bot de verdade (std::process::exit)",
+            "Logout do WhatsApp: espera 3s pro Chromium liberar arquivos SQLite (corrige EBUSY)",
+            "Auto-matar processo órfão na porta 3001 se já tiver outra instância (corrige EADDRINUSE)",
+            "wmic depreciado no Win11 substituído por PowerShell Get-CimInstance",
+            "Build cross-platform: extract_zip nativo + tray icon com fallback"
+          ]
+        },
+        {
+          "icon": "🔧",
+          "title": "Correções de CI/CD",
+          "items": [
+            "Workflow converte chave privada pra base64 antes do build (tauri build espera base64)",
+            "createUpdaterArtifacts: true adicionado no tauri.conf.json (gera .sig e latest.json)",
+            "Diagnóstico de signing antes do build (mostra formato e newlines da chave)",
+            "Fallback manual de latest.json com npx tauri signer sign",
+            "Upload via GitHub CLI (gh release upload) em vez de softprops/action-gh-release",
+            "Step de debug usa PowerShell no Windows (bash 2>/dev/null não funciona)"
           ]
         }
       ]

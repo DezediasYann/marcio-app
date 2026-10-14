@@ -488,6 +488,12 @@ fn notify(app: tauri::AppHandle, title: String, body: String) {
     send_notification(&app, &title, &body);
 }
 
+/// Retorna a versão atual do app (do tauri.conf.json / Cargo.toml).
+#[tauri::command]
+fn get_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 #[tauri::command]
 fn is_autostart_enabled(app: tauri::AppHandle) -> bool {
     if let Some(autostart) = app.try_state::<tauri_plugin_autostart::AutoLaunchManager>() {
@@ -769,6 +775,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             notify,
+            get_app_version,
             is_autostart_enabled,
             toggle_autostart,
             open_main_window,

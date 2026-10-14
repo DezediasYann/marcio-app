@@ -2656,7 +2656,7 @@
             <div class="about-hero">
               <div class="about-logo">🤖</div>
               <div class="about-title">Márcio App</div>
-              <div class="about-version">v1.0 · Painel de controle</div>
+              <div class="about-version" id="aboutVersion">v— · Painel de controle</div>
             </div>
             <div class="muted" style="text-align: center; margin-bottom: 24px;">
               Bot de WhatsApp com IA generativa, memórias, figurinhas, eventos e mais.
@@ -3475,6 +3475,36 @@
       loadBotAvatar();
       // Carrega config de update (aceitar beta)
       loadUpdateSettings();
+      // Busca versão atual do app e atualiza o Sobre
+      async function loadAppVersion() {
+        const el = $('#aboutVersion');
+        if (!el) return;
+        // Tenta via Tauri primeiro (mais confiável — pega do package_info)
+        if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+          try {
+            const version = await window.__TAURI__.core.invoke('get_app_version');
+            if (version) {
+              el.textContent = `v${version} · Painel de controle`;
+              console.log('[MARCIO] versão do app (Tauri):', version);
+              return;
+            }
+          } catch (e) {
+            console.warn('[MARCIO] get_app_version falhou:', e);
+          }
+        }
+        // Fallback: busca via /api/health
+        try {
+          const h = await apiGet('/api/health');
+          if (h.version) {
+            el.textContent = `v${h.version} · Painel de controle`;
+            console.log('[MARCIO] versão do app (API):', h.version);
+          }
+        } catch {
+          // Se tudo falha, mantém o placeholder
+          console.warn('[MARCIO] não conseguiu obter versão do app');
+        }
+      }
+      loadAppVersion();
     }
 
     // === Identidade do Bot (nome + aliases) ===
@@ -5454,11 +5484,14 @@
     //  5. Tela de instalação (atende tarefa #4)
 
     // === UPDATE SETTINGS (aceitar beta) ===
+    var _marcio_accept_beta = false;
+
     async function loadUpdateSettings() {
       try {
         const r = await apiGet('/api/update-settings');
+        _marcio_accept_beta = !!r.acceptBeta;
         const toggle = $('#acceptBetaToggle');
-        if (toggle) toggle.checked = !!r.acceptBeta;
+        if (toggle) toggle.checked = _marcio_accept_beta;
       } catch (e) {
         console.error('[UPDATE] erro ao carregar update-settings:', e);
       }
@@ -5467,8 +5500,10 @@
     async function toggleAcceptBeta(enabled) {
       try {
         await apiPost('/api/update-settings', { acceptBeta: enabled });
+        _marcio_accept_beta = enabled;
         toast(enabled ? '✅ Versões beta aceitas' : '✅ Só versões estáveis', 'success');
       } catch (e) {
+        console.error('[UPDATE] erro ao salvar:', e);
         toast('Erro: ' + e.message, 'error');
         const toggle = $('#acceptBetaToggle');
         if (toggle) toggle.checked = !enabled;
@@ -5487,6 +5522,14 @@
         const { check } = await import('/js/tauri-updater.min.js');
         const update = await check();
         if (update) {
+          // Verifica se a versão encontrada é beta (tem '-' no número)
+          const isBeta = update.version.includes('-');
+          if (isBeta && !_marcio_accept_beta) {
+            // É beta mas usuário não aceita beta — não mostra
+            if (status) status.textContent = '✅ Você tá na versão mais recente';
+            toast('Versão beta disponível mas você não aceita beta. Ative em Configurações.', 'info', 5000);
+            return;
+          }
           if (status) status.textContent = `Nova versão: ${update.version}`;
           // Abre o wizard de update (modal completo com changelog + progresso)
           openUpdateWizard(update);

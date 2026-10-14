@@ -1102,11 +1102,14 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
 
     try {
       const result = await this.app.lastCollage.generateCollage(username, gridSize, period);
-      if (result) {
+      if (result && 'media' in result) {
         await this.app.whatsapp.client.sendMessage(chatId, result.media, { caption: result.caption });
         await this.app.react(msg, EMOJI.SUCCESS);
+      } else if (result && 'error' in result) {
+        await this.app.notify(chatId, `❌ ${result.error}`);
+        await this.app.react(msg, EMOJI.ERROR);
       } else {
-        await this.app.notify(chatId, 'não consegui criar o collage. Verifique se o usuário existe no Last.fm.');
+        await this.app.notify(chatId, 'não consegui criar o collage por um erro desconhecido.');
         await this.app.react(msg, EMOJI.ERROR);
       }
     } catch (e) {

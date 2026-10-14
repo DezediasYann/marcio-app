@@ -2146,12 +2146,14 @@ export class ControlPanel {
   }
 
   private writeUpdateSettings(settings: { acceptBeta: boolean }): void {
-    try {
-      const filePath = this.app.dataPath('update-settings.json');
-      fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf8');
-    } catch (e) {
-      this.app.debug('UPDATE', `erro ao salvar update-settings: ${(e as Error).message}`);
+    const filePath = this.app.dataPath('update-settings.json');
+    // Garante que o diretório data/ existe
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
+    fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf8');
+    this.app.debug('UPDATE', `update-settings.json salvo em: ${filePath} — acceptBeta=${settings.acceptBeta}`);
   }
 
   /**

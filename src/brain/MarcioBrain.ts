@@ -689,6 +689,22 @@ export class MarcioBrain {
       }
     }
 
+    // === Instrução reforçada sobre Last.fm Collage ===
+    // É injetada ANTES do self-awareness pra ter alta prioridade.
+    // Previne que a IA ignore pedidos de collage em linguagem natural.
+    messages.push({
+      role: 'system',
+      content: 'INSTRUÇÃO IMPORTANTE SOBRE LAST.FM:\n' +
+        'Se alguém pedir um "collage do Last.fm", "last 4x4", "colagem de álbuns", ou similar:\n' +
+        '1. PROCURE nas memórias da pessoa o usuário do Last.fm dela. Se não sabe, PERGUNTE.\n' +
+        '2. Use o marcador [LASTCOLLAGE: usuario, grid, periodo] na sua resposta.\n' +
+        '   - grid: 3, 4, ou 5 (default: 3)\n' +
+        '   - periodo: 7d, 1m, 3m, 6m, 12m, overall (default: 7d)\n' +
+        '3. O marcador será processado e o collage enviado como imagem.\n' +
+        'NUNCA ignore um pedido de collage. SEMPRE use o marcador [LASTCOLLAGE: ...] ou pergunte o usuário.\n' +
+        'NUNCA chute um usuário aleatório. Use o das memórias ou pergunte.',
+    });
+
     // Reforço final das diretivas
     if (directivesText) {
       const list = this.app.directives.all();
@@ -1385,13 +1401,16 @@ export class MarcioBrain {
         this.app.debug('LASTFM', `IA pediu collage: ${username} ${grid}x${grid} ${period}`);
         try {
           const result = await this.app.lastCollage.generateCollage(username, grid, period);
-          if (result) {
+          if (result && 'media' in result) {
             await this.app.whatsapp.client.sendMessage(chatId, result.media, { caption: result.caption });
-          } else {
-            this.app.debug('LASTFM', 'collage falhou — enviando só texto');
+          } else if (result && 'error' in result) {
+            // Collage falhou — envia o erro como notificação pro usuário
+            this.app.debug('LASTFM', `collage falhou: ${result.error}`);
+            await this.app.whatsapp.client.sendMessage(chatId, `❌ ${result.error}`);
           }
         } catch (e) {
           this.app.debug('LASTFM', `erro ao processar collage da IA: ${(e as Error).message}`);
+          await this.app.whatsapp.client.sendMessage(chatId, `❌ Erro ao criar collage: ${(e as Error).message}`);
         }
       }
 

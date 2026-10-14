@@ -198,16 +198,6 @@ export class MarcioApp {
     this.stickers = new StickerVault(this);
     this.log('BOOT', `StickerVault inicializado — ${this.stickers.listNamed().length} figurinha(s) nomeada(s).`);
 
-    // === FASE 3.2: CommandRegistry (plugin-based, substitui o switch) ===
-    this.commands = new CommandRegistry(this);
-    // FASE 3.3-4: carregar módulos de comando
-    await this.commands.loadModules([
-      new BasicCommands(this),
-      new StickerCommands(this),
-      new AdminCommands(this),
-    ]);
-    this.log('BOOT', `CommandRegistry inicializado — ${this.commands.count()} comando(s) registrado(s).`);
-
     // === FASE 4: Scheduler (eventos + lembretes agendados) ===
     this.scheduler = new Scheduler(this);
     this.scheduler.start();

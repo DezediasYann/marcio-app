@@ -4378,7 +4378,7 @@
         // checar se o chat ativo estava nos pendentes (pra saber se re-renderiza).
         // loadConversations limpa no final (.then abaixo).
         dbg('CONV', `auto-refresh debounced: ${chats.length} chat(s) updated`);
-        loadConversations().then(() => {
+        loadConversations().finally(() => {
           _convRefreshPending.clear();
         });
       }, 1500);  // 1.5s de debounce — junta várias msgs em 1 reload só
@@ -5275,7 +5275,7 @@
           closeModal();
           loadBackupComponents();
           if (_marcio_state.currentSection === 'memories') {
-            try { loadMemories(); } catch { /* ignora */ }
+            try { loadProfiles(); } catch { /* ignora */ }
           }
         }, 2000);
       } catch (e) {
@@ -5367,7 +5367,7 @@
           throw new Error(err.error || `import falhou: ${r.status}`);
         }
         toast('Memórias importadas ✓', 'success', 8000);
-        if (_marcio_state.currentSection === 'memories') { try { await loadMemories(); } catch { /* ignora */ } }
+        if (_marcio_state.currentSection === 'memories') { try { await loadProfiles(); } catch { /* ignora */ } }
       } catch (e) { toast('Import falhou: ' + e.message, 'error', 6000); }
       ev.target.value = '';
     }

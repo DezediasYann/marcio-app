@@ -277,11 +277,13 @@ jobs:
           
           mkdir -p src-tauri/target/release/bundle/nsis
           
-          # Gera o latest.json usando printf (evita problemas de escape do YAML)
-          # Escapa aspas duplas da assinatura pra JSON válido
+          # Gera o latest.json com AMBAS as chaves de plataforma:
+          # - "windows-x86_64-nsis" (primeira que o updater procura pra instalações NSIS)
+          # - "windows-x86_64" (fallback genérico)
+          # Sem ambas, o updater pode dar erro "None of the fallback platforms were found"
           SIG_ESCAPED=$(echo "$SIGNATURE" | sed 's/"/\\"/g' | tr -d '\n')
-          printf '{\n  "version": "v%s",\n  "notes": "Márcio App v%s",\n  "pub_date": "%s",\n  "platforms": {\n    "windows-x86_64": {\n      "signature": "%s",\n      "url": "%s"\n    }\n  }\n}\n' \
-            "$VERSION" "$VERSION" "$PUB_DATE" "$SIG_ESCAPED" "$URL" > "$LATEST_PATH"
+          printf '{\n  "version": "v%s",\n  "notes": "Marcio App v%s",\n  "pub_date": "%s",\n  "platforms": {\n    "windows-x86_64-nsis": {\n      "signature": "%s",\n      "url": "%s"\n    },\n    "windows-x86_64": {\n      "signature": "%s",\n      "url": "%s"\n    }\n  }\n}\n' \
+            "$VERSION" "$VERSION" "$PUB_DATE" "$SIG_ESCAPED" "$URL" "$SIG_ESCAPED" "$URL" > "$LATEST_PATH"
           
           if [ -f "$LATEST_PATH" ]; then
             echo "✅ latest.json gerado manualmente!"

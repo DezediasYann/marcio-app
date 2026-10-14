@@ -1379,9 +1379,11 @@ export class MarcioBrain {
         this.app.debug('VAULT', `StickerVault não inicializado — ignorando [FIGURINHA]`);
       }
 
-      // Envia o texto restante (se houver)
+      // Envia o texto restante (se houver) — CHAMA sendResponse RECURSIVAMENTE
+      // pra processar outros marcadores que possam estar no texto restante
+      // (ex: [LASTCOLLAGE: ...] que veio junto com [FIGURINHA: ...])
       if (cleanText) {
-        return await this.sendMultiMessage(chatId, cleanText, quotedMessageId);
+        return await this.sendResponse(chatId, cleanText, quotedMessageId);
       }
       return '';
     }
@@ -1414,14 +1416,15 @@ export class MarcioBrain {
         }
       }
 
-      // Envia o texto restante (se houver)
+      // Envia o texto restante (se houver) — CHAMA sendResponse RECURSIVAMENTE
+      // pra processar outros marcadores que possam estar no texto restante
       if (reply) {
-        return await this.sendMultiMessage(chatId, reply, quotedMessageId);
+        return await this.sendResponse(chatId, reply, quotedMessageId);
       }
       return '';
     }
 
-    // Resposta de texto normal
+    // Resposta de texto normal (sem marcadores)
     return await this.sendMultiMessage(chatId, reply, quotedMessageId);
   }
 

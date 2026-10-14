@@ -40,6 +40,7 @@ import { AssistiveCommands } from './commands/AssistiveCommands';
 import { ControlPanel } from './control/ControlPanel';
 import { ErrorTracker } from './control/ErrorTracker';
 import { FeatureFlags } from './control/FeatureFlags';
+import { LastCollage } from './services/LastCollage';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -103,6 +104,7 @@ export class MarcioApp {
   control!: ControlPanel;
   errors!: ErrorTracker;
   features!: FeatureFlags;
+  lastCollage!: LastCollage;
 
   // Todos os subsistemas estão instanciados (Fase 3 + 4 + 5a completa).
 
@@ -210,6 +212,10 @@ export class MarcioApp {
     this.scheduler = new Scheduler(this);
     this.scheduler.start();
     this.log('BOOT', `Scheduler inicializado — ${this.scheduler.list().length} evento(s) pendente(s).`);
+
+    // === LastCollage (colagens do Last.fm) ===
+    this.lastCollage = new LastCollage(this);
+    this.log('BOOT', 'LastCollage inicializado (colagens do Last.fm)');
 
     // === FASE 3.2: CommandRegistry (plugin-based, substitui o switch) ===
     this.commands = new CommandRegistry(this);

@@ -648,7 +648,7 @@ export class ControlPanel {
       }
 
       // POST /api/update-settings — salva config de update
-      // Body: { acceptBeta?: boolean, acceptSecret?: boolean }
+      // Body: { acceptBeta?: boolean }
       if (method === 'POST' && pathname === '/api/update-settings') {
         const body = await this.readJsonBody(req).catch(() => ({}));
         try {
@@ -656,12 +656,35 @@ export class ControlPanel {
           if (typeof body?.acceptBeta === 'boolean') {
             current.acceptBeta = body.acceptBeta;
           }
-          if (typeof body?.acceptSecret === 'boolean') {
-            current.acceptSecret = body.acceptSecret;
-          }
           this.writeUpdateSettings(current);
-          this.app.log('UPDATE', `update-settings salvo — acceptBeta=${current.acceptBeta} acceptSecret=${current.acceptSecret}`);
+          this.app.log('UPDATE', `update-settings salvo — acceptBeta=${current.acceptBeta}`);
           return this.json(res, { ok: true, ...current });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // GET /api/lastfm-config — retorna config do Last.fm
+      if (method === 'GET' && pathname === '/api/lastfm-config') {
+        try {
+          const filePath = this.app.dataPath('lastfm-config.json');
+          const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '{}';
+          const parsed = JSON.parse(content);
+          return this.json(res, { apiKey: parsed.apiKey || '' });
+        } catch {
+          return this.json(res, { apiKey: '' });
+        }
+      }
+
+      // POST /api/lastfm-config — salva config do Last.fm
+      if (method === 'POST' && pathname === '/api/lastfm-config') {
+        const body = await this.readJsonBody(req).catch(() => ({}));
+        try {
+          const config = { apiKey: String(body?.apiKey || '') };
+          fs.writeFileSync(this.app.dataPath('lastfm-config.json'), JSON.stringify(config, null, 2), 'utf8');
+          this.app.log('LASTFM', `API key salva (${config.apiKey ? 'configurada' : 'vazia'})`);
+          if (this.app.lastCollage) this.app.lastCollage.invalidateConfigCache();
+          return this.json(res, { ok: true });
         } catch (e) {
           return this.json(res, { ok: false, error: (e as Error).message }, 500);
         }
@@ -2111,21 +2134,18 @@ export class ControlPanel {
   // UPDATE SETTINGS (acceptBeta)
   // ===========================================================================
 
-  private readUpdateSettings(): { acceptBeta: boolean; acceptSecret: boolean } {
+  private readUpdateSettings(): { acceptBeta: boolean } {
     try {
       const filePath = this.app.dataPath('update-settings.json');
       const content = fs.readFileSync(filePath, 'utf8');
       const parsed = JSON.parse(content);
-      return {
-        acceptBeta: !!parsed.acceptBeta,
-        acceptSecret: !!parsed.acceptSecret,
-      };
+      return { acceptBeta: !!parsed.acceptBeta };
     } catch {
-      return { acceptBeta: false, acceptSecret: false };
+      return { acceptBeta: false };
     }
   }
 
-  private writeUpdateSettings(settings: { acceptBeta: boolean; acceptSecret: boolean }): void {
+  private writeUpdateSettings(settings: { acceptBeta: boolean }): void {
     try {
       const filePath = this.app.dataPath('update-settings.json');
       fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf8');

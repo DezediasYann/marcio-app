@@ -2417,6 +2417,17 @@
                   <span class="muted small">0 = sem cooldown. Default: 60s.</span>
                 </div>
               </div>
+
+              <!-- Last.fm Config -->
+              <div class="card-subtitle mt-3" style="text-align:left;">🎵 Last.fm Collage</div>
+              <div class="form-row">
+                <label>Last.fm API Key</label>
+                <input type="password" id="lastfmApiKey" placeholder="pegue em last.fm/api">
+              </div>
+              <div class="row-flex mt-2">
+                <button class="ghost sm" onclick="saveLastfmConfig()">💾 Salvar Last.fm</button>
+                <a href="https://www.last.fm/api/account/create" target="_blank" class="muted small">Como conseguir API key →</a>
+              </div>
               <div class="row-flex mt-2">
                 <button class="primary" onclick="saveAiConfig()">💾 Salvar configuração</button>
                 <span class="muted small" id="aiConfigStatus"></span>
@@ -2684,18 +2695,6 @@
               </div>
               <div class="muted small mt-1" style="max-width:380px;margin:4px auto 0;">
                 💡 Se ativado, o updater também busca versões beta (pré-release). Versões beta podem ter bugs.
-              </div>
-              <div class="form-row row-flex mt-2" style="justify-content:center;align-items:center;gap:8px;">
-                <label class="muted small" for="acceptSecretToggle" style="cursor:pointer;">
-                  Aceitar <strong>menu secreto</strong> (Konami code)
-                </label>
-                <label class="switch" style="display:inline-flex;align-items:center;">
-                  <input type="checkbox" id="acceptSecretToggle" onchange="toggleAcceptSecret(this.checked)">
-                  <span class="slider round"></span>
-                </label>
-              </div>
-              <div class="muted small mt-1" style="max-width:380px;margin:4px auto 0;">
-                💡 Ativa o menu secreto de testes: <kbd>↑↑↓↓←→←→BA</kbd> ou 7 cliques no logo.
               </div>
             </div>
 
@@ -3022,7 +3021,7 @@
         case 'conversations': loadConversations(); break;
         case 'ops': loadOps(); break;
         case 'prompt': loadPrompt(); break;
-        case 'ai': loadAiConfig(); break;
+        case 'ai': loadAiConfig(); loadLastfmConfig(); break;
         case 'commands': loadCommands(); break;
         case 'directives': loadDirectives(); break;
         case 'theme': loadMaintenance(); loadAutostartStatus(); break;
@@ -4710,6 +4709,25 @@
         $('#aiConfigStatus').textContent = '❌ ' + e.message + ' — endpoint /api/ai-config ainda não existe';
       }
     }
+
+    // === Last.fm Config ===
+    async function loadLastfmConfig() {
+      try {
+        const r = await apiGet('/api/lastfm-config');
+        $('#lastfmApiKey').value = r.apiKey || '';
+      } catch (e) {
+        console.error('[LASTFM] erro ao carregar config:', e);
+      }
+    }
+    async function saveLastfmConfig() {
+      try {
+        const apiKey = $('#lastfmApiKey').value.trim();
+        await apiPost('/api/lastfm-config', { apiKey });
+        toast('Last.fm API key salva ✓', 'success');
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+      }
+    }
     function renderFallbacks() {
       $('#aiFallbacks').innerHTML = _marcio_state.aiFallbacks.map((m, i) =>
         `<span class="pill">${escapeHtml(m)}<span class="x" onclick="removeFallback(${i})">✕</span></span>`
@@ -5435,16 +5453,12 @@
     //  4. Velocidade de download (atende tarefa #4)
     //  5. Tela de instalação (atende tarefa #4)
 
-    // === UPDATE SETTINGS (aceitar beta + menu secreto) ===
+    // === UPDATE SETTINGS (aceitar beta) ===
     async function loadUpdateSettings() {
       try {
         const r = await apiGet('/api/update-settings');
         const toggle = $('#acceptBetaToggle');
         if (toggle) toggle.checked = !!r.acceptBeta;
-        // Carrega também o toggle do menu secreto
-        _marcio_accept_secret = !!r.acceptSecret;
-        const secretToggle = $('#acceptSecretToggle');
-        if (secretToggle) secretToggle.checked = _marcio_accept_secret;
       } catch (e) {
         console.error('[UPDATE] erro ao carregar update-settings:', e);
       }
@@ -5457,18 +5471,6 @@
       } catch (e) {
         toast('Erro: ' + e.message, 'error');
         const toggle = $('#acceptBetaToggle');
-        if (toggle) toggle.checked = !enabled;
-      }
-    }
-
-    async function toggleAcceptSecret(enabled) {
-      try {
-        await apiPost('/api/update-settings', { acceptSecret: enabled });
-        _marcio_accept_secret = enabled;
-        toast(enabled ? '✅ Menu secreto ativado (↑↑↓↓←→←→BA)' : '✅ Menu secreto desativado', 'success');
-      } catch (e) {
-        toast('Erro: ' + e.message, 'error');
-        const toggle = $('#acceptSecretToggle');
         if (toggle) toggle.checked = !enabled;
       }
     }
@@ -6040,7 +6042,6 @@
 
     var _marcio_channel = 'stable';  // default conservador
     var _marcio_features = {};
-    var _marcio_accept_secret = false;  // toggle do menu secreto (configurável)
 
     async function loadFeatureFlags() {
       try {
@@ -6152,10 +6153,8 @@
     }
 
     function openSecretMenu() {
-      // Verifica se o usuário ativou o menu secreto nas configurações
-      // (em vez de ser hardcoded por canal)
-      if (!_marcio_accept_secret) {
-        toast('Menu secreto desativado. Ative em Configurações → Aceitar menu secreto.', 'warn', 5000);
+      // Menu secreto SÓ existe em dev. Beta e stable não têm, sem exceção.
+      if (_marcio_channel !== 'dev') {
         return;
       }
       // Se o modal já tá aberto, fecha

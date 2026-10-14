@@ -117,6 +117,12 @@ export class BasicCommands implements CommandModule {
         handler: (msg, chatId) => this.handleEstilo(msg, chatId),
         help: 'mostra o que o bot aprendeu do estilo do grupo. /estilo reset (ops) apaga.',
       },
+      {
+        name: '!last',
+        aliases: ['/last', '!lastfm', '/lastfm'],
+        handler: (msg, chatId) => this.handleLast(msg, chatId),
+        help: 'cria collage do Last.fm. Ex: !last rjanhs 4x4 7d (grid 3/4/5, período 7d/1m/3m/6m/12m/overall).',
+      },
       // === Ops only ===
       {
         name: '/ia',
@@ -1045,5 +1051,67 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
 
     await this.app.notify(chatId, 'use */alias* (lista), */alias add <nome>*, ou */alias remove <nome>*');
     await this.app.react(msg, EMOJI.ERROR);
+  }
+
+  // === !last — Last.fm Collage ===
+  private async handleLast(msg: Message, chatId: string): Promise<void> {
+    const args = msg.body.trim().split(/\s+/).slice(1); // remove !last
+
+    if (args.length === 0 || args[0] === 'help' || args[0] === 'ajuda') {
+      await this.app.notify(chatId, [
+        '*!last <usuário> [grid] [período]*',
+        '',
+        'Cria um collage dos álbuns mais ouvidos.',
+        '',
+        '_Parâmetros:_',
+        '• *usuário*: seu user do Last.fm',
+        '• *grid*: 3, 4, ou 5 (default: 3 → 3x3)',
+        '• *período*: 7d, 1m, 3m, 6m, 12m, overall (default: 7d)',
+        '',
+        '_Exemplos:_',
+        '!last rjanhs',
+        '!last rjanhs 4x4 7d',
+        '!last rjanhs 5 1m',
+      ].join('\n'));
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    const username = args[0];
+    let gridSize = 3;
+    let period = '7d';
+
+    // Parse grid (ex: "4x4" ou "4")
+    if (args[1]) {
+      const gridMatch = args[1].match(/^(\d+)/);
+      if (gridMatch) {
+        gridSize = Math.max(2, Math.min(6, parseInt(gridMatch[1])));
+      }
+    }
+
+    // Parse period
+    if (args[2]) {
+      const p = args[2].toLowerCase();
+      if (['7d', '1m', '3m', '6m', '12m', 'overall'].includes(p)) {
+        period = p;
+      }
+    }
+
+    await this.app.react(msg, '⏳');
+    this.app.log('CMD', `!last: ${username} ${gridSize}x${gridSize} ${period}`);
+
+    try {
+      const result = await this.app.lastCollage.generateCollage(username, gridSize, period);
+      if (result) {
+        await this.app.whatsapp.client.sendMessage(chatId, result.media, { caption: result.caption });
+        await this.app.react(msg, EMOJI.SUCCESS);
+      } else {
+        await this.app.notify(chatId, 'não consegui criar o collage. Verifique se o usuário existe no Last.fm.');
+        await this.app.react(msg, EMOJI.ERROR);
+      }
+    } catch (e) {
+      await this.app.notify(chatId, `erro: ${(e as Error).message}`);
+      await this.app.react(msg, EMOJI.ERROR);
+    }
   }
 }

@@ -955,6 +955,23 @@ export class MarcioBrain {
       'Ex.: "Manda pro Fulano dizendo que o jogo é amanhã" → [ACAO: pv|Fulano|opa, o Sicrano no grupo Amigos pediu pra te avisar que o jogo é amanhã]',
       'Ex.: "Sorteia alguém do grupo pro pão gozado" → [ACAO: pv|grupo|@fulano, você foi sorteado, a pedido do Sicrano, pro pão gozado]',
       'Os marcadores são SEMPRE removidos da resposta final — o usuário não vê.',
+      '',
+      'LAST.FM COLLAGES (quando alguém pedir):',
+      '• [LASTCOLLAGE: username, grid, periodo] — cria um collage do Last.fm',
+      '  - username: usuário do Last.fm (OBRIGATÓRIO)',
+      '  - grid: 3, 4, ou 5 (default: 3 → 3x3)',
+      '  - periodo: 7d, 1m, 3m, 6m, 12m, overall (default: 7d)',
+      '',
+      '⚠️ REGRA CRÍTICA: ANTES de usar [LASTCOLLAGE], PROCURE NAS MEMÓRIAS da pessoa',
+      'se ela já te disse qual é o usuário do Last.fm dela (ou de outra rede social).',
+      'Se nas memórias tem algo tipo "last.fm: fulano" ou "user: fulano", USE esse usuário.',
+      'Se NÃO tem nas memórias, NÃO invente um usuário. PERGUNTE: "qual seu usuário no Last.fm?"',
+      'NUNCA chute um usuário aleatório. Sempre use o que está nas memórias ou pergunte.',
+      '',
+      'Ex.: se nas memórias tem "last.fm: ydm_r" → [LASTCOLLAGE: ydm_r, 3, 7d]',
+      'Ex.: "faz meu last 4x4 dos últimos 7 dias" sem saber o user → pergunte o usuário primeiro',
+      'Ex.: "collage do last do fulano" sem saber o user dele → [LASTCOLLAGE: fulano, 3, 7d] (tenta o nome)',
+      'O collage é gerado e enviado como imagem. O marcador é removido da resposta.',
     ];
 
     return lines.join('\n');
@@ -1349,6 +1366,38 @@ export class MarcioBrain {
       // Envia o texto restante (se houver)
       if (cleanText) {
         return await this.sendMultiMessage(chatId, cleanText, quotedMessageId);
+      }
+      return '';
+    }
+
+    // === LASTCOLLAGE: detecção e processamento ===
+    const lastfmRegex = /\[LASTCOLLAGE:\s*([^\],]+)\s*(?:,\s*(\d+)\s*)?(?:,\s*(\w+)\s*)?\]/i;
+    const lastfmMatch = lastfmRegex.exec(reply);
+    if (lastfmMatch) {
+      const username = lastfmMatch[1]?.trim();
+      const grid = lastfmMatch[2] ? parseInt(lastfmMatch[2]) : 3;
+      const period = lastfmMatch[3]?.trim() || '7d';
+
+      // Remove o marcador da resposta
+      reply = reply.replace(lastfmRegex, '').replace(/\s{2,}/g, ' ').trim();
+
+      if (username && this.app.lastCollage) {
+        this.app.debug('LASTFM', `IA pediu collage: ${username} ${grid}x${grid} ${period}`);
+        try {
+          const result = await this.app.lastCollage.generateCollage(username, grid, period);
+          if (result) {
+            await this.app.whatsapp.client.sendMessage(chatId, result.media, { caption: result.caption });
+          } else {
+            this.app.debug('LASTFM', 'collage falhou — enviando só texto');
+          }
+        } catch (e) {
+          this.app.debug('LASTFM', `erro ao processar collage da IA: ${(e as Error).message}`);
+        }
+      }
+
+      // Envia o texto restante (se houver)
+      if (reply) {
+        return await this.sendMultiMessage(chatId, reply, quotedMessageId);
       }
       return '';
     }

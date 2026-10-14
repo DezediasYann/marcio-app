@@ -241,7 +241,7 @@
       ]
     },
     {
-      "version": "1.0.3-1",
+      "version": "1.0.3-2",
       "date": "2025-10-13",
       "title": "🧪 Beta — Figurinhas no painel + update wizard + correções",
       "sections": [
@@ -291,6 +291,18 @@
             "Toggle 'Aceitar versões beta' na seção Atualizações",
             "Persistido em data/update-settings.json",
             "CompareVersions corrigido pra suportar pre-release tags (-beta, -rc, -alpha)"
+          ]
+        },
+        {
+          "icon": "🎵",
+          "title": "Last.fm Collage",
+          "items": [
+            "Comando !last cria colagens de álbuns do Last.fm",
+            "Sintaxe: !last <user> [grid] [período] (ex: !last rjanhs 4x4 7d)",
+            "IA também pode criar collages via linguagem natural ([LASTCOLLAGE: user, grid, periodo])",
+            "Configuração de API key do Last.fm no painel (seção IA)",
+            "Grid suportado: 2x2 até 6x6",
+            "Períodos: 7d, 1m, 3m, 6m, 12m, overall"
           ]
         }
       ]

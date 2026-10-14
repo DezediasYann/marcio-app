@@ -197,7 +197,9 @@ export class MessageRouter {
     let body = msg.body;
     if (body.startsWith('//')) {
       body = '/admin ' + body.slice(2);
-      msg.body = body;  // muta o body pra os handlers lerem o reescrito
+      // ⚠️ Muta msg.body intencionalmente — os command handlers leem msg.body diretamente
+      // (não recebem `body` como parâmetro). Mudar isso exigiria refatorar CommandRegistry.
+      msg.body = body;
     }
 
     const token = body.split(' ')[0].toLowerCase();

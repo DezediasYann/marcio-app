@@ -33,7 +33,7 @@ import fs from 'node:fs';
 // TIPOS
 // ============================================================================
 
-export type Decision = 'pending' | 'skip' | 'responded' | 'backfill';
+export type Decision = 'pending' | 'skip' | 'responded' | 'backfill' | 'received';
 
 export interface DecisionEntry {
   msgId: string;

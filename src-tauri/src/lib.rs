@@ -646,6 +646,9 @@ pub fn run() {
                         }
                     }
                     "restart" => {
+                        // Tray "restart" = mata e re-spawna o bot Node.js (NÃO reinicia o app Tauri).
+                        // Diferente de relaunch_app que reinicia tudo.
+                        println!("[TAURI] Tray menu: Reiniciar bot");
                         let state: tauri::State<BotProcess> = app.state();
                         let mut guard = state.0.lock().unwrap();
                         if let Some(ref mut child) = *guard {
@@ -658,6 +661,9 @@ pub fn run() {
                         }
                     }
                     "quit" => {
+                        // Tray "quit" = mata bot + fecha app (igual ao comando quit_app).
+                        // Usa std::process::exit(0) que é mais agressivo que app.exit(0)
+                        // (garante que threads presas não segurem o processo).
                         println!("[TAURI] Tray menu: Sair — matando bot e saindo...");
                         let state: tauri::State<BotProcess> = app.state();
                         let mut guard = state.0.lock().unwrap();
@@ -670,7 +676,6 @@ pub fn run() {
                             println!("[TAURI] ⚠️ Nenhum bot em execução para matar");
                         }
                         *guard = None;
-                        // Em Windows, garante que o processo sai mesmo se tiver threads presas
                         std::process::exit(0);
                     }
                     _ => {}

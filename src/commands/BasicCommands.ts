@@ -121,7 +121,7 @@ export class BasicCommands implements CommandModule {
         name: '!last',
         aliases: ['/last', '!lastfm', '/lastfm'],
         handler: (msg, chatId) => this.handleLast(msg, chatId),
-        help: 'cria collage do Last.fm. Ex: !last rjanhs 4x4 7d (grid 3/4/5, período 7d/1m/3m/6m/12m/overall).',
+        help: 'cria collage do Last.fm. Ex: !last user 4x4 7d (grid 2-6, período 7d/1m/3m/6m/12m/overall).',
       },
       // === Ops only ===
       {
@@ -195,18 +195,26 @@ export class BasicCommands implements CommandModule {
 
     const helpText = [
       '*Comandos:*',
-      '!figurinha — cria figurinha',
-      '!pergunta <texto> — fala comigo',
-      '/resumo — resumo da conversa',
-      '/entrosao [0-2] — ajusta participação',
+      '!figurinha — cria figurinha (responda uma imagem)',
+      '!pergunta <texto> — fala comigo diretamente',
+      '!last <user> [grid] [período] — collage do Last.fm',
+      '/resumo — resumo da conversa recente',
+      '/entrosao [0-2] — ajusta minha participação',
       '!mute / !unmute — vota silenciar/desmutar',
       '!ajuda — esta lista',
       '',
-      '_OP:_',
-      '/ia on|off / /fig / /educa / /deseduca / /educacao',
-      '/memoria / /perfil / /estilo',
-      '/ban / /unban / /banidos / /op / /deop / /ops',
-      '/admin (PV do bot)',
+      '_OP (só no PV do bot):_',
+      '/ia on|off [global] — liga/desliga IA',
+      '/fig fav|unfav|nome|lista|dedup — gerencia figurinhas',
+      '/nome <novo nome> — muda meu nome',
+      '/alias add|remove|list — gerencia aliases',
+      '/memoria [add <nome> <fato>|reset] — gerencia memórias',
+      '/perfil — perfil do chat',
+      '/estilo [reset] — estilo que aprendi',
+      '/educa <fato> / /deseduca <fato> — ensina/desensina',
+      '/ban / /unban / /banidos — gerencia banidos',
+      '/op / /deop / /ops — gerencia operadores',
+      '/admin — painel admin',
     ].join('\n');
 
     try {
@@ -1065,7 +1073,7 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
         '',
         '_Parâmetros:_',
         '• *usuário*: seu user do Last.fm',
-        '• *grid*: 3, 4, ou 5 (default: 3 → 3x3)',
+        '• *grid*: 2 a 6 (default: 3 → 3x3)',
         '• *período*: 7d, 1m, 3m, 6m, 12m, overall (default: 7d)',
         '',
         '_Exemplos:_',

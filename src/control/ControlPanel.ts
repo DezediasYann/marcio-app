@@ -137,6 +137,7 @@ export class ControlPanel {
   private clients = new Set<WebSocket>();
   private publicDir: string;
   private logFilePath: string;
+  private listenPort: number = 3001;
 
   /**
    * Flags de captura — quando um comando é injetado pelo painel, setamos
@@ -164,6 +165,7 @@ export class ControlPanel {
    * Inicia o servidor HTTP + WebSocket na porta informada.
    */
   listen(port: number): void {
+    this.listenPort = port;
     this.httpServer = createServer((req, res) => this.handleHttp(req, res));
 
     // WebSocket Server anexado ao mesmo HTTP server (upgrade automático).
@@ -198,7 +200,7 @@ export class ControlPanel {
                   this.app.log('PANEL', `✅ Painel de controle ouvindo em http://localhost:${port} (após matar órfão)`);
                 });
               } catch (e2) {
-                this.app.errors.report('PANEL', `EADDRINUSE persistente em porta ${port}`, e, {
+                this.app.errors.report('PANEL', `EADDRINUSE persistente em porta ${port}`, e2 as Error, {
                   userMessage: 'Já existe outro bot rodando. Feche todas as instâncias e tente de novo.',
                   severity: 'critical',
                 });
@@ -413,16 +415,6 @@ export class ControlPanel {
       // SETUP WIZARD — estado do primeiro boot (data/setup-state.json)
       // ======================================================================
 
-      // GET /api/setup/state — retorna { completed: boolean, completedAt?: string }
-      if (method === 'GET' && pathname === '/api/setup/state') {
-        try {
-          const state = this.readSetupState();
-          return this.json(res, state);
-        } catch (e) {
-          return this.json(res, { error: (e as Error).message }, 500);
-        }
-      }
-
       // POST /api/setup/complete — marca setup como completo
       // Body: { botName?: string, systemPrompt?: string, aiConfig?: {...} }
       // Salva tudo (delega pros sistemas correspondentes) e marca setup-state.json.
@@ -586,7 +578,7 @@ export class ControlPanel {
       // GET /api/chats
       if (method === 'GET' && pathname === '/api/chats') {
         const chats = await this.buildChatsList();
-        return this.json(res, { items: chats, chats });
+        return this.json(res, { chats });
       }
 
       // GET /api/directives
@@ -787,14 +779,6 @@ export class ControlPanel {
         this.app.maintenanceMode = !!body?.enabled;
         this.app.log('PANEL', `modo manutenção ${this.app.maintenanceMode ? 'ativado' : 'desativado'} via painel`);
         return this.json(res, { ok: true, enabled: this.app.maintenanceMode });
-      }
-
-      // GET /api/autostart — status do auto-start (delega pro Tauri via WS)
-      if (method === 'GET' && pathname === '/api/autostart') {
-        // O auto-start é gerenciado pelo Tauri (Rust). O painel não consegue
-        // checar direto — manda um 'autostart-status' via WS e o Tauri responde.
-        // Por enquanto, retorna unknown.
-        return this.json(res, { enabled: null, message: 'autostart é gerenciado pelo Tauri' });
       }
 
       // POST /api/command  { text: string }
@@ -1552,7 +1536,7 @@ export class ControlPanel {
       // DELETE /api/events/:id  — cancela um evento
       if (method === 'DELETE' && pathname.startsWith('/api/events/')) {
         try {
-          const id = decodeURIComponent(pathname.replace('/api/events/', ''));
+          const id = decodeURIComponent(pathname.slice('/api/events/'.length));
           const ok = this.app.scheduler.cancel(id);
           return this.json(res, { ok });
         } catch (e) {
@@ -1568,7 +1552,7 @@ export class ControlPanel {
       // GET /api/ops  → { ops: [...], items: [...] }  (items alias pra UI legada)
       if (method === 'GET' && pathname === '/api/ops') {
         const ops = this.app.permissions.loadOps();
-        return this.json(res, { ops, items: ops });
+        return this.json(res, { ops });
       }
       // POST /api/ops  { phone, lid?, id? }  (id = alias pra phone/lid)
       if (method === 'POST' && pathname === '/api/ops') {
@@ -1612,7 +1596,7 @@ export class ControlPanel {
       // GET /api/banned  → { banned: [...], items: [...] }
       if (method === 'GET' && pathname === '/api/banned') {
         const banned = this.app.permissions.loadBanned();
-        return this.json(res, { banned, items: banned });
+        return this.json(res, { banned });
       }
       // POST /api/banned  { phone, lid?, id? }
       if (method === 'POST' && pathname === '/api/banned') {
@@ -1694,6 +1678,10 @@ export class ControlPanel {
                 ? at.fallbackModel.trim()
                 : (current.fallbackModel || 'gemini-3.1-flash-lite'),
             };
+          }
+          // === Cooldown de figurinha (ajustável via painel) ===
+          if (body?.stickerCooldownSec != null && !isNaN(Number(body.stickerCooldownSec))) {
+            next.stickerCooldownSec = Number(body.stickerCooldownSec);
           }
           fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf8');
           // Invalida cache do Brain — próxima chamada de getAIConfig() re-lê.
@@ -2543,7 +2531,7 @@ export class ControlPanel {
         model: aiModel,
         info: !aiEnabled ? 'Configure a API key em Configurações → IA' : undefined,
       },
-      port: { listening: true, port: 3001 },  // porta padrão do painel (hardcoded em MarcioApp.start())
+      port: { listening: true, port: this.listenPort },
       uptime: Math.floor((Date.now() - this.app.startTime) / 1000),
       errorSummary,
       maintenanceMode: this.app.maintenanceMode,
@@ -2646,17 +2634,18 @@ export class ControlPanel {
           this.app.log('TEST', 'Limpando TODAS as figurinhas (menu secreto)');
           try {
             const vaultDir = this.app.dataPath('stickers-vault');
+            let deletedCount = 0;
             if (fs.existsSync(vaultDir)) {
               const files = fs.readdirSync(vaultDir).filter(f => /\.(webp|png|jpg|jpeg)$/.test(f));
               for (const f of files) {
-                try { fs.unlinkSync(path.join(vaultDir, f)); } catch { /* ignora */ }
+                try { fs.unlinkSync(path.join(vaultDir, f)); deletedCount++; } catch { /* ignora */ }
               }
             }
             const metaPath = this.app.dataPath('stickers-meta.json');
             if (fs.existsSync(metaPath)) {
               fs.writeFileSync(metaPath, '{}', 'utf8');
             }
-            return { ok: true, result: `${0} figurinhas limpas (vault resetado)` };
+            return { ok: true, result: `${deletedCount} figurinhas limpas (vault resetado)` };
           } catch (e) {
             return { ok: false, error: `Erro ao limpar figurinhas: ${(e as Error).message}` };
           }
@@ -3594,23 +3583,25 @@ async function killLeftoverChromium(app: MarcioApp): Promise<void> {
 
   try {
     if (process.platform === 'win32') {
+      // ⚠️ wmic foi DEPRECIADO no Windows 11 — usar PowerShell Get-CimInstance
       const names = ['chrome.exe', 'chromium.exe', 'msedge.exe'];
       const allPids: number[] = [];
       for (const name of names) {
         try {
-          const out = execSync(`wmic process where "name='${name}'" get ProcessId,CommandLine /format:csv`, { encoding: 'utf8', timeout: 5000 });
+          const psCmd = `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name='${name}'\\" | Select-Object ProcessId,CommandLine | ConvertTo-Csv -NoTypeInformation"`;
+          const out = execSync(psCmd, { encoding: 'utf8', timeout: 8000 });
           const lines = out.split('\n').map(l => l.trim()).filter(l => l.length > 0);
           for (const line of lines) {
             const lower = line.toLowerCase();
             if (lower.includes('wwebjs_auth') || lower.includes('com.marcio')) {
-              const parts = line.split(',');
-              const pid = parseInt(parts[parts.length - 1]);
+              const match = line.match(/"(\d+)"/);
+              const pid = match ? parseInt(match[1]) : NaN;
               if (pid > 0 && !allPids.includes(pid)) {
                 allPids.push(pid);
               }
             }
           }
-        } catch { /* processo não existe */ }
+        } catch { /* processo não existe ou powershell falhou */ }
       }
       if (allPids.length > 0) {
         app.log('PANEL', `killLeftoverChromium: matando ${allPids.length} processo(s): ${allPids.join(', ')}`);
@@ -3638,7 +3629,6 @@ async function killLeftoverChromium(app: MarcioApp): Promise<void> {
       }
     } else {
       try { execSync('pkill -f "wwebjs_auth" 2>/dev/null', { timeout: 5000 }); } catch { /* ignora */ }
-      // Remove locks no Linux/Mac também
       const authPath = app.config.legacyAuthPath || path.join(app.config.rootDir, '.wwebjs_auth');
       const sessionDir = path.join(authPath, 'session');
       for (const lock of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {

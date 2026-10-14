@@ -3475,36 +3475,35 @@
       loadBotAvatar();
       // Carrega config de update (aceitar beta)
       loadUpdateSettings();
-      // Busca versão atual do app e atualiza o Sobre
-      async function loadAppVersion() {
-        const el = $('#aboutVersion');
-        if (!el) return;
-        // Tenta via Tauri primeiro (mais confiável — pega do package_info)
-        if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
-          try {
-            const version = await window.__TAURI__.core.invoke('get_app_version');
-            if (version) {
-              el.textContent = `v${version} · Painel de controle`;
-              console.log('[MARCIO] versão do app (Tauri):', version);
-              return;
-            }
-          } catch (e) {
-            console.warn('[MARCIO] get_app_version falhou:', e);
-          }
-        }
-        // Fallback: busca via /api/health
+    }
+
+    // === Versão do app (mostra no Sobre) ===
+    async function loadAppVersion() {
+      const el = $('#aboutVersion');
+      if (!el) return;
+      // Tenta via Tauri primeiro (mais confiável — pega do package_info)
+      if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
         try {
-          const h = await apiGet('/api/health');
-          if (h.version) {
-            el.textContent = `v${h.version} · Painel de controle`;
-            console.log('[MARCIO] versão do app (API):', h.version);
+          const version = await window.__TAURI__.core.invoke('get_app_version');
+          if (version) {
+            el.textContent = `v${version} · Painel de controle`;
+            console.log('[MARCIO] versão do app (Tauri):', version);
+            return;
           }
-        } catch {
-          // Se tudo falha, mantém o placeholder
-          console.warn('[MARCIO] não conseguiu obter versão do app');
+        } catch (e) {
+          console.warn('[MARCIO] get_app_version falhou:', e);
         }
       }
-      loadAppVersion();
+      // Fallback: busca via /api/health
+      try {
+        const h = await apiGet('/api/health');
+        if (h.version) {
+          el.textContent = `v${h.version} · Painel de controle`;
+          console.log('[MARCIO] versão do app (API):', h.version);
+        }
+      } catch {
+        console.warn('[MARCIO] não conseguiu obter versão do app');
+      }
     }
 
     // === Identidade do Bot (nome + aliases) ===
@@ -4142,24 +4141,29 @@
     }
     async function openChat(chatId) {
       _marcio_state.currentChatId = chatId;
-      _marcio_state.activeChatId = chatId;
       // Busca dados do chat (inclui nome, entrosão, iaEnabled, muted)
+      // Usa _marcio_state.chats se já estiver carregado (evita fetch redundante)
       let entrosao = 1;
       let iaEnabled = true;
       let muted = false;
       let chatName = chatLabel(chatId);
       let isGroup = chatId.endsWith('@g.us');
-      try {
-        const chats = await apiGet('/api/chats');
-        const chatData = (chats.items || chats.chats || chats).find(c => c.chatId === chatId);
-        if (chatData) {
-          entrosao = chatData.entrosao ?? 1;
-          iaEnabled = chatData.iaEnabled ?? true;
-          muted = chatData.muted ?? false;
-          if (chatData.name && chatData.name !== chatId) chatName = chatData.name;
-          isGroup = chatData.isGroup ?? isGroup;
-        }
-      } catch { /* usa defaults */ }
+      let chatData = null;
+      if (_marcio_state.chats && _marcio_state.chats.length > 0) {
+        chatData = _marcio_state.chats.find(c => c.chatId === chatId);
+      } else {
+        try {
+          const chats = await apiGet('/api/chats');
+          chatData = (chats.chats || chats).find(c => c.chatId === chatId);
+        } catch { /* usa defaults */ }
+      }
+      if (chatData) {
+        entrosao = chatData.entrosao ?? 1;
+        iaEnabled = chatData.iaEnabled ?? true;
+        muted = chatData.muted ?? false;
+        if (chatData.name && chatData.name !== chatId) chatName = chatData.name;
+        isGroup = chatData.isGroup ?? isGroup;
+      }
       const groupIcon = isGroup ? '👥' : '💬';
       openModal(`
         <div class="modal-header">
@@ -4261,7 +4265,7 @@
     }
     async function saveEntrosao() {
       const lvl = parseInt($('#entrosaoSlider').value, 10);
-      const chatId = _marcio_state.activeChatId;
+      const chatId = _marcio_state.currentChatId;
       if (!chatId) { toast('Nenhum chat selecionado', 'warn'); return; }
       try {
         await apiPost(`/api/chat-settings/${encodeURIComponent(chatId)}`, { entrosao: lvl });
@@ -4623,8 +4627,8 @@
           apiGet('/api/banned').catch(() => []),
         ]);
         _marcio_state.opsData = {
-          ops: Array.isArray(ops) ? ops : (ops.items || []),
-          banned: Array.isArray(banned) ? banned : (banned.items || []),
+          ops: Array.isArray(ops) ? ops : ([]),
+          banned: Array.isArray(banned) ? banned : ([]),
         };
         renderOps();
       } catch (e) {
@@ -5307,70 +5311,7 @@
       }
     }
 
-    // Legacy compat (mantém funções antigas chamando as novas)
-    async function downloadBackup() { openExportModal(); }
-    async function uploadRestore(ev) { openImportModal(); }
-    async function doUploadRestore() { doImport(); }
-    async function exportMemories() {
-      // Exporta só memórias
-      toast('Exportando memórias…', 'info');
-      try {
-        const r = await fetch(API_BASE + '/api/export', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ components: ['memories'] }),
-        });
-        if (!r.ok) throw new Error(`export falhou: ${r.status}`);
-        const blob = await r.blob();
-        const filename = `marcio-memories-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
-        if (window.showSaveFilePicker) {
-          try {
-            const handle = await window.showSaveFilePicker({
-              suggestedName: filename,
-              types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
-            });
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            toast('Memórias salvas ✓', 'success');
-            return;
-          } catch (e) {
-            if (e.name === 'AbortError') { toast('Cancelado', 'warn'); return; }
-          }
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast('Memórias exportadas ✓', 'success');
-      } catch (e) { toast('Export falhou: ' + e.message, 'error', 6000); }
-    }
-    async function importMemories(ev) {
-      const file = ev.target.files[0];
-      if (!file) return;
-      if (!confirm(`Importar memórias de ${file.name}?\n\n⚠️ Vai SUBSTITUIR todas as memórias atuais.`)) { ev.target.value = ''; return; }
-      try {
-        const text = await file.text();
-        const pkg = JSON.parse(text);
-        toast('Importando memórias…', 'info');
-        const r = await fetch(API_BASE + '/api/import?components=memories', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pkg),
-        });
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ error: r.status }));
-          throw new Error(err.error || `import falhou: ${r.status}`);
-        }
-        toast('Memórias importadas ✓', 'success', 8000);
-        if (_marcio_state.currentSection === 'memories') { try { await loadProfiles(); } catch { /* ignora */ } }
-      } catch (e) { toast('Import falhou: ' + e.message, 'error', 6000); }
-      ev.target.value = '';
-    }
+    // (Funções legacy de backup removidas — substituídas por openExportModal/openImportModal/doExport/doImport)
 
     // ================================================================
     // MANUTENÇÃO + AUTOSTART + NOTIFICAÇÕES
@@ -6055,6 +5996,8 @@
         // Carrega nome + foto do bot pro brand da sidebar (no boot)
         loadBotConfig();
         loadBotAvatar();
+        // Carrega versão do app pra mostrar no Sobre
+        loadAppVersion();
         // Start polling stats every 10s (backup)
         _marcio_state.statsInterval = setInterval(loadStats, 10000);
         // Start bot status polling every 30s (when on bot section)
@@ -6578,12 +6521,7 @@
       toggleCommandDisabled: () => typeof toggleCommandDisabled !== 'undefined' ? toggleCommandDisabled : null,
       setCommandPermission: () => typeof setCommandPermission !== 'undefined' ? setCommandPermission : null,
       resetCommandOverride: () => typeof resetCommandOverride !== 'undefined' ? resetCommandOverride : null,
-      downloadBackup: () => typeof downloadBackup !== 'undefined' ? downloadBackup : null,
-      uploadRestore: () => typeof uploadRestore !== 'undefined' ? uploadRestore : null,
-      doUploadRestore: () => typeof doUploadRestore !== 'undefined' ? doUploadRestore : null,
       cancelImport: () => typeof cancelImport !== 'undefined' ? cancelImport : null,
-      exportMemories: () => typeof exportMemories !== 'undefined' ? exportMemories : null,
-      importMemories: () => typeof importMemories !== 'undefined' ? importMemories : null,
       loadBackupComponents: () => typeof loadBackupComponents !== 'undefined' ? loadBackupComponents : null,
       openExportModal: () => typeof openExportModal !== 'undefined' ? openExportModal : null,
       openImportModal: () => typeof openImportModal !== 'undefined' ? openImportModal : null,

@@ -337,6 +337,69 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.3-5",
+      "date": "2025-10-14",
+      "title": "🧪 Beta — Auditoria de código + correções de bugs",
+      "sections": [
+        {
+          "icon": "🔴",
+          "title": "Correções Críticas",
+          "items": [
+            "CommandRegistry era inicializado 2x no boot — causava VoteSystem duplicado (votos processados em duplicata)",
+            "LASTCOLLAGE enviado como texto puro quando vinha junto com FIGURINHA (sendResponse agora é recursivo)",
+            "Cooldown de figurinha não era salvo pelo painel (endpoint não tinha o campo stickerCooldownSec no merge)",
+            "latest.json não tinha plataforma windows-x86_64-nsis (causava erro 'None of the fallback platforms were found')"
+          ]
+        },
+        {
+          "icon": "🟠",
+          "title": "Correções de Alta Prioridade",
+          "items": [
+            "loadMemories() não existia — trocado por loadProfiles() (import não recarregava memórias)",
+            "clear-stickers sempre reportava '0 figurinhas limpas' mesmo quando deletou 50",
+            "killLeftoverChromium no ControlPanel usava wmic depreciado (Win11) — trocado por PowerShell Get-CimInstance",
+            "Variável errada no catch do EADDRINUSE (reportava erro da outer scope em vez do retry)",
+            "Removidos 4 endpoints mortos: GET /api/setup/state, GET /api/autostart, e 4 endpoints legacy de backup"
+          ]
+        },
+        {
+          "icon": "🟡",
+          "title": "Correções de Média Prioridade",
+          "items": [
+            "_convRefreshPending vazava memória quando request falhava (sem .catch/.finally)",
+            "Porta hardcoded 3001 no getHealthStatus — agora usa campo listenPort dinâmico",
+            "Tipo Decision não incluía 'received' — adicionado ao union type",
+            "activeChatId e currentChatId eram redundantes — unificado em currentChatId",
+            "openChat fazia fetch redundante de /api/chats — agora usa state em cache",
+            "Path slicing inconsistente em /api/events/:id (replace → slice)",
+            "Campo items redundante removido de /api/chats, /api/ops, /api/banned"
+          ]
+        },
+        {
+          "icon": "🟢",
+          "title": "Correções de Baixa Prioridade",
+          "items": [
+            "Help do !last dizia '3, 4 ou 5' mas aceita 2-6 — corrigido",
+            "handleHelp não listava !last, /nome, /alias, /fig — agora lista todos os comandos",
+            "Tray menu restart/quit documentados (comportamento intencional, não duplicação)",
+            "Mutação de msg.body no // → /admin documentada (intencional)",
+            "Removidas 5 funções legacy mortas (downloadBackup, uploadRestore, etc.) — ~65 linhas eliminadas"
+          ]
+        },
+        {
+          "icon": "🔄",
+          "title": "Updater e Versão",
+          "items": [
+            "Toggle 'Aceitar versões beta' agora funciona de verdade (filtra por versão com hífen)",
+            "Versão do app no Sobre agora vem do comando Rust get_app_version (não mais v—)",
+            "productName sem acento (Marcio App) — corrige erro 404 no download do update",
+            "Erros do Last.fm agora explicam o motivo (sem scrobble, usuário não existe, API key inválida)",
+            "IA sempre consulta memórias antes de pedir usuário do Last.fm (instrução reforçada no prompt)"
+          ]
+        }
+      ]
     }
   ]
 }

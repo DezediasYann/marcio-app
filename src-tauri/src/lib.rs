@@ -488,12 +488,6 @@ fn notify(app: tauri::AppHandle, title: String, body: String) {
     send_notification(&app, &title, &body);
 }
 
-/// Retorna a versão atual do app (do tauri.conf.json / Cargo.toml).
-#[tauri::command]
-fn get_app_version(app: tauri::AppHandle) -> String {
-    app.package_info().version.to_string()
-}
-
 #[tauri::command]
 fn is_autostart_enabled(app: tauri::AppHandle) -> bool {
     if let Some(autostart) = app.try_state::<tauri_plugin_autostart::AutoLaunchManager>() {
@@ -646,9 +640,6 @@ pub fn run() {
                         }
                     }
                     "restart" => {
-                        // Tray "restart" = mata e re-spawna o bot Node.js (NÃO reinicia o app Tauri).
-                        // Diferente de relaunch_app que reinicia tudo.
-                        println!("[TAURI] Tray menu: Reiniciar bot");
                         let state: tauri::State<BotProcess> = app.state();
                         let mut guard = state.0.lock().unwrap();
                         if let Some(ref mut child) = *guard {
@@ -661,9 +652,6 @@ pub fn run() {
                         }
                     }
                     "quit" => {
-                        // Tray "quit" = mata bot + fecha app (igual ao comando quit_app).
-                        // Usa std::process::exit(0) que é mais agressivo que app.exit(0)
-                        // (garante que threads presas não segurem o processo).
                         println!("[TAURI] Tray menu: Sair — matando bot e saindo...");
                         let state: tauri::State<BotProcess> = app.state();
                         let mut guard = state.0.lock().unwrap();
@@ -676,6 +664,7 @@ pub fn run() {
                             println!("[TAURI] ⚠️ Nenhum bot em execução para matar");
                         }
                         *guard = None;
+                        // Em Windows, garante que o processo sai mesmo se tiver threads presas
                         std::process::exit(0);
                     }
                     _ => {}
@@ -780,7 +769,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             notify,
-            get_app_version,
             is_autostart_enabled,
             toggle_autostart,
             open_main_window,

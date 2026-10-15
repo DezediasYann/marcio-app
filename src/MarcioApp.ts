@@ -337,9 +337,9 @@ export class MarcioApp {
         apiKey: raw.apiKey || '',
         maxTokens: raw.maxTokens ?? 400,
         temperature: raw.temperature ?? 0.75,
-        contextMessages: 20,
-        historyMessages: 25,
-        contextMaxMsgLength: 250,
+        contextMessages: 30,
+        historyMessages: 35,
+        contextMaxMsgLength: 500,
       };
       this.log('BOOT', `AI config carregado: provider=${this.aiConfig.provider} model=${this.aiConfig.model} fallbacks=${this.aiConfig.fallbackModels.length}`);
     } catch (e) {

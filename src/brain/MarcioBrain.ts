@@ -1626,6 +1626,15 @@ export class MarcioBrain {
 
     // === Avaliação de chance (se não é direto) ===
     if (!isDirect) {
+      // Entrosao 0 = bot QUIETO no grupo. So responde se for chamado pelo nome.
+      const entrosaoLevel = this.chatEntrosaoLevel.get(chatId) ?? 1.0;
+      if (entrosaoLevel === 0) {
+        if (this.app.retroactive && msg.id?._serialized) {
+          this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, msg.body ?? (isAudio ? '[audio]' : ''), 'skip');
+        }
+        return;
+      }
+
       const last = this.lastAutoResponse.get(chatId) || 0;
       if (Date.now() - last < AI_DEFAULTS.cooldownMs) {
         // Cooldown ativo — candidata pra retroativo
@@ -1678,7 +1687,6 @@ export class MarcioBrain {
       }
 
       // Multiplicador de entrosão
-      const entrosaoLevel = this.chatEntrosaoLevel.get(chatId) ?? 1.0;
       chance *= entrosaoLevel;
       if (chance > 1.0) chance = 1.0;
 

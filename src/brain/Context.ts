@@ -220,7 +220,7 @@ export class Context {
     }
 
     // --- 6. Trunca mensagens longas ---
-    const maxLen = this.app.aiConfig?.contextMaxMsgLength ?? 250;
+    const maxLen = this.app.aiConfig?.contextMaxMsgLength ?? 500;
     if (text!.length > maxLen) {
       text = text!.slice(0, maxLen) + '...';
     }
@@ -296,7 +296,7 @@ export class Context {
     }
 
     // --- 9. Mantém só as últimas N ---
-    const maxCtx = this.app.aiConfig?.contextMessages ?? 20;
+    const maxCtx = this.app.aiConfig?.contextMessages ?? 30;
     if (ctx.length > maxCtx) {
       ctx.splice(0, ctx.length - maxCtx);
     }
@@ -316,7 +316,7 @@ export class Context {
     if (!this.chatContexts.has(chatId)) this.chatContexts.set(chatId, []);
     const ctx = this.chatContexts.get(chatId)!;
     ctx.push({ role: 'assistant', content: text, timestamp: Date.now() });
-    const maxCtx = this.app.aiConfig?.contextMessages ?? 20;
+    const maxCtx = this.app.aiConfig?.contextMessages ?? 30;
     if (ctx.length > maxCtx) {
       ctx.splice(0, ctx.length - maxCtx);
     }
@@ -401,7 +401,7 @@ export class Context {
 
     try {
       const chat = await msg.getChat();
-      const limit = this.app.aiConfig?.historyMessages ?? 25;
+      const limit = this.app.aiConfig?.historyMessages ?? 35;
       const messages = await chat.fetchMessages({ limit });
 
       if (!messages || messages.length === 0) {
@@ -415,7 +415,7 @@ export class Context {
       const ctx = this.chatContexts.get(chatId)!;
 
       let added = 0;
-      const maxLen = this.app.aiConfig?.contextMaxMsgLength ?? 250;
+      const maxLen = this.app.aiConfig?.contextMaxMsgLength ?? 500;
 
       for (const oldMsg of ordered) {
         // Pula mensagens do próprio bot rastreadas (loop guard)
@@ -469,7 +469,7 @@ export class Context {
         added++;
       }
 
-      const maxCtx = this.app.aiConfig?.contextMessages ?? 20;
+      const maxCtx = this.app.aiConfig?.contextMessages ?? 30;
       if (ctx.length > maxCtx) {
         ctx.splice(0, ctx.length - maxCtx);
       }
@@ -545,7 +545,7 @@ export class Context {
       this.chatContexts.set(chatId, []);
       this.chatsWithHistoryLoaded.delete(chatId);
       const ctx = this.chatContexts.get(chatId)!;
-      const maxLen = this.app.aiConfig?.contextMaxMsgLength ?? 250;
+      const maxLen = this.app.aiConfig?.contextMaxMsgLength ?? 500;
 
       const skip = (reason: string) => {
         stats.skippedReasons[reason] = (stats.skippedReasons[reason] || 0) + 1;
@@ -636,7 +636,7 @@ export class Context {
         }
       }
 
-      const maxCtx = this.app.aiConfig?.contextMessages ?? 20;
+      const maxCtx = this.app.aiConfig?.contextMessages ?? 30;
       if (ctx.length > maxCtx) {
         ctx.splice(0, ctx.length - maxCtx);
       }

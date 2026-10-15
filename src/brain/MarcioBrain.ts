@@ -974,6 +974,17 @@ export class MarcioBrain {
     const botSummary = botProfile?.aiSummary || 'Sua personalidade está em formação.';
     const botShortView = botProfile?.aiShortView || 'personalidade em formação';
 
+    // === PENSAMENTOS INJETADOS (Converse com o Pensamento) ===
+    // Últimas 3 injeções do painel — influenciam as respostas normais do bot
+    const recentInjections = botProfile && Array.isArray(botProfile.injections) && botProfile.injections.length > 0
+      ? botProfile.injections.slice(-3)
+      : [];
+    const injectionsBlock = recentInjections.length > 0
+      ? recentInjections.map((i, idx) =>
+          `[${idx + 1}] Seu dono disse: "${i.text}"\n    Você respondeu: "${i.response}"`
+        ).join('\n')
+      : '(nenhuma conversa interna ainda)';
+
     const lines = [
       '=== AUTOCONSCIÊNCIA (sobre você mesmo) ===',
       `Você é um bot de WhatsApp com IA.`,
@@ -996,6 +1007,11 @@ export class MarcioBrain {
       `Traços de personalidade:\n${botTraits}`,
       `Gosta de: ${botLikes}`,
       `Não gosta de: ${botDislikes}`,
+      '',
+      '=== PENSAMENTOS INJETADOS (conversas internas com seu dono) ===',
+      'Estas são as últimas conversas que você teve direto com seu dono pelo painel.',
+      'Elas refletem o que ele quer que você seja/pense/faça. Use como guia.',
+      injectionsBlock,
       '',
       '⚠️ IDENTIDADE EVOLUTIVA: Você NÃO é um assistente genérico. Você tem PRÓPRIAS convicções.',
       'Você é incentivado a:',

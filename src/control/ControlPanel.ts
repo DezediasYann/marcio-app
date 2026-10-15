@@ -744,6 +744,55 @@ export class ControlPanel {
         }
       }
 
+      // POST /api/bot-profile/converse — "Converse com o Pensamento"
+      // Body: { message: string }
+      // Retorna: { ok, response, profile }
+      if (method === 'POST' && pathname === '/api/bot-profile/converse') {
+        try {
+          const body = await this.readJsonBody(req).catch(() => ({}));
+          const message = String(body?.message || '').trim();
+          if (!message) {
+            return this.json(res, { ok: false, error: 'mensagem vazia' }, 400);
+          }
+          this.app.log('PANEL', `💬 converse: ${message.slice(0, 60)}${message.length > 60 ? '…' : ''}`);
+          const result = await this.app.botProfile.converse(message);
+          if (result.error) {
+            return this.json(res, { ok: false, error: result.error, response: result.response });
+          }
+          return this.json(res, { ok: true, response: result.response, profile: this.app.botProfile.get() });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // DELETE /api/bot-profile/injections — limpa TODAS as injeções
+      if (method === 'DELETE' && pathname === '/api/bot-profile/injections') {
+        try {
+          this.app.botProfile.clearInjections();
+          return this.json(res, { ok: true, profile: this.app.botProfile.get() });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // DELETE /api/bot-profile/injections/:index — remove uma injeção específica
+      if (method === 'DELETE' && pathname.startsWith('/api/bot-profile/injections/')) {
+        try {
+          const idxStr = pathname.slice('/api/bot-profile/injections/'.length).split('/')[0];
+          const index = parseInt(idxStr, 10);
+          if (isNaN(index)) {
+            return this.json(res, { ok: false, error: 'índice inválido' }, 400);
+          }
+          const removed = this.app.botProfile.removeInjection(index);
+          if (!removed) {
+            return this.json(res, { ok: false, error: 'injeção não encontrada' }, 404);
+          }
+          return this.json(res, { ok: true, profile: this.app.botProfile.get() });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
       // GET /api/lastfm-config — retorna config do Last.fm
       if (method === 'GET' && pathname === '/api/lastfm-config') {
         try {

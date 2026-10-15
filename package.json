@@ -1,6 +1,6 @@
 {
   "name": "marcio-app",
-  "version": "1.0.3-8",
+  "version": "1.0.3-7",
   "private": true,
   "description": "Márcio App — bot de WhatsApp com IA",
   "scripts": {

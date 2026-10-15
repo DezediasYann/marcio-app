@@ -1862,6 +1862,637 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+
+    /* ================================================================
+       BOT MIND (Mente do Bot) — redesign com tabs + chat interno
+       ================================================================ */
+    .bot-mind-hero {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 20px 22px;
+      background: linear-gradient(135deg, rgba(91, 58, 189, 0.18), rgba(10, 132, 255, 0.10) 60%, rgba(230, 36, 42, 0.08));
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      margin-bottom: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .bot-mind-hero::before {
+      content: '';
+      position: absolute;
+      top: -50%; right: -10%;
+      width: 280px; height: 280px;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.22), transparent 65%);
+      pointer-events: none;
+      filter: blur(20px);
+    }
+    .bot-mind-avatar {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, var(--pt-red), #b8161c);
+      display: grid; place-items: center;
+      font-size: 36px;
+      box-shadow: 0 8px 24px rgba(230, 36, 42, 0.35);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+    .bot-mind-avatar img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .bot-mind-hero-info {
+      flex: 1;
+      min-width: 0;
+      position: relative;
+      z-index: 1;
+    }
+    .bot-mind-hero-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .bot-mind-hero-short {
+      font-size: 14px;
+      font-style: italic;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    .bot-mind-hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(0, 0, 0, 0.3);
+      backdrop-filter: var(--blur-light);
+      -webkit-backdrop-filter: var(--blur-light);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-top: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .bot-mind-hero-badge .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+    }
+    .bot-mind-hero-badge .dot.quiet { background: var(--text-tertiary); box-shadow: none; }
+    .bot-mind-last-reflection {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-left: auto;
+      padding-left: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    /* Tabs nav */
+    .bot-mind-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 5px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 18px;
+      overflow-x: auto;
+    }
+    .bot-mind-tab {
+      flex: 1;
+      min-width: 120px;
+      padding: 10px 14px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+    .bot-mind-tab:hover {
+      color: var(--text);
+      background: var(--bg-glass-light);
+    }
+    .bot-mind-tab.active {
+      background: linear-gradient(135deg, rgba(91, 58, 189, 0.4), rgba(10, 132, 255, 0.3));
+      color: var(--text);
+      box-shadow: 0 2px 12px rgba(91, 58, 189, 0.3), inset 0 0 0 1px rgba(168, 85, 247, 0.3);
+    }
+    .bot-mind-tab-content {
+      display: none;
+      animation: fadeIn 0.25s var(--ease);
+    }
+    .bot-mind-tab-content.active {
+      display: block;
+    }
+
+    /* Sub-section dentro das tabs */
+    .bot-mind-panel {
+      background: var(--bg-glass-light);
+      backdrop-filter: var(--blur-light);
+      -webkit-backdrop-filter: var(--blur-light);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      margin-bottom: 14px;
+    }
+    .bot-mind-panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .bot-mind-panel-title .count {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-secondary);
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      font-variant-numeric: tabular-nums;
+    }
+    .bot-mind-panel-hint {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    /* Form dentro dos paineis */
+    .bot-mind-textarea {
+      width: 100%;
+      min-height: 90px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      resize: vertical;
+      transition: all var(--transition);
+    }
+    .bot-mind-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+      background: rgba(0, 0, 0, 0.4);
+    }
+    .bot-mind-textarea::placeholder { color: var(--text-tertiary); }
+
+    /* Sticky save bar */
+    .bot-mind-save-bar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-hairline);
+    }
+    .bot-mind-save-bar .status {
+      margin-right: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Pills grid (convicções + traços) */
+    .bot-mind-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .bot-mind-pill {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 7px 12px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      color: var(--text);
+      transition: all var(--transition);
+    }
+    .bot-mind-pill:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+    }
+    .bot-mind-pill .k {
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .bot-mind-pill .sep {
+      color: var(--text-tertiary);
+      margin: 0 2px;
+    }
+    .bot-mind-pill .v {
+      color: var(--text);
+    }
+    .bot-mind-pill .x {
+      cursor: pointer;
+      color: var(--text-tertiary);
+      margin-left: 4px;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0 2px;
+      transition: color var(--transition);
+    }
+    .bot-mind-pill .x:hover { color: var(--error); }
+    .bot-mind-pill.like {
+      background: rgba(48, 209, 88, 0.12);
+      border-color: rgba(48, 209, 88, 0.28);
+    }
+    .bot-mind-pill.like .k { color: var(--success); }
+    .bot-mind-pill.dislike {
+      background: rgba(255, 69, 58, 0.12);
+      border-color: rgba(255, 69, 58, 0.28);
+    }
+    .bot-mind-pill.dislike .k { color: var(--error); }
+
+    /* Tag input (add via Enter) */
+    .bot-mind-tag-input {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .bot-mind-tag-input input {
+      flex: 1;
+      min-width: 100px;
+      padding: 8px 12px;
+      font-size: 13px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      transition: all var(--transition);
+    }
+    .bot-mind-tag-input input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+    }
+    .bot-mind-tag-input input.key { flex: 0 0 30%; max-width: 160px; }
+
+    /* Likes/Dislikes split */
+    .bot-mind-likes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 640px) {
+      .bot-mind-likes-grid { grid-template-columns: 1fr; }
+    }
+    .bot-mind-likes-col {
+      background: rgba(0, 0, 0, 0.18);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+    .bot-mind-likes-col .col-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .bot-mind-likes-col .col-title.likes { color: var(--success); }
+    .bot-mind-likes-col .col-title.dislikes { color: var(--error); }
+
+    /* === Conversa Interna (chat) === */
+    .bot-mind-chat-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.22);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .bot-mind-chat-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-hairline);
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .bot-mind-chat-header .icon-wrap {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(10, 132, 255, 0.3));
+      display: grid; place-items: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .bot-mind-chat-header .title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .bot-mind-chat-header .counter {
+      font-size: 11px;
+      color: var(--text-secondary);
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      font-variant-numeric: tabular-nums;
+    }
+    .bot-mind-chat-header .clear-btn {
+      margin-left: auto;
+      font-size: 11px;
+      padding: 5px 10px;
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      transition: all var(--transition);
+    }
+    .bot-mind-chat-header .clear-btn:hover {
+      color: var(--error);
+      border-color: rgba(255, 69, 58, 0.4);
+      background: rgba(255, 69, 58, 0.08);
+    }
+    .bot-mind-chat-hint {
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--text-tertiary);
+      background: rgba(168, 85, 247, 0.06);
+      border-bottom: 1px solid var(--border-hairline);
+      line-height: 1.5;
+      font-style: italic;
+    }
+    .bot-mind-chat-msgs {
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+    }
+    .bot-mind-chat-empty {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-tertiary);
+      font-size: 13px;
+      font-style: italic;
+    }
+    .bot-mind-chat-empty .icon {
+      font-size: 36px;
+      opacity: 0.4;
+      margin-bottom: 8px;
+      display: block;
+    }
+    .bot-mind-chat-msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 80%;
+      animation: botMindMsgIn 0.2s var(--ease);
+    }
+    @keyframes botMindMsgIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .bot-mind-chat-msg.user {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+    .bot-mind-chat-msg.bot {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+    .bot-mind-chat-bubble {
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 13px;
+      line-height: 1.5;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+    .bot-mind-chat-msg.user .bot-mind-chat-bubble {
+      background: linear-gradient(135deg, var(--accent), #409cff);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 2px 8px rgba(10, 132, 255, 0.25);
+    }
+    .bot-mind-chat-msg.bot .bot-mind-chat-bubble {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+    }
+    .bot-mind-chat-msg.bot .bot-mind-chat-bubble .x {
+      display: inline-block;
+      margin-left: 8px;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      font-size: 11px;
+      transition: color var(--transition);
+      vertical-align: middle;
+    }
+    .bot-mind-chat-msg.bot .bot-mind-chat-bubble .x:hover { color: var(--error); }
+    .bot-mind-chat-meta {
+      font-size: 10px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+      padding: 0 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .bot-mind-chat-thinking {
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-strong);
+      border-radius: 16px;
+      border-bottom-left-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+    .bot-mind-chat-thinking .dots {
+      display: inline-flex;
+      gap: 3px;
+    }
+    .bot-mind-chat-thinking .dots span {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: botMindDot 1.4s var(--ease) infinite;
+    }
+    .bot-mind-chat-thinking .dots span:nth-child(2) { animation-delay: 0.2s; }
+    .bot-mind-chat-thinking .dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes botMindDot {
+      0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+      30% { opacity: 1; transform: translateY(-3px); }
+    }
+    .bot-mind-chat-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border-hairline);
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .bot-mind-chat-input-row input {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 13px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-pill);
+      color: var(--text);
+      transition: all var(--transition);
+    }
+    .bot-mind-chat-input-row input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+    }
+    .bot-mind-chat-input-row button {
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: var(--radius-pill);
+      background: linear-gradient(135deg, var(--accent), #409cff);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      transition: all var(--transition);
+      box-shadow: 0 2px 8px rgba(10, 132, 255, 0.25);
+    }
+    .bot-mind-chat-input-row button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(10, 132, 255, 0.4);
+    }
+    .bot-mind-chat-input-row button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* === Settings tab === */
+    .bot-mind-model-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .bot-mind-model-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .bot-mind-model-option:hover {
+      background: rgba(0, 0, 0, 0.3);
+      border-color: rgba(10, 132, 255, 0.4);
+    }
+    .bot-mind-model-option.selected {
+      border-color: var(--accent);
+      background: rgba(10, 132, 255, 0.12);
+      box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.3);
+    }
+    .bot-mind-model-option input[type="radio"] {
+      margin-top: 2px;
+      accent-color: var(--accent);
+      flex-shrink: 0;
+    }
+    .bot-mind-model-option .info {
+      flex: 1;
+      min-width: 0;
+    }
+    .bot-mind-model-option .name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      font-family: var(--font-mono);
+    }
+    .bot-mind-model-option .desc {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+      line-height: 1.4;
+    }
+    .bot-mind-action-btn {
+      width: 100%;
+      padding: 14px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-strong);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .bot-mind-action-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+    .bot-mind-action-btn.primary {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(91, 58, 189, 0.5));
+      border-color: rgba(168, 85, 247, 0.4);
+      color: #fff;
+    }
+    .bot-mind-action-btn.primary:hover {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.7), rgba(91, 58, 189, 0.7));
+      box-shadow: 0 4px 16px rgba(168, 85, 247, 0.3);
+    }
+    .bot-mind-action-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .bot-mind-action-btn .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
   </style>
   <script src="/chart.min.js?v=1"></script>
 </head>
@@ -2659,86 +3290,186 @@
              ============================================================ -->
         <section class="section" id="section-bot-mind">
           <div class="glass-card">
-            <div class="card-title">Mente do Bot</div>
-            <div class="card-subtitle">Identidade, conviccoes e personalidade - construida pela propria IA</div>
-
-            <div class="card mt-3" style="padding:16px;">
-              <div class="card-title small">Resumo da personalidade</div>
-              <textarea id="botMindSummary" rows="3" style="width:100%;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px;color:inherit;font-family:inherit;font-size:13px;resize:vertical;" placeholder="O bot ainda nao refletiu sobre si mesmo..."></textarea>
-              <div class="muted small mt-1">Visao curta: <span id="botMindShortView">-</span></div>
-              <div class="muted small">Ultima reflexao: <span id="botMindLastUpdate">nunca</span></div>
-            </div>
-
-            <div class="card mt-3" style="padding:16px;">
-              <div class="card-title small">Conviccoes e Opinioes</div>
-              <div id="botMindConvictions" class="mt-2"></div>
-              <div class="row-flex mt-2" style="gap:6px;">
-                <input type="text" id="newConvictionKey" placeholder="tema (ex: musica)" style="flex:1;font-size:12px;">
-                <input type="text" id="newConvictionValue" placeholder="posicao (ex: gosta de rock)" style="flex:2;font-size:12px;">
-                <button class="ghost sm" onclick="addBotConviction()">+ Add</button>
+            <div class="card-header">
+              <div>
+                <div class="card-title">🧠 Mente do Bot</div>
+                <div class="card-subtitle">Identidade, convicções e personalidade — construída pela própria IA</div>
               </div>
+              <button class="ghost sm" onclick="loadBotProfile()">↻ Recarregar</button>
             </div>
 
-            <div class="card mt-3" style="padding:16px;">
-              <div class="card-title small">Tracos de Personalidade</div>
-              <div id="botMindTraits" class="mt-2"></div>
-              <div class="row-flex mt-2" style="gap:6px;">
-                <input type="text" id="newTraitKey" placeholder="traco (ex: humor)" style="flex:1;font-size:12px;">
-                <input type="text" id="newTraitValue" placeholder="descricao (ex: ironico)" style="flex:2;font-size:12px;">
-                <button class="ghost sm" onclick="addBotTrait()">+ Add</button>
-              </div>
-            </div>
-
-            <div class="card mt-3" style="padding:16px;">
-              <div class="card-title small">Gostos</div>
-              <div class="row-flex mt-2" style="gap:16px;flex-wrap:wrap;">
-                <div style="flex:1;min-width:200px;">
-                  <div class="muted small">Gosta de:</div>
-                  <div id="botMindLikes" class="mt-1"></div>
-                  <input type="text" id="newLike" placeholder="ex: debater" style="width:100%;font-size:12px;margin-top:4px;" onkeydown="if(event.key==='Enter')addBotLike()">
+            <!-- HERO: avatar + nome + short view + badge + última reflexão -->
+            <div class="bot-mind-hero">
+              <div class="bot-mind-avatar" id="botMindAvatar">🤖</div>
+              <div class="bot-mind-hero-info">
+                <div class="bot-mind-hero-name">
+                  <span id="botMindName">Bot</span>
                 </div>
-                <div style="flex:1;min-width:200px;">
-                  <div class="muted small">Nao gosta de:</div>
-                  <div id="botMindDislikes" class="mt-1"></div>
-                  <input type="text" id="newDislike" placeholder="ex: hipocrisia" style="width:100%;font-size:12px;margin-top:4px;" onkeydown="if(event.key==='Enter')addBotDislike()">
+                <div class="bot-mind-hero-short" id="botMindShortView">personalidade em formação</div>
+                <div class="bot-mind-hero-badge">
+                  <span class="dot" id="botMindDot"></span>
+                  <span id="botMindStats">🧠 0 convicções · 0 traços · 0 pensamentos injetados</span>
                 </div>
               </div>
+              <div class="bot-mind-last-reflection" id="botMindLastUpdate">última reflexão: nunca</div>
             </div>
 
-            <div class="card mt-3" style="padding:16px;">
-              <div class="card-title small">Notas Internas</div>
-              <textarea id="botMindNotes" rows="4" style="width:100%;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px;color:inherit;font-family:inherit;font-size:13px;resize:vertical;" placeholder="Notas que o bot faz sobre si mesmo..."></textarea>
+            <!-- TABS nav -->
+            <div class="bot-mind-tabs" role="tablist">
+              <button class="bot-mind-tab active" data-tab="personality" onclick="showBotMindTab('personality')">
+                🧠 Personalidade
+              </button>
+              <button class="bot-mind-tab" data-tab="convictions" onclick="showBotMindTab('convictions')">
+                💭 Convicções
+              </button>
+              <button class="bot-mind-tab" data-tab="chat" onclick="showBotMindTab('chat')">
+                💬 Conversa Interna
+              </button>
+              <button class="bot-mind-tab" data-tab="settings" onclick="showBotMindTab('settings')">
+                ⚙️ Configurações
+              </button>
             </div>
 
-            <div class="row-flex mt-3" style="gap:8px;justify-content:center;flex-wrap:wrap;">
-              <button class="primary" onclick="saveBotProfile()">Salvar tudo</button>
-              <button class="ghost" onclick="forceBotReflection()">Forcar reflexao</button>
-              <button class="ghost" onclick="loadBotProfile()">Recarregar</button>
-            </div>
-
-            <div class="card mt-3" style="padding:16px;">
-              <div class="card-title small">IA de Pensamento (Self-Awareness)</div>
-              <div class="muted small mt-1">Modelo dedicado pra auto-reflexao. Se vazio, usa o modelo principal.</div>
-              <div class="form-row mt-2">
-                <label>Modelo de pensamento</label>
-                <select id="selfAwarenessModel" style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px;color:inherit;font-size:13px;width:100%;">
-                  <option value="">Usar modelo principal</option>
-                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (melhor raciocinio)</option>
-                  <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
-                  <option value="gemini-3-flash">Gemini 3 Flash</option>
-                  <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (atual)</option>
-                  <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
-                  <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
-                  <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
-                  <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-                </select>
+            <!-- TAB: Personalidade -->
+            <div class="bot-mind-tab-content active" id="botMindTab-personality">
+              <div class="bot-mind-panel">
+                <div class="bot-mind-panel-title">
+                  📝 Resumo da personalidade
+                </div>
+                <textarea id="botMindSummary" class="bot-mind-textarea" rows="4" placeholder="O bot ainda não refletiu sobre si mesmo..."></textarea>
+                <div class="bot-mind-panel-hint">
+                  Visão curta: <span id="botMindShortViewInline">-</span>
+                </div>
+                <div class="bot-mind-save-bar">
+                  <span class="status" id="botMindSaveStatus"></span>
+                  <button class="primary" onclick="saveBotProfile()">💾 Salvar personalidade</button>
+                </div>
               </div>
-              <button class="ghost sm mt-2" onclick="saveSelfAwarenessModel()">Salvar modelo</button>
+
+              <div class="bot-mind-panel">
+                <div class="bot-mind-panel-title">
+                  📋 Notas Internas
+                  <span class="count" id="botMindNotesCount">0 chars</span>
+                </div>
+                <textarea id="botMindNotes" class="bot-mind-textarea" rows="5" placeholder="Notas livres que o bot faz sobre si mesmo (não vão pro prompt — só ficam salvas)..."></textarea>
+                <div class="bot-mind-save-bar">
+                  <span class="status">Salva junto com o resumo ao clicar em "Salvar personalidade".</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB: Convicções -->
+            <div class="bot-mind-tab-content" id="botMindTab-convictions">
+              <div class="bot-mind-panel">
+                <div class="bot-mind-panel-title">
+                  💭 Convicções e Opiniões
+                  <span class="count" id="botMindConvCount">0</span>
+                </div>
+                <div class="bot-mind-pills" id="botMindConvictions"></div>
+                <div class="bot-mind-tag-input">
+                  <input type="text" id="newConvictionKey" class="key" placeholder="tema (ex: música)" onkeydown="if(event.key==='Enter')addBotConviction()">
+                  <input type="text" id="newConvictionValue" placeholder="posição (ex: gosta de rock clássico)" onkeydown="if(event.key==='Enter')addBotConviction()">
+                  <button class="primary sm" onclick="addBotConviction()">+ Adicionar</button>
+                </div>
+                <div class="bot-mind-panel-hint">💡 Dica: aperte Enter pra adicionar rapidamente.</div>
+              </div>
+
+              <div class="bot-mind-panel">
+                <div class="bot-mind-panel-title">
+                  🎭 Traços de Personalidade
+                  <span class="count" id="botMindTraitCount">0</span>
+                </div>
+                <div class="bot-mind-pills" id="botMindTraits"></div>
+                <div class="bot-mind-tag-input">
+                  <input type="text" id="newTraitKey" class="key" placeholder="traço (ex: humor)" onkeydown="if(event.key==='Enter')addBotTrait()">
+                  <input type="text" id="newTraitValue" placeholder="descrição (ex: irônico)" onkeydown="if(event.key==='Enter')addBotTrait()">
+                  <button class="primary sm" onclick="addBotTrait()">+ Adicionar</button>
+                </div>
+              </div>
+
+              <div class="bot-mind-panel">
+                <div class="bot-mind-panel-title">
+                  ❤️ Gostos
+                  <span class="count" id="botMindLikesCount">0</span>
+                </div>
+                <div class="bot-mind-likes-grid">
+                  <div class="bot-mind-likes-col">
+                    <div class="col-title likes">✓ Gosta de</div>
+                    <div class="bot-mind-pills" id="botMindLikes"></div>
+                    <div class="bot-mind-tag-input">
+                      <input type="text" id="newLike" placeholder="ex: debater" onkeydown="if(event.key==='Enter')addBotLike()">
+                    </div>
+                  </div>
+                  <div class="bot-mind-likes-col">
+                    <div class="col-title dislikes">✗ Não gosta de</div>
+                    <div class="bot-mind-pills" id="botMindDislikes"></div>
+                    <div class="bot-mind-tag-input">
+                      <input type="text" id="newDislike" placeholder="ex: hipocrisia" onkeydown="if(event.key==='Enter')addBotDislike()">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB: Conversa Interna (NOVO) -->
+            <div class="bot-mind-tab-content" id="botMindTab-chat">
+              <div class="bot-mind-chat-wrap">
+                <div class="bot-mind-chat-header">
+                  <div class="icon-wrap">💬</div>
+                  <div class="title">Converse com o Pensamento</div>
+                  <div class="counter" id="botMindChatCounter">0 pensamentos injetados</div>
+                  <button class="clear-btn" onclick="clearBotInjections()">🗑 Limpar conversa</button>
+                </div>
+                <div class="bot-mind-chat-hint">
+                  💡 Fale direto com a mente do bot. Incentive comportamentos, plante ideias, debata convicções. As últimas 3 conversas influenciam as respostas do bot no WhatsApp.
+                </div>
+                <div class="bot-mind-chat-msgs" id="botMindChatMsgs">
+                  <div class="bot-mind-chat-empty">
+                    <span class="icon">💭</span>
+                    Sem conversas ainda. Mande uma mensagem pra começar a influenciar o bot.
+                  </div>
+                </div>
+                <div class="bot-mind-chat-input-row">
+                  <input type="text" id="botMindChatInput" placeholder="Digite uma mensagem pra mente do bot..." autocomplete="off" onkeydown="if(event.key==='Enter')sendBotThought()">
+                  <button id="botMindChatSendBtn" onclick="sendBotThought()">Enviar ➤</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB: Configurações -->
+            <div class="bot-mind-tab-content" id="botMindTab-settings">
+              <div class="bot-mind-panel">
+                <div class="bot-mind-panel-title">
+                  🤖 Modelo de IA de Pensamento
+                </div>
+                <div class="bot-mind-panel-hint" style="margin-top:0;margin-bottom:12px;">
+                  Modelo dedicado pra auto-reflexão e conversa interna. Se vazio, usa o modelo principal.
+                </div>
+                <div class="bot-mind-model-grid" id="botMindModelGrid"></div>
+                <div class="bot-mind-save-bar">
+                  <span class="status" id="botMindModelStatus"></span>
+                  <button class="primary" onclick="saveSelfAwarenessModel()">💾 Salvar modelo</button>
+                </div>
+              </div>
+
+              <div class="bot-mind-panel">
+                <div class="bot-mind-panel-title">
+                  ⚡ Ações
+                </div>
+                <button class="bot-mind-action-btn primary" id="botMindReflectBtn" onclick="forceBotReflection()">
+                  🧠 Forçar reflexão agora
+                </button>
+                <div class="bot-mind-panel-hint">
+                  Faz o bot reler conversas recentes e atualizar convicções/traços/gostos. Pode demorar 10-20s.
+                </div>
+                <button class="bot-mind-action-btn" onclick="loadBotProfile()" style="margin-top:10px;">
+                  ↻ Recarregar perfil
+                </button>
+              </div>
             </div>
           </div>
         </section>
 
-        <section class="section" id="section-about">
         <section class="section" id="section-about">
           <div class="glass-card">
             <div class="about-hero">
@@ -4836,69 +5567,341 @@
     // === Last.fm Config ===
 
     // === BOT PROFILE (Mente do Bot) ===
+
+    /** Tab atual ativa na seção Mente do Bot. */
+    var _botMindActiveTab = 'personality';
+
+    /** Lista de modelos de IA de pensamento (self-awareness) disponíveis. */
+    var _botMindModelOptions = [
+      { value: '',                       name: 'Modelo principal',         desc: 'Usa o mesmo modelo das respostas no WhatsApp (mais econômico).' },
+      { value: 'gemini-2.5-flash',       name: 'gemini-2.5-flash',         desc: 'Melhor raciocínio. Mais lento e caro, mas reflete melhor.' },
+      { value: 'gemini-2.5-flash-lite',  name: 'gemini-2.5-flash-lite',   desc: 'Versão lite do 2.5 — equilíbrio entre qualidade e velocidade.' },
+      { value: 'gemini-3-flash',         name: 'gemini-3-flash',           desc: 'Gemini 3 Flash — rápida e atualizada.' },
+      { value: 'gemini-3.5-flash-lite',  name: 'gemini-3.5-flash-lite',   desc: 'Padrão atual nas respostas do WhatsApp.' },
+      { value: 'gemini-3.6-flash',       name: 'gemini-3.6-flash',         desc: 'Versão 3.6 —_flash, mais nova.' },
+      { value: 'gemini-3.7-flash',       name: 'gemini-3.7-flash',         desc: 'Versão 3.7 — flash experimental.' },
+      { value: 'gemini-3.8-flash',       name: 'gemini-3.8-flash',         desc: 'Versão 3.8 — flash experimental.' },
+      { value: 'gemini-3.1-flash-lite',  name: 'gemini-3.1-flash-lite',    desc: 'Gemini 3.1 Flash Lite (fallback comum).' },
+    ];
+
+    /** Alterna entre as tabs da Mente do Bot. */
+    function showBotMindTab(tabName) {
+      _botMindActiveTab = tabName;
+      $$('.bot-mind-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+      $$('.bot-mind-tab-content').forEach(c => c.classList.remove('active'));
+      const el = document.getElementById('botMindTab-' + tabName);
+      if (el) el.classList.add('active');
+      // Foca no input de chat se for a tab de conversa
+      if (tabName === 'chat') {
+        setTimeout(() => {
+          const inp = $('#botMindChatInput');
+          if (inp) inp.focus();
+          // Scroll pro fim do chat
+          const msgs = $('#botMindChatMsgs');
+          if (msgs) msgs.scrollTop = msgs.scrollHeight;
+        }, 50);
+      }
+    }
+
+    /** Carrega o perfil do bot (identidade evolutiva) + avatar + modelo de self-awareness. */
     async function loadBotProfile() {
       try {
-        const r = await apiGet('/api/bot-profile');
-        _marcio_state.botProfile = r;
-        renderBotProfile(r);
-        // Carrega modelo de self-awareness do ai-config
-        try {
-          const cfg = await apiGet('/api/ai-config');
-          const sel = $('#selfAwarenessModel');
-          if (sel && cfg.selfAwarenessModel) sel.value = cfg.selfAwarenessModel;
-        } catch {}
+        // Carrega perfil + modelo de IA em paralelo pra renderizar tudo de uma vez
+        const [profile, aiCfg] = await Promise.allSettled([
+          apiGet('/api/bot-profile'),
+          apiGet('/api/ai-config'),
+        ]);
+
+        if (profile.status === 'fulfilled' && profile.value) {
+          _marcio_state.botProfile = profile.value;
+          renderBotProfile(profile.value);
+        } else {
+          console.error('[BOT-PROFILE] erro ao carregar perfil:', profile.reason);
+        }
+
+        if (aiCfg.status === 'fulfilled' && aiCfg.value) {
+          _marcio_state.selfAwarenessModel = aiCfg.value.selfAwarenessModel || '';
+          renderBotMindModelOptions(aiCfg.value.selfAwarenessModel || '');
+        }
+
+        // Avatar (busca separado pra não bloquear a render)
+        loadBotAvatar();
       } catch (e) {
         console.error('[BOT-PROFILE] erro ao carregar:', e);
       }
     }
 
+    /** Busca o avatar do bot (foto de perfil no WhatsApp). */
+    async function loadBotAvatar() {
+      try {
+        const r = await apiGet('/api/bot/avatar');
+        const avatarEl = $('#botMindAvatar');
+        if (avatarEl) {
+          if (r && r.url) {
+            avatarEl.innerHTML = `<img src="${escapeHtml(r.url)}" alt="avatar" onerror="this.parentElement.textContent='🤖';" />`;
+          } else {
+            avatarEl.textContent = '🤖';
+          }
+        }
+      } catch (e) {
+        // sem avatar — mantém o emoji
+      }
+    }
+
+    /** Renderiza TODAS as tabs da Mente do Bot a partir do objeto de perfil. */
     function renderBotProfile(p) {
       if (!p) return;
-      $('#botMindSummary').value = p.aiSummary || '';
-      $('#botMindShortView').textContent = p.aiShortView || '-';
-      $('#botMindLastUpdate').textContent = p.lastAIUpdate ? new Date(p.lastAIUpdate).toLocaleString('pt-BR') : 'nunca';
-      $('#botMindNotes').value = p.rawNotes || '';
 
+      // === HERO ===
+      const nameEl = $('#botMindName');
+      if (nameEl) nameEl.textContent = p.name || 'Bot';
+
+      const shortEl = $('#botMindShortView');
+      if (shortEl) shortEl.textContent = p.aiShortView || 'personalidade em formação';
+      const shortInline = $('#botMindShortViewInline');
+      if (shortInline) shortInline.textContent = p.aiShortView || '-';
+
+      const convCount = Object.keys(p.convictions || {}).length;
+      const traitCount = Object.keys(p.traits || {}).length;
+      const injCount = Array.isArray(p.injections) ? p.injections.length : 0;
+      const statsEl = $('#botMindStats');
+      if (statsEl) {
+        statsEl.textContent = `🧠 ${convCount} convicção${convCount !== 1 ? 'ões' : ''} · ${traitCount} traço${traitCount !== 1 ? 's' : ''} · 💬 ${injCount} pensamento${injCount !== 1 ? 's' : ''} injetado${injCount !== 1 ? 's' : ''}`;
+      }
+
+      // Dot do badge: azul se tem convicções, cinza se não
+      const dot = $('#botMindDot');
+      if (dot) dot.classList.toggle('quiet', convCount === 0 && traitCount === 0);
+
+      // Última reflexão (timestamp relativo)
+      const lastEl = $('#botMindLastUpdate');
+      if (lastEl) {
+        if (p.lastAIUpdate) {
+          lastEl.textContent = 'última reflexão: ' + timeAgo(p.lastAIUpdate);
+        } else {
+          lastEl.textContent = 'última reflexão: nunca';
+        }
+      }
+
+      // === TAB: Personalidade ===
+      const summaryEl = $('#botMindSummary');
+      if (summaryEl) summaryEl.value = p.aiSummary || '';
+      const notesEl = $('#botMindNotes');
+      if (notesEl) {
+        notesEl.value = p.rawNotes || '';
+        const notesCount = $('#botMindNotesCount');
+        if (notesCount) notesCount.textContent = (p.rawNotes || '').length + ' chars';
+      }
+
+      // === TAB: Convicções ===
       // Convictions
       const convEl = $('#botMindConvictions');
       const convs = Object.entries(p.convictions || {});
-      convEl.innerHTML = convs.length ? convs.map(([k, v]) =>
-        `<div class="pill" style="margin:2px;">${escapeHtml(k)}: ${escapeHtml(v)} <span class="x" onclick="removeBotItem('convictions','${escapeHtml(k)}')" style="cursor:pointer;color:var(--error);">x</span></div>`
-      ).join('') : '<span class="muted small">nenhuma convicção ainda</span>';
+      if (convEl) {
+        convEl.innerHTML = convs.length ? convs.map(([k, v]) =>
+          `<span class="bot-mind-pill"><span class="k">${escapeHtml(k)}</span><span class="sep">:</span><span class="v">${escapeHtml(v)}</span><span class="x" onclick="removeBotItem('convictions','${escapeAttr(k)}')" title="remover">✕</span></span>`
+        ).join('') : '<span class="muted small">nenhuma convicção ainda</span>';
+      }
+      const convCountEl = $('#botMindConvCount');
+      if (convCountEl) convCountEl.textContent = String(convs.length);
 
       // Traits
       const traitEl = $('#botMindTraits');
       const traits = Object.entries(p.traits || {});
-      traitEl.innerHTML = traits.length ? traits.map(([k, v]) =>
-        `<div class="pill" style="margin:2px;">${escapeHtml(k)}: ${escapeHtml(v)} <span class="x" onclick="removeBotItem('traits','${escapeHtml(k)}')" style="cursor:pointer;color:var(--error);">x</span></div>`
-      ).join('') : '<span class="muted small">nenhum traço ainda</span>';
+      if (traitEl) {
+        traitEl.innerHTML = traits.length ? traits.map(([k, v]) =>
+          `<span class="bot-mind-pill"><span class="k">${escapeHtml(k)}</span><span class="sep">:</span><span class="v">${escapeHtml(v)}</span><span class="x" onclick="removeBotItem('traits','${escapeAttr(k)}')" title="remover">✕</span></span>`
+        ).join('') : '<span class="muted small">nenhum traço ainda</span>';
+      }
+      const traitCountEl = $('#botMindTraitCount');
+      if (traitCountEl) traitCountEl.textContent = String(traits.length);
 
       // Likes
       const likesEl = $('#botMindLikes');
       const likes = p.likes || [];
-      likesEl.innerHTML = likes.length ? likes.map(l =>
-        `<div class="pill" style="margin:2px;background:rgba(48,209,88,0.15);">${escapeHtml(l)} <span class="x" onclick="removeBotItem('likes','${escapeHtml(l)}')" style="cursor:pointer;color:var(--error);">x</span></div>`
-      ).join('') : '<span class="muted small">nenhum ainda</span>';
+      if (likesEl) {
+        likesEl.innerHTML = likes.length ? likes.map(l =>
+          `<span class="bot-mind-pill like"><span class="v">${escapeHtml(l)}</span><span class="x" onclick="removeBotItem('likes','${escapeAttr(l)}')" title="remover">✕</span></span>`
+        ).join('') : '<span class="muted small">nenhum ainda</span>';
+      }
 
       // Dislikes
       const dlEl = $('#botMindDislikes');
       const dls = p.dislikes || [];
-      dlEl.innerHTML = dls.length ? dls.map(d =>
-        `<div class="pill" style="margin:2px;background:rgba(239,68,68,0.15);">${escapeHtml(d)} <span class="x" onclick="removeBotItem('dislikes','${escapeHtml(d)}')" style="cursor:pointer;color:var(--error);">x</span></div>`
-      ).join('') : '<span class="muted small">nenhum ainda</span>';
+      if (dlEl) {
+        dlEl.innerHTML = dls.length ? dls.map(d =>
+          `<span class="bot-mind-pill dislike"><span class="v">${escapeHtml(d)}</span><span class="x" onclick="removeBotItem('dislikes','${escapeAttr(d)}')" title="remover">✕</span></span>`
+        ).join('') : '<span class="muted small">nenhum ainda</span>';
+      }
+      const likesCountEl = $('#botMindLikesCount');
+      if (likesCountEl) likesCountEl.textContent = String(likes.length + dls.length);
+
+      // === TAB: Conversa Interna (chat) ===
+      renderBotInjections(Array.isArray(p.injections) ? p.injections : []);
     }
 
+    /** Renderiza o chat de conversa interna (injeções). */
+    function renderBotInjections(injections) {
+      const msgsEl = $('#botMindChatMsgs');
+      const counterEl = $('#botMindChatCounter');
+      if (counterEl) {
+        counterEl.textContent = `${injections.length} pensamento${injections.length !== 1 ? 's' : ''} injetado${injections.length !== 1 ? 's' : ''}`;
+      }
+      if (!msgsEl) return;
+
+      if (!injections || injections.length === 0) {
+        msgsEl.innerHTML = `
+          <div class="bot-mind-chat-empty">
+            <span class="icon">💭</span>
+            Sem conversas ainda. Mande uma mensagem pra começar a influenciar o bot.
+          </div>`;
+        return;
+      }
+
+      // Renderiza cada injeção como 2 bubbles: usuário (pergunta) + bot (resposta)
+      const html = injections.map((inj, idx) => {
+        const ts = inj.timestamp ? new Date(inj.timestamp) : null;
+        const tsLabel = ts && !isNaN(ts.getTime()) ? timeAgo(ts.toISOString()) : '';
+        return `
+          <div class="bot-mind-chat-msg user">
+            <div class="bot-mind-chat-bubble">${escapeHtml(inj.text)}</div>
+            <div class="bot-mind-chat-meta">você · ${tsLabel}</div>
+          </div>
+          <div class="bot-mind-chat-msg bot">
+            <div class="bot-mind-chat-bubble">${escapeHtml(inj.response)}<span class="x" onclick="removeBotInjection(${idx})" title="remover esta conversa">✕</span></div>
+            <div class="bot-mind-chat-meta">${escapeHtml(_marcio_state.botProfile?.name || 'Bot')} · ${tsLabel}</div>
+          </div>`;
+      }).join('');
+      msgsEl.innerHTML = html;
+
+      // Scroll pro fim
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+
+    /** Envia uma mensagem pra mente do bot (converse). */
+    async function sendBotThought() {
+      const input = $('#botMindChatInput');
+      if (!input) return;
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      const sendBtn = $('#botMindChatSendBtn');
+      const msgsEl = $('#botMindChatMsgs');
+
+      // Limpa o input e desabilita o botão
+      input.value = '';
+      if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'pensando...';
+      }
+
+      // Mostra a mensagem do usuário imediatamente + indicator "pensando"
+      const userTs = new Date().toISOString();
+      const userBubbleHtml = `
+        <div class="bot-mind-chat-msg user" data-tmp="user">
+          <div class="bot-mind-chat-bubble">${escapeHtml(msg)}</div>
+          <div class="bot-mind-chat-meta">você · agora</div>
+        </div>
+        <div class="bot-mind-chat-thinking" data-tmp="thinking">
+          🧠 pensando
+          <span class="dots"><span></span><span></span><span></span></span>
+        </div>`;
+      // Se tinha empty state, troca pelas msgs
+      const emptyEl = msgsEl.querySelector('.bot-mind-chat-empty');
+      if (emptyEl) {
+        emptyEl.remove();
+      }
+      msgsEl.insertAdjacentHTML('beforeend', userBubbleHtml);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+
+      try {
+        const r = await apiPost('/api/bot-profile/converse', { message: msg });
+        // Remove os placeholders
+        msgsEl.querySelectorAll('[data-tmp]').forEach(el => el.remove());
+
+        if (r.ok && r.response) {
+          // Atualiza o estado + re-renderiza o chat com a versão persistida do backend
+          _marcio_state.botProfile = r.profile;
+          renderBotProfile(r.profile);
+          toast('💭 Bot respondeu ✓', 'success', 2000);
+        } else {
+          // Mostra erro como bubble do bot
+          const errHtml = `
+            <div class="bot-mind-chat-msg bot">
+              <div class="bot-mind-chat-bubble" style="color:var(--error);">❌ ${escapeHtml(r.error || 'erro ao conversar com o bot')}</div>
+              <div class="bot-mind-chat-meta">erro · agora</div>
+            </div>`;
+          msgsEl.insertAdjacentHTML('beforeend', errHtml);
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        }
+      } catch (e) {
+        // Remove os placeholders
+        msgsEl.querySelectorAll('[data-tmp]').forEach(el => el.remove());
+        const errHtml = `
+          <div class="bot-mind-chat-msg bot">
+            <div class="bot-mind-chat-bubble" style="color:var(--error);">❌ ${escapeHtml(e.message)}</div>
+            <div class="bot-mind-chat-meta">erro · agora</div>
+          </div>`;
+        msgsEl.insertAdjacentHTML('beforeend', errHtml);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      } finally {
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.textContent = 'Enviar ➤';
+        }
+        input.focus();
+      }
+    }
+
+    /** Limpa TODAS as injeções (conversa interna). */
+    async function clearBotInjections() {
+      if (!confirm('Limpar toda a conversa interna? O bot vai esquecer tudo que vocês conversaram.')) return;
+      try {
+        const r = await apiDelete('/api/bot-profile/injections');
+        if (r.ok) {
+          _marcio_state.botProfile = r.profile;
+          renderBotProfile(r.profile);
+          toast('Conversa interna limpa ✓', 'success');
+        } else {
+          toast('Erro: ' + (r.error || 'desconhecido'), 'error');
+        }
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+      }
+    }
+
+    /** Remove uma injeção específica pelo índice. */
+    async function removeBotInjection(index) {
+      try {
+        const r = await apiDelete('/api/bot-profile/injections/' + index);
+        if (r.ok) {
+          _marcio_state.botProfile = r.profile;
+          renderBotProfile(r.profile);
+          toast('Pensamento removido ✓', 'success');
+        } else {
+          toast('Erro: ' + (r.error || 'desconhecido'), 'error');
+        }
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+      }
+    }
+
+    /** Salva o resumo da personalidade + notas. */
     async function saveBotProfile() {
       try {
         const p = _marcio_state.botProfile || {};
         p.aiSummary = $('#botMindSummary').value;
-        p.aiShortView = $('#botMindShortView').textContent === '-' ? '' : $('#botMindShortView').textContent;
         p.rawNotes = $('#botMindNotes').value;
         const r = await apiPost('/api/bot-profile', p);
         if (r.ok) {
           _marcio_state.botProfile = r.profile;
           renderBotProfile(r.profile);
           toast('Mente do bot salva ✓', 'success');
+          const status = $('#botMindSaveStatus');
+          if (status) {
+            status.textContent = 'salvo às ' + nowTime();
+            setTimeout(() => { if (status) status.textContent = ''; }, 3000);
+          }
         } else {
           toast('Erro: ' + r.error, 'error');
         }
@@ -4907,10 +5910,14 @@
       }
     }
 
+    /** Adiciona uma convicção (tema → posição). */
     async function addBotConviction() {
       const k = $('#newConvictionKey').value.trim();
       const v = $('#newConvictionValue').value.trim();
-      if (!k || !v) return;
+      if (!k || !v) {
+        toast('Preencha tema e posição', 'warn');
+        return;
+      }
       const p = _marcio_state.botProfile || {};
       if (!p.convictions) p.convictions = {};
       p.convictions[k] = v;
@@ -4920,13 +5927,18 @@
         $('#newConvictionValue').value = '';
         await loadBotProfile();
         toast('Convicção adicionada ✓', 'success');
+        $('#newConvictionKey').focus();
       } catch (e) { toast('Erro: ' + e.message, 'error'); }
     }
 
+    /** Adiciona um traço de personalidade. */
     async function addBotTrait() {
       const k = $('#newTraitKey').value.trim();
       const v = $('#newTraitValue').value.trim();
-      if (!k || !v) return;
+      if (!k || !v) {
+        toast('Preencha traço e descrição', 'warn');
+        return;
+      }
       const p = _marcio_state.botProfile || {};
       if (!p.traits) p.traits = {};
       p.traits[k] = v;
@@ -4936,9 +5948,11 @@
         $('#newTraitValue').value = '';
         await loadBotProfile();
         toast('Traço adicionado ✓', 'success');
+        $('#newTraitKey').focus();
       } catch (e) { toast('Erro: ' + e.message, 'error'); }
     }
 
+    /** Adiciona um "gosta de". */
     async function addBotLike() {
       const v = $('#newLike').value.trim();
       if (!v) return;
@@ -4950,9 +5964,11 @@
         $('#newLike').value = '';
         await loadBotProfile();
         toast('Adicionado ✓', 'success');
+        $('#newLike').focus();
       } catch (e) { toast('Erro: ' + e.message, 'error'); }
     }
 
+    /** Adiciona um "não gosta de". */
     async function addBotDislike() {
       const v = $('#newDislike').value.trim();
       if (!v) return;
@@ -4964,9 +5980,11 @@
         $('#newDislike').value = '';
         await loadBotProfile();
         toast('Adicionado ✓', 'success');
+        $('#newDislike').focus();
       } catch (e) { toast('Erro: ' + e.message, 'error'); }
     }
 
+    /** Remove um item específico (conviction/trait/like/dislike) por key. */
     async function removeBotItem(field, key) {
       try {
         await apiDelete('/api/bot-profile/' + field + '/' + encodeURIComponent(key));
@@ -4975,8 +5993,14 @@
       } catch (e) { toast('Erro: ' + e.message, 'error'); }
     }
 
+    /** Força a auto-reflexão do bot (lê conversas recentes e atualiza o perfil). */
     async function forceBotReflection() {
+      const btn = $('#botMindReflectBtn');
       try {
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = '<span class="spinner"></span> Refletindo...';
+        }
         toast('Forçando reflexão... pode demorar 10-20s', 'info', 5000);
         const r = await apiPost('/api/bot-profile/reflect', {});
         if (r.ok) {
@@ -4988,17 +6012,66 @@
         }
       } catch (e) {
         toast('Erro: ' + e.message, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '🧠 Forçar reflexão agora';
+        }
       }
     }
 
+    /** Renderiza o grid de modelos de IA de pensamento (radio buttons). */
+    function renderBotMindModelOptions(selectedModel) {
+      const grid = $('#botMindModelGrid');
+      if (!grid) return;
+      const sel = selectedModel || '';
+      grid.innerHTML = _botMindModelOptions.map(opt => `
+        <label class="bot-mind-model-option ${opt.value === sel ? 'selected' : ''}" data-value="${escapeAttr(opt.value)}">
+          <input type="radio" name="botMindModel" value="${escapeAttr(opt.value)}" ${opt.value === sel ? 'checked' : ''} onchange="selectBotMindModel('${escapeAttr(opt.value)}')">
+          <div class="info">
+            <div class="name">${escapeHtml(opt.name)}</div>
+            <div class="desc">${escapeHtml(opt.desc)}</div>
+          </div>
+        </label>
+      `).join('');
+    }
+
+    /** Marca visualmente qual modelo foi selecionado (sem salvar). */
+    function selectBotMindModel(value) {
+      $$('.bot-mind-model-option').forEach(el => {
+        el.classList.toggle('selected', el.dataset.value === value);
+      });
+      const status = $('#botMindModelStatus');
+      if (status) {
+        const opt = _botMindModelOptions.find(o => o.value === value);
+        status.textContent = opt ? 'selecionado: ' + opt.name : 'modelo principal';
+      }
+    }
+
+    /** Salva o modelo de IA de pensamento (self-awareness). */
     async function saveSelfAwarenessModel() {
       try {
-        const model = $('#selfAwarenessModel').value;
+        const checked = document.querySelector('input[name="botMindModel"]:checked');
+        const model = checked ? checked.value : '';
         await apiPost('/api/ai-config', { selfAwarenessModel: model });
+        _marcio_state.selfAwarenessModel = model;
+        const status = $('#botMindModelStatus');
+        if (status) {
+          status.textContent = 'salvo às ' + nowTime();
+          setTimeout(() => { if (status) status.textContent = ''; }, 3000);
+        }
         toast('Modelo de pensamento salvo ✓', 'success');
       } catch (e) {
         toast('Erro: ' + e.message, 'error');
       }
+    }
+
+    /** Escape pra uso dentro de atributos HTML (onclick='...'). */
+    function escapeAttr(s) {
+      return String(s ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"');
     }
 
     async function loadLastfmConfig() {

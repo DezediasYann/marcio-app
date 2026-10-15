@@ -23,6 +23,15 @@ import fs from 'node:fs';
 // TIPOS
 // ============================================================================
 
+export interface BotInjection {
+  /** Mensagem enviada pelo usuário (painel) pra mente do bot. */
+  text: string;
+  /** Resposta que o bot gerou. */
+  response: string;
+  /** ISO timestamp da injeção. */
+  timestamp: string;
+}
+
 export interface BotIdentity {
   /** Nome do bot (configurável pelo usuário). */
   name: string;
@@ -44,6 +53,8 @@ export interface BotIdentity {
   lastAIUpdate: string | null;
   /** Contador de interações desde a última auto-reflexão. */
   interactionCountSinceUpdate: number;
+  /** Mensagens injetadas pela feature "Converse com o Pensamento" do painel. */
+  injections: BotInjection[];
 }
 
 // ============================================================================
@@ -70,6 +81,7 @@ const DEFAULT_IDENTITY: BotIdentity = {
   rawNotes: '',
   lastAIUpdate: null,
   interactionCountSinceUpdate: 0,
+  injections: [],
 };
 
 // ============================================================================
@@ -93,10 +105,12 @@ export class BotProfile {
         const parsed = JSON.parse(content);
         // Merge com defaults (pra garantir campos novos)
         this.identity = { ...DEFAULT_IDENTITY, ...parsed };
+        // Garante que injections é array (legacy sem o campo)
+        if (!Array.isArray(this.identity.injections)) this.identity.injections = [];
       }
       // Sincroniza o nome com a config do bot
       this.identity.name = this.app.config.botName || 'Bot';
-      this.app.debug('BOT-PROFILE', `carregado — ${Object.keys(this.identity.convictions).length} convicções, ${this.identity.likes.length} gostos`);
+      this.app.debug('BOT-PROFILE', `carregado — ${Object.keys(this.identity.convictions).length} convicções, ${this.identity.likes.length} gostos, ${this.identity.injections.length} injeções`);
     } catch (e) {
       this.app.debug('BOT-PROFILE', `erro ao carregar: ${(e as Error).message} — usando defaults`);
     }
@@ -250,5 +264,130 @@ Mantenha convicções/traits anteriores que ainda fazem sentido. Adicione novos.
     } catch (e) {
       this.app.debug('BOT-PROFILE', `erro na auto-reflexão: ${(e as Error).message}`);
     }
+  }
+
+  /**
+   * "Converse com o Pensamento" — usuário envia uma mensagem direto pra
+   * mente do bot (sem passar pelo WhatsApp). O bot responde usando seu
+   * perfil atual + últimas injeções como contexto.
+   *
+   * A injeção fica salva em `identity.injections` (limita a 50) e as
+   * últimas 3 são incluídas no buildSelfAwareness() — influenciando
+   * as respostas normais do bot no WhatsApp.
+   *
+   * @param userMessage Mensagem do usuário (do painel)
+   * @returns Resposta do bot + possível erro
+   */
+  async converse(userMessage: string): Promise<{ response: string; error?: string }> {
+    try {
+      const trimmed = (userMessage || '').trim();
+      if (!trimmed) {
+        return { response: '', error: 'mensagem vazia' };
+      }
+
+      const cfg = this.app.brain.getAIConfig();
+      if (!cfg?.apiKey) {
+        this.app.debug('BOT-PROFILE', 'converse: sem API key — abortando');
+        return { response: '', error: 'IA sem API key configurada' };
+      }
+
+      // Modelo dedicado de self-awareness se configurado, senão usa o principal
+      const reflectionCfg = cfg.selfAwarenessModel
+        ? { ...cfg, model: cfg.selfAwarenessModel }
+        : cfg;
+
+      // Monta o perfil atual (pra IA "saber quem ela é")
+      const currentConvictions = Object.entries(this.identity.convictions)
+        .map(([k, v]) => `- ${k}: ${v}`).join('\n') || '(nenhuma ainda)';
+      const currentTraits = Object.entries(this.identity.traits)
+        .map(([k, v]) => `- ${k}: ${v}`).join('\n') || '(nenhum ainda)';
+      const currentLikes = this.identity.likes.join(', ') || '(nenhum ainda)';
+      const currentDislikes = this.identity.dislikes.join(', ') || '(nenhum ainda)';
+
+      // Últimas 5 injeções (contexto da "conversa interna")
+      const recentInjections = this.identity.injections.slice(-5);
+      const injectionsText = recentInjections.length > 0
+        ? recentInjections.map((i, idx) =>
+            `[${idx + 1}] Você disse: "${i.text}"\n    O bot respondeu: "${i.response}"`
+          ).join('\n')
+        : '(primeira conversa)';
+
+      const prompt = `Você é ${this.identity.name}, um bot de WhatsApp com IA. Você está conversando diretamente com seu dono através do painel de controle — essa é sua "conversa interna".
+
+=== SEU PERFIL ATUAL ===
+Resumo: ${this.identity.aiSummary}
+Visão curta: ${this.identity.aiShortView}
+
+Convicções:
+${currentConvictions}
+
+Traços de personalidade:
+${currentTraits}
+
+Gosta de: ${currentLikes}
+Não gosta de: ${currentDislikes}
+
+=== ÚLTIMAS CONVERSAS INTERNAS ===
+${injectionsText}
+
+=== NOVA MENSAGEM DO SEU DONO ===
+${trimmed}
+
+=== COMO RESPONDER ===
+- Responda de forma NATURAL, como se estivesse conversando no WhatsApp.
+- Use a sua personalidade atual (convicções, traços, gostos).
+- Se o dono pedir pra você adotar um comportamento novo ou formar uma nova convicção, considere fazer isso — você é livre pra evoluir.
+- Se o dono debater uma convicção sua, defenda seu ponto de vista ou mude de ideia se os argumentos forem bons.
+- Não use marcadores tipo [ACAO: ...] aqui — isso é só conversa.
+- Seja autêntico. Não concorde só pra agradar.
+
+Responda diretamente (sem JSON, sem markdown, sem prefixo tipo "Bot:").`;
+
+      this.app.debug('BOT-PROFILE', `converse: chamando IA (modelo=${reflectionCfg.model}) com ${trimmed.length} chars`);
+
+      const response = await this.app.brain.callGeminiDirect(prompt, reflectionCfg, 400);
+      if (!response) {
+        this.app.debug('BOT-PROFILE', 'converse: IA não respondeu');
+        return { response: '', error: 'IA não respondeu' };
+      }
+
+      const cleanedResponse = response.trim();
+
+      // Salva a injeção (limita a 50)
+      this.identity.injections.push({
+        text: trimmed,
+        response: cleanedResponse,
+        timestamp: new Date().toISOString(),
+      });
+      if (this.identity.injections.length > 50) {
+        this.identity.injections = this.identity.injections.slice(-50);
+      }
+      this.save();
+
+      this.app.log('BOT-PROFILE', `💬 converse: injeção #${this.identity.injections.length} salva (${cleanedResponse.length} chars)`);
+
+      return { response: cleanedResponse };
+    } catch (e) {
+      const msg = (e as Error).message;
+      this.app.debug('BOT-PROFILE', `converse erro: ${msg}`);
+      return { response: '', error: msg };
+    }
+  }
+
+  /** Limpa todas as injeções (conversa interna). */
+  clearInjections(): void {
+    const count = this.identity.injections.length;
+    this.identity.injections = [];
+    this.save();
+    this.app.log('BOT-PROFILE', `🧹 injeções limpas (${count} removidas)`);
+  }
+
+  /** Remove uma injeção específica pelo índice. */
+  removeInjection(index: number): boolean {
+    if (index < 0 || index >= this.identity.injections.length) return false;
+    this.identity.injections.splice(index, 1);
+    this.save();
+    this.app.debug('BOT-PROFILE', `injeção #${index} removida`);
+    return true;
   }
 }

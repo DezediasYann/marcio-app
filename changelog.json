@@ -400,6 +400,80 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.3-7",
+      "date": "2025-10-15",
+      "title": "🧠 Mente do Bot redesenhada + Conversa Interna",
+      "sections": [
+        {
+          "icon": "🧠",
+          "title": "Painel do BotProfile — redesign completo",
+          "items": [
+            "Seção 'Mente do Bot' redesenhada com hero card: avatar do bot + nome + visão curta + badge de status (convicções/traços/pensamentos injetados) + timestamp relativo da última reflexão",
+            "Tabs no topo organizam o conteúdo: 🧠 Personalidade, 💭 Convicções, 💬 Conversa Interna, ⚙️ Configurações",
+            "Tab Personalidade: textarea grande pro resumo + textarea menor pros rawNotes + botão 'Salvar personalidade' sticky com feedback de horário",
+            "Tab Convicções: grid responsivo de pills com botão X pra remover + tag input (digita e aperta Enter) em vez de 3 inputs minúsculos em linha",
+            "Tab Convicções: Traços de personalidade em sub-seção com mesmo padrão (pills + tag input)",
+            "Tab Convicções: Gostos (likes/dislikes) lado a lado em grid responsivo, cada um com seu input dedicado",
+            "Tab Configurações: select de modelo de IA de self-awareness virou grid de radio buttons com nome + descrição de cada modelo (RPD, qualidade, economia)",
+            "Tab Configurações: botão grande 'Forçar reflexão agora' com loading state (spinner + texto 'Refletindo...')",
+            "Tab Configurações: botão 'Recarregar perfil' (carrega do disco)",
+            "Todos os estilos migrados de inline pra classes CSS reais com prefixo .bot-mind-* (sem style=\"\" nos elementos)",
+            "CSS consistente com tema Liquid Glass: gradient mesh no hero, glassmorphism nos painéis, animações sutis nos hovers",
+            "Bug corrigido: linha <section id=\"section-about\"> estava duplicada (tinha duas) — removida a duplicata"
+          ]
+        },
+        {
+          "icon": "💬",
+          "title": "Conversa Interna (novo feature)",
+          "items": [
+            "Nova tab 'Conversa Interna' dentro da Mente do Bot — fale direto com a mente do bot pelo painel",
+            "Chat com bubbles estilo WhatsApp: usuário à direita (azul), bot à esquerda (cinza translúcido)",
+            "Área de mensagens com scroll (max-height 400px) e scroll automático pro fim",
+            "Input na parte inferior com botão 'Enviar ➤' (Enter também envia)",
+            "Loading state: '🧠 pensando' com 3 dots animados enquanto a IA processa",
+            "Botão 'Limpar conversa' discreto no header (pede confirmação antes)",
+            "Contador no header: 'X pensamentos injetados'",
+            "Hint text explicativo: 'Fale direto com a mente do bot. Incentive comportamentos, plante ideias, debata convicções. As últimas 3 conversas influenciam as respostas do bot no WhatsApp.'",
+            "Cada injeção (par pergunta+resposta) tem botão ✕ pra remover individualmente",
+            "Botão de envio fica desabilitado durante o processamento (evita duplo envio)"
+          ]
+        },
+        {
+          "icon": "🔌",
+          "title": "Backend — BotProfile.converse()",
+          "items": [
+            "Novo campo `injections: BotInjection[]` no BotIdentity (text, response, timestamp)",
+            "DEFAULT_IDENTITY.injections inicializado como array vazio",
+            "Backward compat: load() garante que injections é array mesmo em perfis legacy",
+            "Novo método converse(userMessage): monta prompt com perfil atual + últimas 5 injeções como contexto, chama callGeminiDirect com maxTokens 400, salva resposta em injections (limita a 50)",
+            "Usa selfAwarenessModel se configurado, senão usa modelo principal",
+            "Prompt instrui o bot a responder de forma natural (sem marcadores [ACAO:], sem JSON), defender convicções, mudar de ideia com bons argumentos",
+            "Novo método clearInjections() — limpa todas as injeções",
+            "Novo método removeInjection(index) — remove uma específica"
+          ]
+        },
+        {
+          "icon": "🧬",
+          "title": "Backend — buildSelfAwareness()",
+          "items": [
+            "Últimas 3 injeções agora aparecem no system prompt do bot (seção 'PENSAMENTOS INJETADOS')",
+            "Injeções influenciam as respostas normais do bot no WhatsApp (não só o chat do painel)",
+            "Instrução no prompt: 'Estas são as últimas conversas que você teve direto com seu dono pelo painel. Elas refletem o que ele quer que você seja/pense/faça. Use como guia.'"
+          ]
+        },
+        {
+          "icon": "🌐",
+          "title": "Backend — 3 endpoints novos",
+          "items": [
+            "POST /api/bot-profile/converse — body: { message }, retorna { ok, response, profile }",
+            "DELETE /api/bot-profile/injections — limpa TODAS as injeções, retorna { ok, profile }",
+            "DELETE /api/bot-profile/injections/:index — remove uma injeção específica, retorna { ok, profile } ou 404 se não encontrar",
+            "Validação de entrada: mensagem vazia retorna 400, índice inválido retorna 400"
+          ]
+        }
+      ]
     }
   ]
 }

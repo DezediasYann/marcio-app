@@ -656,6 +656,94 @@ export class ControlPanel {
         }
       }
 
+      // GET /api/bot-profile — retorna perfil do bot (identidade evolutiva)
+      if (method === 'GET' && pathname === '/api/bot-profile') {
+        try {
+          const profile = this.app.botProfile?.get();
+          if (!profile) return this.json(res, { error: 'BotProfile não inicializado' }, 500);
+          return this.json(res, profile);
+        } catch (e) {
+          return this.json(res, { error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/bot-profile — atualiza perfil do bot (editável pelo painel)
+      // Body: { aiSummary?, aiShortView?, convictions?, traits?, likes?, dislikes?, rawNotes? }
+      if (method === 'POST' && pathname === '/api/bot-profile') {
+        const body = await this.readJsonBody(req).catch(() => ({}));
+        try {
+          const current = this.app.botProfile.get();
+          // Merge campos (não substitui tudo — só o que veio)
+          if (typeof body?.aiSummary === 'string') current.aiSummary = body.aiSummary;
+          if (typeof body?.aiShortView === 'string') current.aiShortView = body.aiShortView;
+          if (body?.convictions && typeof body.convictions === 'object') {
+            // Se é um objeto vazio, limpa tudo. Senão, merge.
+            if (Object.keys(body.convictions).length === 0) {
+              current.convictions = {};
+            } else {
+              current.convictions = { ...current.convictions, ...body.convictions };
+            }
+          }
+          if (body?.traits && typeof body.traits === 'object') {
+            if (Object.keys(body.traits).length === 0) {
+              current.traits = {};
+            } else {
+              current.traits = { ...current.traits, ...body.traits };
+            }
+          }
+          if (Array.isArray(body?.likes)) current.likes = body.likes;
+          if (Array.isArray(body?.dislikes)) current.dislikes = body.dislikes;
+          if (typeof body?.rawNotes === 'string') current.rawNotes = body.rawNotes;
+          this.app.botProfile.update(current);
+          this.app.log('PANEL', 'BotProfile atualizado via painel');
+          return this.json(res, { ok: true, profile: current });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // DELETE /api/bot-profile/:field/:key — remove um item específico
+      // Ex: DELETE /api/bot-profile/convictions/politica
+      if (method === 'DELETE' && pathname.startsWith('/api/bot-profile/')) {
+        try {
+          const parts = pathname.slice('/api/bot-profile/'.length).split('/');
+          const field = parts[0]; // convictions, traits, likes, dislikes
+          const key = parts[1] ? decodeURIComponent(parts[1]) : '';
+          const profile = this.app.botProfile.get();
+          if (field === 'convictions' && key) {
+            delete profile.convictions[key];
+          } else if (field === 'traits' && key) {
+            delete profile.traits[key];
+          } else if (field === 'likes' && key) {
+            profile.likes = profile.likes.filter(l => l !== key);
+          } else if (field === 'dislikes' && key) {
+            profile.dislikes = profile.dislikes.filter(d => d !== key);
+          }
+          this.app.botProfile.update(profile);
+          this.app.log('PANEL', `BotProfile: removido ${field}/${key}`);
+          return this.json(res, { ok: true, profile });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/bot-profile/reflect — força auto-reflexão imediata
+      if (method === 'POST' && pathname === '/api/bot-profile/reflect') {
+        try {
+          const body = await this.readJsonBody(req).catch(() => ({}));
+          const chatId = body?.chatId || '';
+          this.app.log('PANEL', 'Forçando auto-reflexão do BotProfile...');
+          // registerInteraction com threshold 1 pra forçar
+          const profile = this.app.botProfile.get();
+          profile.interactionCountSinceUpdate = 29; // próximo do threshold
+          this.app.botProfile.update(profile);
+          await this.app.botProfile.registerInteraction(chatId);
+          return this.json(res, { ok: true, profile: this.app.botProfile.get() });
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
       // GET /api/lastfm-config — retorna config do Last.fm
       if (method === 'GET' && pathname === '/api/lastfm-config') {
         try {
@@ -1682,6 +1770,10 @@ export class ControlPanel {
           // === Cooldown de figurinha (ajustável via painel) ===
           if (body?.stickerCooldownSec != null && !isNaN(Number(body.stickerCooldownSec))) {
             next.stickerCooldownSec = Number(body.stickerCooldownSec);
+          }
+          // === Modelo de self-awareness (IA dedicada pra auto-reflexao) ===
+          if (body?.selfAwarenessModel !== undefined) {
+            next.selfAwarenessModel = body.selfAwarenessModel || null;
           }
           fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf8');
           // Invalida cache do Brain — próxima chamada de getAIConfig() re-lê.

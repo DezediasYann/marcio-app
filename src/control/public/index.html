@@ -1949,6 +1949,9 @@
           <span class="icon">🩺</span><span>Diagnóstico</span>
           <span class="nav-badge" id="diagBadge" style="display:none;"></span>
         </button>
+        <button class="nav-item" data-section="bot-mind" onclick="showSection('bot-mind')">
+          <span class="icon">🧠</span><span>Mente</span>
+        </button>
         <button class="nav-item" data-section="about" onclick="showSection('about')">
           <span class="icon">❓</span><span>Sobre</span>
         </button>
@@ -2651,6 +2654,91 @@
           </div>
         </section>
 
+        <!-- ============================================================
+             MENTE DO BOT (identidade evolutiva)
+             ============================================================ -->
+        <section class="section" id="section-bot-mind">
+          <div class="glass-card">
+            <div class="card-title">Mente do Bot</div>
+            <div class="card-subtitle">Identidade, conviccoes e personalidade - construida pela propria IA</div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">Resumo da personalidade</div>
+              <textarea id="botMindSummary" rows="3" style="width:100%;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px;color:inherit;font-family:inherit;font-size:13px;resize:vertical;" placeholder="O bot ainda nao refletiu sobre si mesmo..."></textarea>
+              <div class="muted small mt-1">Visao curta: <span id="botMindShortView">-</span></div>
+              <div class="muted small">Ultima reflexao: <span id="botMindLastUpdate">nunca</span></div>
+            </div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">Conviccoes e Opinioes</div>
+              <div id="botMindConvictions" class="mt-2"></div>
+              <div class="row-flex mt-2" style="gap:6px;">
+                <input type="text" id="newConvictionKey" placeholder="tema (ex: musica)" style="flex:1;font-size:12px;">
+                <input type="text" id="newConvictionValue" placeholder="posicao (ex: gosta de rock)" style="flex:2;font-size:12px;">
+                <button class="ghost sm" onclick="addBotConviction()">+ Add</button>
+              </div>
+            </div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">Tracos de Personalidade</div>
+              <div id="botMindTraits" class="mt-2"></div>
+              <div class="row-flex mt-2" style="gap:6px;">
+                <input type="text" id="newTraitKey" placeholder="traco (ex: humor)" style="flex:1;font-size:12px;">
+                <input type="text" id="newTraitValue" placeholder="descricao (ex: ironico)" style="flex:2;font-size:12px;">
+                <button class="ghost sm" onclick="addBotTrait()">+ Add</button>
+              </div>
+            </div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">Gostos</div>
+              <div class="row-flex mt-2" style="gap:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:200px;">
+                  <div class="muted small">Gosta de:</div>
+                  <div id="botMindLikes" class="mt-1"></div>
+                  <input type="text" id="newLike" placeholder="ex: debater" style="width:100%;font-size:12px;margin-top:4px;" onkeydown="if(event.key==='Enter')addBotLike()">
+                </div>
+                <div style="flex:1;min-width:200px;">
+                  <div class="muted small">Nao gosta de:</div>
+                  <div id="botMindDislikes" class="mt-1"></div>
+                  <input type="text" id="newDislike" placeholder="ex: hipocrisia" style="width:100%;font-size:12px;margin-top:4px;" onkeydown="if(event.key==='Enter')addBotDislike()">
+                </div>
+              </div>
+            </div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">Notas Internas</div>
+              <textarea id="botMindNotes" rows="4" style="width:100%;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px;color:inherit;font-family:inherit;font-size:13px;resize:vertical;" placeholder="Notas que o bot faz sobre si mesmo..."></textarea>
+            </div>
+
+            <div class="row-flex mt-3" style="gap:8px;justify-content:center;flex-wrap:wrap;">
+              <button class="primary" onclick="saveBotProfile()">Salvar tudo</button>
+              <button class="ghost" onclick="forceBotReflection()">Forcar reflexao</button>
+              <button class="ghost" onclick="loadBotProfile()">Recarregar</button>
+            </div>
+
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">IA de Pensamento (Self-Awareness)</div>
+              <div class="muted small mt-1">Modelo dedicado pra auto-reflexao. Se vazio, usa o modelo principal.</div>
+              <div class="form-row mt-2">
+                <label>Modelo de pensamento</label>
+                <select id="selfAwarenessModel" style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px;color:inherit;font-size:13px;width:100%;">
+                  <option value="">Usar modelo principal</option>
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (melhor raciocinio)</option>
+                  <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+                  <option value="gemini-3-flash">Gemini 3 Flash</option>
+                  <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (atual)</option>
+                  <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+                  <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
+                  <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                  <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                </select>
+              </div>
+              <button class="ghost sm mt-2" onclick="saveSelfAwarenessModel()">Salvar modelo</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="section-about">
         <section class="section" id="section-about">
           <div class="glass-card">
             <div class="about-hero">
@@ -3027,6 +3115,7 @@
         case 'theme': loadMaintenance(); loadAutostartStatus(); break;
         case 'backup': loadBackupComponents(); break;
         case 'diagnostic': loadHealth(); loadErrors(); break;
+        case 'bot-mind': loadBotProfile(); break;
       }
     }
     function toggleSidebar(force) {
@@ -4745,6 +4834,173 @@
     }
 
     // === Last.fm Config ===
+
+    // === BOT PROFILE (Mente do Bot) ===
+    async function loadBotProfile() {
+      try {
+        const r = await apiGet('/api/bot-profile');
+        _marcio_state.botProfile = r;
+        renderBotProfile(r);
+        // Carrega modelo de self-awareness do ai-config
+        try {
+          const cfg = await apiGet('/api/ai-config');
+          const sel = $('#selfAwarenessModel');
+          if (sel && cfg.selfAwarenessModel) sel.value = cfg.selfAwarenessModel;
+        } catch {}
+      } catch (e) {
+        console.error('[BOT-PROFILE] erro ao carregar:', e);
+      }
+    }
+
+    function renderBotProfile(p) {
+      if (!p) return;
+      $('#botMindSummary').value = p.aiSummary || '';
+      $('#botMindShortView').textContent = p.aiShortView || '-';
+      $('#botMindLastUpdate').textContent = p.lastAIUpdate ? new Date(p.lastAIUpdate).toLocaleString('pt-BR') : 'nunca';
+      $('#botMindNotes').value = p.rawNotes || '';
+
+      // Convictions
+      const convEl = $('#botMindConvictions');
+      const convs = Object.entries(p.convictions || {});
+      convEl.innerHTML = convs.length ? convs.map(([k, v]) =>
+        `<div class="pill" style="margin:2px;">${escapeHtml(k)}: ${escapeHtml(v)} <span class="x" onclick="removeBotItem('convictions','${escapeHtml(k)}')" style="cursor:pointer;color:var(--error);">x</span></div>`
+      ).join('') : '<span class="muted small">nenhuma convicção ainda</span>';
+
+      // Traits
+      const traitEl = $('#botMindTraits');
+      const traits = Object.entries(p.traits || {});
+      traitEl.innerHTML = traits.length ? traits.map(([k, v]) =>
+        `<div class="pill" style="margin:2px;">${escapeHtml(k)}: ${escapeHtml(v)} <span class="x" onclick="removeBotItem('traits','${escapeHtml(k)}')" style="cursor:pointer;color:var(--error);">x</span></div>`
+      ).join('') : '<span class="muted small">nenhum traço ainda</span>';
+
+      // Likes
+      const likesEl = $('#botMindLikes');
+      const likes = p.likes || [];
+      likesEl.innerHTML = likes.length ? likes.map(l =>
+        `<div class="pill" style="margin:2px;background:rgba(48,209,88,0.15);">${escapeHtml(l)} <span class="x" onclick="removeBotItem('likes','${escapeHtml(l)}')" style="cursor:pointer;color:var(--error);">x</span></div>`
+      ).join('') : '<span class="muted small">nenhum ainda</span>';
+
+      // Dislikes
+      const dlEl = $('#botMindDislikes');
+      const dls = p.dislikes || [];
+      dlEl.innerHTML = dls.length ? dls.map(d =>
+        `<div class="pill" style="margin:2px;background:rgba(239,68,68,0.15);">${escapeHtml(d)} <span class="x" onclick="removeBotItem('dislikes','${escapeHtml(d)}')" style="cursor:pointer;color:var(--error);">x</span></div>`
+      ).join('') : '<span class="muted small">nenhum ainda</span>';
+    }
+
+    async function saveBotProfile() {
+      try {
+        const p = _marcio_state.botProfile || {};
+        p.aiSummary = $('#botMindSummary').value;
+        p.aiShortView = $('#botMindShortView').textContent === '-' ? '' : $('#botMindShortView').textContent;
+        p.rawNotes = $('#botMindNotes').value;
+        const r = await apiPost('/api/bot-profile', p);
+        if (r.ok) {
+          _marcio_state.botProfile = r.profile;
+          renderBotProfile(r.profile);
+          toast('Mente do bot salva ✓', 'success');
+        } else {
+          toast('Erro: ' + r.error, 'error');
+        }
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+      }
+    }
+
+    async function addBotConviction() {
+      const k = $('#newConvictionKey').value.trim();
+      const v = $('#newConvictionValue').value.trim();
+      if (!k || !v) return;
+      const p = _marcio_state.botProfile || {};
+      if (!p.convictions) p.convictions = {};
+      p.convictions[k] = v;
+      try {
+        await apiPost('/api/bot-profile', { convictions: p.convictions });
+        $('#newConvictionKey').value = '';
+        $('#newConvictionValue').value = '';
+        await loadBotProfile();
+        toast('Convicção adicionada ✓', 'success');
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
+
+    async function addBotTrait() {
+      const k = $('#newTraitKey').value.trim();
+      const v = $('#newTraitValue').value.trim();
+      if (!k || !v) return;
+      const p = _marcio_state.botProfile || {};
+      if (!p.traits) p.traits = {};
+      p.traits[k] = v;
+      try {
+        await apiPost('/api/bot-profile', { traits: p.traits });
+        $('#newTraitKey').value = '';
+        $('#newTraitValue').value = '';
+        await loadBotProfile();
+        toast('Traço adicionado ✓', 'success');
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
+
+    async function addBotLike() {
+      const v = $('#newLike').value.trim();
+      if (!v) return;
+      const p = _marcio_state.botProfile || {};
+      if (!p.likes) p.likes = [];
+      if (!p.likes.includes(v)) p.likes.push(v);
+      try {
+        await apiPost('/api/bot-profile', { likes: p.likes });
+        $('#newLike').value = '';
+        await loadBotProfile();
+        toast('Adicionado ✓', 'success');
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
+
+    async function addBotDislike() {
+      const v = $('#newDislike').value.trim();
+      if (!v) return;
+      const p = _marcio_state.botProfile || {};
+      if (!p.dislikes) p.dislikes = [];
+      if (!p.dislikes.includes(v)) p.dislikes.push(v);
+      try {
+        await apiPost('/api/bot-profile', { dislikes: p.dislikes });
+        $('#newDislike').value = '';
+        await loadBotProfile();
+        toast('Adicionado ✓', 'success');
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
+
+    async function removeBotItem(field, key) {
+      try {
+        await apiDelete('/api/bot-profile/' + field + '/' + encodeURIComponent(key));
+        await loadBotProfile();
+        toast('Removido ✓', 'success');
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
+
+    async function forceBotReflection() {
+      try {
+        toast('Forçando reflexão... pode demorar 10-20s', 'info', 5000);
+        const r = await apiPost('/api/bot-profile/reflect', {});
+        if (r.ok) {
+          _marcio_state.botProfile = r.profile;
+          renderBotProfile(r.profile);
+          toast('Reflexão completa ✓', 'success');
+        } else {
+          toast('Erro: ' + r.error, 'error');
+        }
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+      }
+    }
+
+    async function saveSelfAwarenessModel() {
+      try {
+        const model = $('#selfAwarenessModel').value;
+        await apiPost('/api/ai-config', { selfAwarenessModel: model });
+        toast('Modelo de pensamento salvo ✓', 'success');
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+      }
+    }
+
     async function loadLastfmConfig() {
       try {
         const r = await apiGet('/api/lastfm-config');

@@ -26,6 +26,7 @@ import { Directives } from './brain/Directives';
 import { MarcioBrain } from './brain/MarcioBrain';
 import { Retroactive } from './brain/Retroactive';
 import { ProfileBook } from './brain/ProfileBook';
+import { BotProfile } from './brain/BotProfile';
 import { AudioTranscriber } from './brain/AudioTranscriber';
 import { PermissionSystem } from './permissions/PermissionSystem';
 import { StickerVault } from './stickers/StickerVault';
@@ -91,6 +92,7 @@ export class MarcioApp {
   memory!: Memory;
   profile!: Profile;
   profileBook!: ProfileBook;
+  botProfile!: BotProfile;
   directives!: Directives;
   brain!: MarcioBrain;
   retroactive!: Retroactive;
@@ -165,6 +167,12 @@ export class MarcioApp {
     this.log('BOOT', `ProfileBook inicializado — ${_personCount} pessoa(s), ${_groupCount} grupo(s).`);
     // Starta varredura periódica de perfis stale (a cada 30min)
     this.profileBook.startAutoUpdateTimer();
+
+    // === BotProfile (autoconsciencia evolutiva do bot) ===
+    this.botProfile = new BotProfile(this);
+    this.botProfile.load();
+    this.log('BOOT', `BotProfile inicializado`);
+
 
     // === FASE 2.4: Directives (regras customizadas do dono) ===
     this.directives = new Directives(this);

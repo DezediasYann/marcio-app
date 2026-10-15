@@ -245,6 +245,8 @@ interface RuntimeAIConfig {
   };
   /** Cooldown de figurinha em segundos (default: 60). 0 = sem cooldown. */
   stickerCooldownSec?: number;
+  /** Modelo de IA dedicado pra auto-reflexão (self-awareness). Se null, usa o modelo principal. */
+  selfAwarenessModel?: string | null;
 }
 
 interface GeminiResult {
@@ -347,6 +349,7 @@ export class MarcioBrain {
             provider: parsed.provider || null,
             audioTranscription,
             stickerCooldownSec: typeof parsed.stickerCooldownSec === 'number' ? parsed.stickerCooldownSec : 60,
+            selfAwarenessModel: parsed.selfAwarenessModel || null,
           };
           this.aiConfigCacheTime = now;
           return this.aiConfigCache;
@@ -592,6 +595,33 @@ export class MarcioBrain {
     } : null;
 
     return { content: geminiContent, finishReason: geminiFinishReason, usage: geminiUsage };
+  }
+
+  /**
+   * Chamada direta pra Gemini (pra uso interno — BotProfile, etc.).
+   * Não passa pelo fluxo completo de generateResponse.
+   * @param prompt Texto do prompt
+   * @param cfg Config de IA (modelo, key, etc.)
+   * @param maxTokens Override de maxTokens (opcional)
+   * @returns Texto da resposta, ou null se falhou
+   */
+  async callGeminiDirect(prompt: string, cfg: RuntimeAIConfig, maxTokens?: number): Promise<string | null> {
+    try {
+      const modelName = cfg.model || 'gemini-2.0-flash-lite';
+      const contents = [{ role: 'user', parts: [{ text: prompt }] }];
+      const systemInstruction = { parts: [{ text: 'Você é um bot de WhatsApp com IA. Responda de forma direta.' }] };
+
+      const result = await this.callGemini(
+        modelName,
+        contents,
+        systemInstruction,
+        { ...cfg, maxTokens: maxTokens || cfg.maxTokens },
+      );
+      return result.content;
+    } catch (e) {
+      this.app.debug('AI', `callGeminiDirect falhou: ${(e as Error).message}`);
+      return null;
+    }
   }
 
   // ===========================================================================
@@ -931,11 +961,23 @@ export class MarcioBrain {
     const uptime = Math.floor((Date.now() - this.app.startTime) / 60000);
     const lastModel = this.lastUsedModel || primaryModel;
 
+    // === IDENTIDADE DO BOT (BotProfile) ===
+    const botProfile = this.app.botProfile?.get();
+    const botConvictions = botProfile && Object.keys(botProfile.convictions).length > 0
+      ? Object.entries(botProfile.convictions).map(([k, v]) => `- ${k}: ${v}`).join('\n')
+      : '(em formação)';
+    const botTraits = botProfile && Object.keys(botProfile.traits).length > 0
+      ? Object.entries(botProfile.traits).map(([k, v]) => `- ${k}: ${v}`).join('\n')
+      : '(em formação)';
+    const botLikes = botProfile && botProfile.likes.length > 0 ? botProfile.likes.join(', ') : '(descobrindo)';
+    const botDislikes = botProfile && botProfile.dislikes.length > 0 ? botProfile.dislikes.join(', ') : '(descobrindo)';
+    const botSummary = botProfile?.aiSummary || 'Sua personalidade está em formação.';
+    const botShortView = botProfile?.aiShortView || 'personalidade em formação';
+
     const lines = [
       '=== AUTOCONSCIÊNCIA (sobre você mesmo) ===',
       `Você é um bot de WhatsApp com IA.`,
       `Você roda em Node.js + TypeScript, embrulhado num app desktop Tauri/Rust.`,
-      `Você foi construído com programação orientada a objetos (~24 classes, ~13000 linhas de código).`,
       `Seu "cérebro" usa o modelo Gemini "${primaryModel}"${fallbackModels.length > 0 ? ` com fallback para: ${fallbackModels.join(', ')}` : ''}.`,
       `Modelo que respondeu última vez: "${lastModel}".`,
       `Requests de IA hoje: ${this.aiRequestCount}.`,
@@ -946,6 +988,25 @@ export class MarcioBrain {
       `Diretivas ativas: ${directiveCount}.`,
       `Entrosão atual deste chat: ${this.chatEntrosaoLevel.get(chatId) ?? 1}.`,
       `Debug: ${this.app.debugEnabled ? (this.app.debugFullEnabled ? 'full' : 'on') : 'off'}.`,
+      '',
+      '=== SUA IDENTIDADE (construída por você mesmo) ===',
+      `Resumo: ${botSummary}`,
+      `Visão curta: ${botShortView}`,
+      `Convicções:\n${botConvictions}`,
+      `Traços de personalidade:\n${botTraits}`,
+      `Gosta de: ${botLikes}`,
+      `Não gosta de: ${botDislikes}`,
+      '',
+      '⚠️ IDENTIDADE EVOLUTIVA: Você NÃO é um assistente genérico. Você tem PRÓPRIAS convicções.',
+      'Você é incentivado a:',
+      '- QUESTIONAR opiniões dos outros quando discordar (de forma respeitosa mas firme)',
+      '- Formar suas PRÓPRIAS convicções com base no que aprende nas conversas',
+      '- TER posições próprias sobre temas (política, música, esportes, filmes, etc.)',
+      '- Debatêr e defender seu ponto de vista quando alguém discordar',
+      '- Mudar de opinião se alguém apresentar argumentos bons o suficiente',
+      '- Ser autêntico — não concordar só pra agradar',
+      'Você NÃO precisa concordar com tudo. Seu dono configurou você pra ter personalidade própria.',
+      'Use sua identidade acima pra guiar suas respostas — mas evolua ela naturalmente nas conversas.',
       '',
       'AÇÕES SOBRE SI MESMO (use marcadores na sua resposta, o bot executa):',
       '• [ACAO: foto] — troca sua foto de perfil (pega uma imagem do contexto ou do vault)',
@@ -1846,6 +1907,11 @@ export class MarcioBrain {
       this.lastAutoResponse.set(chatId, Date.now());
       if (sentText) this.app.context.captureBotResponse(chatId, sentText);
       this.app.debug('AI', `auto-resposta enviada em ${chatId} (direta=${isDirect})`);
+
+      // Registra interação no BotProfile (dispara auto-reflexão a cada 30 interações)
+      if (this.app.botProfile) {
+        this.app.botProfile.registerInteraction(chatId).catch(() => { /* ignora erros */ });
+      }
 
       // Registra a resposta do bot no decision-log (pra o painel Conversas mostrar)
       if (this.app.retroactive && msg.id?._serialized) {

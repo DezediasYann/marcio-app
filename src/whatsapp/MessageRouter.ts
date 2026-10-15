@@ -179,6 +179,37 @@ export class MessageRouter {
       return;
     }
 
+    // === Modo 'background' de transcrição de áudio ===
+    // Se o mode configurado é 'background', dispara a transcrição em background
+    // (sem await) — não bloqueia a decisão de resposta do bot. Áudios aparecem
+    // no painel depois, sem delay.
+    // Nos modos 'always' e 'balanced', a transcrição é disparada pelo
+    // MarcioBrain.maybeAutoRespond (antes da decisão de chance).
+    if (isAudioMsg && this.app.audioTranscriber) {
+      try {
+        const audioConfig = this.app.audioTranscriber.getConfig();
+        if (audioConfig.mode === 'background') {
+          // Resolves senderName aqui (síncrono, barato) — brain.maybeAutoRespond
+          // faria o mesmo depois, mas precisamos antes de disparar o background.
+          const msgAny = msg as any;
+          let senderName = msgAny.author || msgAny.sender?.name || msgAny.sender?.pushname || '';
+          if (!senderName && msgAny.from) {
+            try {
+              const profile = this.app.profileBook.get(msgAny.from);
+              if (profile?.name) senderName = profile.name;
+            } catch { /* ignora */ }
+          }
+          this.app.debug('ROUTER', `modo 'background' — disparando transcrição em background pra ${chatId}`);
+          // SEM await — não bloqueia o fluxo. Erros viram rejects silenciados pelo .catch().
+          this.app.brain.transcribeAudioInBackground(msg, chatId, senderName).catch((e) => {
+            this.app.debug('ROUTER', `transcrição background falhou: ${(e as Error).message}`);
+          });
+        }
+      } catch (e) {
+        this.app.debug('ROUTER', `erro ao checar modo de áudio: ${(e as Error).message}`);
+      }
+    }
+
     // 5. Comando? (! ou /) — só faz sentido pra msgs com body
     const isCommand = msg.body ? (msg.body.startsWith('!') || msg.body.startsWith('/')) : false;
     if (!isCommand) {

@@ -421,7 +421,9 @@
             "Tab Configurações: botão 'Recarregar perfil' (carrega do disco)",
             "Todos os estilos migrados de inline pra classes CSS reais com prefixo .bot-mind-* (sem style=\"\" nos elementos)",
             "CSS consistente com tema Liquid Glass: gradient mesh no hero, glassmorphism nos painéis, animações sutis nos hovers",
-            "Bug corrigido: linha <section id=\"section-about\"> estava duplicada (tinha duas) — removida a duplicata"
+            "Bug corrigido: linha <section id=\"section-about\"> estava duplicada (tinha duas) — removida a duplicata",
+            "Reflexão multi-chat: bot reflete sobre si mesmo usando conversas de TODOS os chats ativos (não só do chat atual)",
+            "Contexto global entre chats: bot sabe temas sendo discutidos em outros chats pra associar referências cruzadas (sem fofocar — só tema, não conteúdo)"
           ]
         },
         {
@@ -471,6 +473,26 @@
             "DELETE /api/bot-profile/injections — limpa TODAS as injeções, retorna { ok, profile }",
             "DELETE /api/bot-profile/injections/:index — remove uma injeção específica, retorna { ok, profile } ou 404 se não encontrar",
             "Validação de entrada: mensagem vazia retorna 400, índice inválido retorna 400"
+          ]
+        },
+        {
+          "icon": "🎵",
+          "title": "Seletor de Modo de Transcrição de Áudio",
+          "items": [
+            "Novo seletor visual no painel (aba IA) com 3 modos: Sempre / Equilibrado / Background — radio buttons estilizados como cards com nome, descrição e custo estimado",
+            "Modo 'Sempre transcrever': transcreve TODO áudio recebido, mesmo se o bot não vai responder. Custo alto de IA mas experiência ideal",
+            "Modo 'Equilibrado' (padrão): só transcreve se entrosão > 0 OU se é PV (mensagem direta). Custo médio",
+            "Modo 'Background': transcrição em background não bloqueia a decisão de resposta do bot. Áudios aparecem no painel depois, sem delay na resposta",
+            "Áudios agora aparecem no painel de Conversas mesmo quando o bot não responde (modos Sempre e Equilibrado)",
+            "Modo Background: transcrição não bloqueia resposta do bot (aparece depois no painel)",
+            "Novo campo mode em AudioTranscriptionConfig com validação (string inválida cai pra 'balanced')",
+            "Novo método helper MarcioBrain.transcribeAudioInBackground() — reutilizável pelos 3 modos, registra em contexto + painel + memória",
+            "MessageRouter dispara transcrição em background (sem await) quando mode === 'background' — não atrasa a decisão de resposta",
+            "Fluxo inteligente: se o áudio já foi transcrito antes da decisão (modos Sempre/Equilibrado), o bloco de resposta não transcreve de novo (flag audioAlreadyTranscribed)",
+            "POST /api/audio-config — endpoint dedicado pra salvar config de áudio isoladamente (valida mode ∈ ['always','balanced','background'])",
+            "GET /api/audio-config — retorna config de áudio atual (incluindo mode)",
+            "POST /api/ai-config atualizado pra aceitar e validar campo mode na seção audioTranscription",
+            "Toast 'Modo de transcrição salvo ✓' ao trocar o modo no painel (debounce 200ms pra evitar spam)"
           ]
         }
       ]

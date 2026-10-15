@@ -1806,6 +1806,13 @@ export class ControlPanel {
           if (body?.audioTranscription && typeof body.audioTranscription === 'object') {
             const at = body.audioTranscription;
             const current = existing.audioTranscription || {};
+            // Valida o campo `mode` — só aceita os 3 valores válidos.
+            // Se vier string inválida (ou ausente), usa o valor atual ou 'balanced'.
+            const VALID_MODES = ['always', 'balanced', 'background'] as const;
+            const incomingMode = typeof at.mode === 'string' ? at.mode : undefined;
+            const resolvedMode = incomingMode && (VALID_MODES as readonly string[]).includes(incomingMode)
+              ? incomingMode
+              : (current.mode || 'balanced');
             next.audioTranscription = {
               enabled: typeof at.enabled === 'boolean' ? at.enabled : (current.enabled ?? true),
               primaryModel: typeof at.primaryModel === 'string' && at.primaryModel.trim()
@@ -1814,6 +1821,7 @@ export class ControlPanel {
               fallbackModel: typeof at.fallbackModel === 'string' && at.fallbackModel.trim()
                 ? at.fallbackModel.trim()
                 : (current.fallbackModel || 'gemini-3.1-flash-lite'),
+              mode: resolvedMode as 'always' | 'balanced' | 'background',
             };
           }
           // === Cooldown de figurinha (ajustável via painel) ===
@@ -1844,6 +1852,86 @@ export class ControlPanel {
         try {
           const result = await this.testAIConnection();
           return this.json(res, result);
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // ======================================================================
+      // AUDIO CONFIG  (GET / POST /api/audio-config)
+      // Endpoints dedicados pra config de transcrição de áudio.
+      // Internamente leem/escrevem o mesmo ai-config.json (seção audioTranscription)
+      // que o /api/ai-config — mas isolados pra UI do seletor de modo não
+      // precisar enviar a config completa de IA.
+      // ======================================================================
+
+      // GET /api/audio-config — retorna { enabled, primaryModel, fallbackModel, mode }
+      if (method === 'GET' && pathname === '/api/audio-config') {
+        try {
+          const config = this.app.audioTranscriber
+            ? this.app.audioTranscriber.getConfig()
+            : null;
+          if (!config) {
+            return this.json(res, {
+              enabled: true,
+              primaryModel: 'gemini-3.5-flash-lite',
+              fallbackModel: 'gemini-3.1-flash-lite',
+              mode: 'balanced',
+            });
+          }
+          return this.json(res, config);
+        } catch (e) {
+          return this.json(res, { ok: false, error: (e as Error).message }, 500);
+        }
+      }
+
+      // POST /api/audio-config — body parcial: { enabled?, primaryModel?, fallbackModel?, mode? }
+      // Valida mode — só aceita 'always' | 'balanced' | 'background'.
+      // Preserva campos não enviados (merge com config atual no disco).
+      if (method === 'POST' && pathname === '/api/audio-config') {
+        const body = await this.readJsonBody(req);
+        try {
+          // Valida `mode` se veio — só aceita os 3 valores válidos.
+          if (body?.mode != null) {
+            const VALID_MODES = ['always', 'balanced', 'background'] as const;
+            if (typeof body.mode !== 'string' || !(VALID_MODES as readonly string[]).includes(body.mode)) {
+              return this.json(res, {
+                ok: false,
+                error: `mode inválido — deve ser um de: ${VALID_MODES.join(', ')}`,
+              }, 400);
+            }
+          }
+          // Reusa a lógica do /api/ai-config passando o body dentro de audioTranscription.
+          const filePath = this.app.dataPath('ai-config.json');
+          let existing: any = {};
+          try {
+            existing = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          } catch { /* ok — primeira vez */ }
+          const current = existing.audioTranscription || {};
+          const at = body || {};
+          const next: any = { ...existing };
+          next.audioTranscription = {
+            enabled: typeof at.enabled === 'boolean' ? at.enabled : (current.enabled ?? true),
+            primaryModel: typeof at.primaryModel === 'string' && at.primaryModel.trim()
+              ? at.primaryModel.trim()
+              : (current.primaryModel || 'gemini-3.5-flash-lite'),
+            fallbackModel: typeof at.fallbackModel === 'string' && at.fallbackModel.trim()
+              ? at.fallbackModel.trim()
+              : (current.fallbackModel || 'gemini-3.1-flash-lite'),
+            mode: typeof at.mode === 'string'
+              ? at.mode
+              : (current.mode || 'balanced'),
+          };
+          fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf8');
+          // Invalida cache do Brain — próxima chamada de getAIConfig() re-lê.
+          this.app.brain.aiConfigCacheTime = 0;
+          // Invalida também o cache do AudioTranscriber (se instanciado)
+          if (this.app.audioTranscriber) {
+            this.app.audioTranscriber.invalidateConfigCache();
+          }
+          const mode = next.audioTranscription.mode;
+          this.app.log('PANEL', `audio-config atualizada via painel — mode=${mode} enabled=${next.audioTranscription.enabled} primary=${next.audioTranscription.primaryModel}`);
+          return this.json(res, { ok: true, config: next.audioTranscription });
         } catch (e) {
           return this.json(res, { ok: false, error: (e as Error).message }, 500);
         }

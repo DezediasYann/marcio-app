@@ -1254,6 +1254,52 @@
     .mb-0 { margin-bottom: 0; } .mb-1 { margin-bottom: 8px; } .mb-2 { margin-bottom: 16px; }
     .flex-1 { flex: 1; }
 
+    /* === Audio Mode Selector (Sempre / Equilibrado / Background) === */
+    .audio-mode-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 8px;
+    }
+    @media (max-width: 720px) {
+      .audio-mode-grid { grid-template-columns: 1fr; }
+    }
+    .audio-mode-card {
+      position: relative;
+      display: block;
+      padding: 12px 14px;
+      background: var(--bg-glass-light);
+      border: 1.5px solid var(--border-strong);
+      border-radius: var(--radius-md, 10px);
+      cursor: pointer;
+      transition: border-color 0.18s ease, background 0.18s ease, transform 0.12s ease;
+      user-select: none;
+    }
+    .audio-mode-card:hover {
+      border-color: var(--accent, #0a84ff);
+      background: var(--bg-glass-hover, rgba(255,255,255,0.06));
+    }
+    .audio-mode-card input[type="radio"] {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--accent, #0a84ff);
+      margin: 0;
+    }
+    .audio-mode-card:has(input[type="radio"]:checked) {
+      border-color: var(--accent, #0a84ff);
+      background: rgba(10, 132, 255, 0.10);
+      box-shadow: 0 0 0 1px var(--accent, #0a84ff) inset;
+    }
+    .audio-mode-card-inner { display: flex; flex-direction: column; gap: 4px; padding-right: 22px; }
+    .audio-mode-name { font-size: 14px; font-weight: 600; color: var(--text); }
+    .audio-mode-recommended { font-size: 11px; color: var(--text-secondary); font-weight: 400; }
+    .audio-mode-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+    .audio-mode-cost { font-size: 11px; color: var(--text-secondary); opacity: 0.85; margin-top: 2px; }
+
     .pill-list { display: flex; flex-wrap: wrap; gap: 6px; }
     .pill {
       display: inline-flex;
@@ -3094,6 +3140,41 @@
                 <input type="text" id="aiAudioFallback" placeholder="gemini-3.1-flash-lite">
               </div>
             </div>
+
+            <!-- Modo de transcrição (Sempre / Equilibrado / Background) -->
+            <div class="form-row mt-2">
+              <label>Modo de Transcrição de Áudio <span class="muted small">(quando transcrever)</span></label>
+              <div class="audio-mode-grid" id="audioModeGrid">
+                <label class="audio-mode-card" data-mode="always">
+                  <input type="radio" name="audioMode" value="always" id="audioModeAlways">
+                  <div class="audio-mode-card-inner">
+                    <div class="audio-mode-name">🔊 Sempre transcrever</div>
+                    <div class="audio-mode-desc">Transcreve TODO áudio recebido, mesmo se o bot não vai responder. Experiência ideal.</div>
+                    <div class="audio-mode-cost">💸 Custo: alto (1 request por áudio)</div>
+                  </div>
+                </label>
+                <label class="audio-mode-card" data-mode="balanced">
+                  <input type="radio" name="audioMode" value="balanced" id="audioModeBalanced" checked>
+                  <div class="audio-mode-card-inner">
+                    <div class="audio-mode-name">⚖️ Equilibrado <span class="audio-mode-recommended">(recomendado)</span></div>
+                    <div class="audio-mode-desc">Só transcreve se o bot está ativo no chat (entrosão &gt; 0) ou se é PV.</div>
+                    <div class="audio-mode-cost">💸 Custo: médio (só quando interage)</div>
+                  </div>
+                </label>
+                <label class="audio-mode-card" data-mode="background">
+                  <input type="radio" name="audioMode" value="background" id="audioModeBackground">
+                  <div class="audio-mode-card-inner">
+                    <div class="audio-mode-name">⚡ Background</div>
+                    <div class="audio-mode-desc">Transcrição não bloqueia a resposta do bot. Áudios aparecem no painel depois.</div>
+                    <div class="audio-mode-cost">💸 Custo: médio (1 request por áudio, assíncrono)</div>
+                  </div>
+                </label>
+              </div>
+              <div class="muted small mt-1" id="audioModeHint">
+                💡 Os áudios aparecem no painel de Conversas mesmo quando o bot não responde (modos <strong>Sempre</strong> e <strong>Equilibrado</strong>). No modo <strong>Background</strong>, a transcrição não atrasa a resposta do bot.
+              </div>
+            </div>
+
             <div class="muted small mt-1">
               💡 Lógica: o bot usa a mesma decisão de chance/triggers/entrosão das mensagens de texto.
               Só transcreve quando decidiu que vai responder (economiza requests da cota diária).
@@ -5557,6 +5638,13 @@
         $('#aiAudioEnabled').checked = at.enabled !== false;  // default true se undefined
         $('#aiAudioPrimary').value = at.primaryModel || 'gemini-3.5-flash-lite';
         $('#aiAudioFallback').value = at.fallbackModel || 'gemini-3.1-flash-lite';
+        // === Modo de transcrição (Sempre / Equilibrado / Background) ===
+        // Se mode é inválido/ausente, cai pra 'balanced' (default).
+        const audioMode = (at.mode === 'always' || at.mode === 'balanced' || at.mode === 'background')
+          ? at.mode
+          : 'balanced';
+        const radioEl = document.querySelector(`input[name="audioMode"][value="${audioMode}"]`);
+        if (radioEl) (radioEl).checked = true;
         $('#aiStickerCooldown').value = r.stickerCooldownSec != null ? r.stickerCooldownSec : 60;
         $('#aiConfigStatus').textContent = 'config carregada ✓';
       } catch (e) {
@@ -6120,6 +6208,7 @@
           enabled: $('#aiAudioEnabled').checked,
           primaryModel: $('#aiAudioPrimary').value.trim() || 'gemini-3.5-flash-lite',
           fallbackModel: $('#aiAudioFallback').value.trim() || 'gemini-3.1-flash-lite',
+          mode: getSelectedAudioMode(),
         },
         stickerCooldownSec: parseInt($('#aiStickerCooldown').value, 10) || 0,
       };
@@ -6141,6 +6230,44 @@
       } catch (e) {
         toast('Teste falhou: ' + e.message, 'error', 5000);
       }
+    }
+
+    // === AUDIO MODE SELECTOR (Sempre / Equilibrado / Background) ===
+
+    /** Lê o radio button selecionado pra modo de transcrição de áudio. */
+    function getSelectedAudioMode() {
+      const checked = document.querySelector('input[name="audioMode"]:checked');
+      if (checked && checked.value) return checked.value;
+      // Fallback pra 'balanced' (default).
+      return 'balanced';
+    }
+
+    /** Salva apenas o modo de transcrição de áudio (POST /api/audio-config). */
+    let _audioModeSaveTimer = null;
+    async function saveAudioMode(mode) {
+      if (mode !== 'always' && mode !== 'balanced' && mode !== 'background') {
+        toast('Modo inválido: ' + mode, 'error');
+        return;
+      }
+      try {
+        await apiPost('/api/audio-config', { mode });
+        toast('Modo de transcrição salvo ✓', 'success');
+      } catch (e) {
+        toast('Erro ao salvar modo: ' + e.message, 'error', 5000);
+      }
+    }
+
+    /** Listener de mudança dos radios — dispara saveAudioMode. */
+    function initAudioModeListeners() {
+      const radios = document.querySelectorAll('input[name="audioMode"]');
+      radios.forEach(radio => {
+        radio.addEventListener('change', (ev) => {
+          const value = (ev.target).value;
+          // Debounce 200ms — se o usuário troca rapidamente, só salva no fim.
+          if (_audioModeSaveTimer) clearTimeout(_audioModeSaveTimer);
+          _audioModeSaveTimer = setTimeout(() => saveAudioMode(value), 200);
+        });
+      });
     }
 
     // ================================================================
@@ -7339,6 +7466,8 @@
         loadLogsFallback();
         // Keyboard shortcuts
         document.addEventListener('keydown', handleKeyboard);
+        // Audio mode selector listeners (Sempre / Equilibrado / Background)
+        initAudioModeListeners();
         // Show dashboard
         showSection('dashboard');
         console.log('[MARCIO] init() complete');

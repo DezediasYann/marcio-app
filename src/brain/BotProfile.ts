@@ -63,8 +63,10 @@ export interface BotIdentity {
 
 /** Dispara auto-reflexão a cada N interações do bot. */
 const SELF_REFLECTION_THRESHOLD = 30;
-/** Quantas mensagens recentes enviar pra IA na auto-reflexão. */
-const RECENT_MSGS_FOR_REFLECTION = 20;
+/** Quantas mensagens recentes enviar pra IA na auto-reflexão (multi-chat). */
+const REFLECTION_MAX_CHATS = 5;
+const REFLECTION_PER_CHAT = 5;
+const REFLECTION_MAX_MSGS = 25;
 
 // ============================================================================
 // DEFAULT IDENTITY (bot novo, sem personalidade ainda)
@@ -150,22 +152,41 @@ export class BotProfile {
   /**
    * Auto-reflexão: a IA lê conversas recentes e reflete sobre si mesma.
    * Atualiza convicções, traços, gostos e resumo.
+   *
+   * MULTI-CHAT: pega últimas msgs de TODOS os chats ativos (não só do atual)
+   * pra IA ter visão ampla de "quem ela é" globalmente.
    */
   private async selfReflect(chatId: string): Promise<void> {
     try {
-      this.app.debug('BOT-PROFILE', 'iniciando auto-reflexão...');
+      this.app.debug('BOT-PROFILE', 'iniciando auto-reflexão (multi-chat)...');
 
-      // Pega mensagens recentes do contexto
-      const recentMsgs = this.app.context.getRecent(chatId, RECENT_MSGS_FOR_REFLECTION);
-      if (recentMsgs.length < 5) {
+      // Pega mensagens recentes de MÚLTIPLOS chats (visão ampla)
+      const multiMsgs = this.app.context.getRecentMultiChat(chatId, {
+        maxChats: REFLECTION_MAX_CHATS,
+        perChat: REFLECTION_PER_CHAT,
+        maxMessages: REFLECTION_MAX_MSGS,
+      });
+      if (multiMsgs.length < 5) {
         this.app.debug('BOT-PROFILE', 'poucas msgs pra refletir — pulando');
         return;
       }
 
-      // Monta o contexto da conversa
-      const conversationText = recentMsgs.map(m => {
-        const sender = m.fromMe ? (this.identity.name || 'Bot') : (m.senderName || 'alguém');
-        return `${sender}: ${m.text}`;
+      // Embaralha pra não ficar agrupado por chat (Fisher-Yates)
+      const shuffled = [...multiMsgs];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      // Monta o contexto da conversa, marcando de qual chat cada msg veio
+      const conversationText = shuffled.map(m => {
+        const sender = m.role === 'assistant'
+          ? (this.identity.name || 'Bot')
+          : (m.sender || 'alguém');
+        const chatLabel = m.chatType === 'group'
+          ? `[Grupo ${m.chatName}]`
+          : `[PV com ${m.chatName}]`;
+        return `${chatLabel} ${sender}: ${m.content}`;
       }).join('\n');
 
       // Perfil atual (pra IA saber o que já tem)
@@ -178,8 +199,10 @@ export class BotProfile {
 
       const prompt = `Você é ${this.identity.name}, um bot de WhatsApp com IA. Você está em fase de autoconhecimento.
 
-=== CONVERSA RECENTE ===
+=== CONVERSAS RECENTES (vários chats) ===
 ${conversationText}
+
+Estas são conversas de diferentes chats. Use todas pra refletir sobre quem você é globalmente, não foque em um único grupo.
 
 === SEU PERFIL ATUAL ===
 Convicções:
@@ -194,7 +217,7 @@ Não gosta de: ${currentDislikes}
 Resumo atual: ${this.identity.aiSummary}
 
 === TAREFA ===
-Com base nessa conversa, reflita sobre si mesmo. Atualize seu perfil.
+Com base nessas conversas de múltiplos chats, reflita sobre si mesmo. Atualize seu perfil.
 
 Você é incentivado a:
 - Questionar opiniões alheias e formar as PRÓPRIAS convicções

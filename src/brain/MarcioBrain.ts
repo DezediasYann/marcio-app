@@ -39,6 +39,7 @@
 import type { MarcioApp } from '../MarcioApp';
 import type { Message } from 'whatsapp-web.js';
 import { MessageMedia } from 'whatsapp-web.js';
+import { Context } from './Context';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -944,6 +945,35 @@ export class MarcioBrain {
   // ===========================================================================
 
   /**
+   * Constrói o bloco de CONTEXTO GLOBAL — temas sendo discutidos em outros
+   * chats (NÃO o chat atual). Usado no buildSelfAwareness() pra IA ter noção
+   * do que está acontecendo globalmente e conseguir associar referências
+   * cruzadas tipo "no penis o assunto tá pesado".
+   *
+   * Implementação: delega pra Context.getChatTopics() (heurística simples,
+   * sem chamar IA), filtra o chat atual, e formata como bullets.
+   */
+  private buildGlobalContextBlock(currentChatId: string): string {
+    try {
+      const topics = this.app.context.getChatTopics(8);
+      const others = topics.filter(t => t.chatId !== currentChatId);
+      if (others.length === 0) return '(nenhum outro chat ativo agora)';
+      const now = Date.now();
+      const lines = others.map(t => {
+        const label = t.chatId.endsWith('@g.us') ? `Grupo ${t.chatName}` : `PV com ${t.chatName}`;
+        const intensity = Context.intensityLabel(t.intensity);
+        const minsAgo = Math.max(0, Math.floor((now - t.lastActivity) / 60000));
+        const ago = minsAgo < 1 ? 'agora' : minsAgo === 1 ? 'há 1min' : `há ${minsAgo}min`;
+        return `• [${label}]: ${t.topic} (atividade ${intensity}, ${ago})`;
+      });
+      return lines.join('\n');
+    } catch (e) {
+      this.app.debug('BRAIN', `buildGlobalContextBlock erro: ${(e as Error).message}`);
+      return '(contexto global indisponível)';
+    }
+  }
+
+  /**
    * Constrói o texto de autoconsciência que é injetado no prompt.
    * Diz ao Márcio: o que ele é, como foi construído, que modelo usa,
    * quantas memórias tem, e que ações pode executar sobre si mesmo.
@@ -985,6 +1015,11 @@ export class MarcioBrain {
         ).join('\n')
       : '(nenhuma conversa interna ainda)';
 
+    // === CONTEXTO GLOBAL (outros chats) ===
+    // Temas sendo discutidos em outros chats — só tema, NÃO conteúdo exato.
+    // Ajuda o bot a associar referências cruzadas ("no penis o assunto tá pesado").
+    const globalContextBlock = this.buildGlobalContextBlock(chatId);
+
     const lines = [
       '=== AUTOCONSCIÊNCIA (sobre você mesmo) ===',
       `Você é um bot de WhatsApp com IA.`,
@@ -999,6 +1034,11 @@ export class MarcioBrain {
       `Diretivas ativas: ${directiveCount}.`,
       `Entrosão atual deste chat: ${this.chatEntrosaoLevel.get(chatId) ?? 1}.`,
       `Debug: ${this.app.debugEnabled ? (this.app.debugFullEnabled ? 'full' : 'on') : 'off'}.`,
+      '',
+      '=== CONTEXTO GLOBAL (o que está acontecendo em outros chats) ===',
+      globalContextBlock,
+      'Use isso pra entender referências cruzadas (ex: "no penis o assunto tá pesado" → você sabe que lá estão falando de política).',
+      'NÃO repita o que ouviu em outros chats — apenas use como contexto.',
       '',
       '=== SUA IDENTIDADE (construída por você mesmo) ===',
       `Resumo: ${botSummary}`,
@@ -1701,6 +1741,44 @@ export class MarcioBrain {
       }
     }
 
+    // === TRANSCRIÇÃO DE ÁUDIO BASEADA EM MODE (Antes da decisão de chance) ===
+    // Lê o modo configurado (Sempre / Equilibrado / Background) e decide
+    // se transcreve AGORA (antes da decisão) ou se deixa pra depois.
+    //
+    // - 'always'    : transcreve TODO áudio recebido, mesmo se o bot não vai responder.
+    // - 'balanced'  : só transcreve se entrosão > 0 OU se é PV (isDirect=true). PADRÃO.
+    // - 'background': NÃO transcreve aqui — o MessageRouter dispara em background.
+    //                 Só transcreve no bloco de resposta (abaixo) se o bot decidir responder.
+    let audioAlreadyTranscribed = false;
+    let audioPreTranscriptionOk = false;
+    if (isAudio && this.app.audioTranscriber) {
+      const audioConfig = this.app.audioTranscriber.getConfig();
+      const audioMode = audioConfig.mode;
+      const entrosaoLevel = this.chatEntrosaoLevel.get(chatId) ?? 1.0;
+
+      if (audioMode === 'always') {
+        // Modo A: transcreve AGORA, antes da decisão. Salva no contexto e no painel.
+        // Mesmo que o bot decida ficar quieto depois, a transcrição já está salva.
+        this.app.debug('AUDIO', `modo 'always' — transcrevendo antes da decisão de chance`);
+        const result = await this.transcribeAudioInBackground(msg, chatId, senderName);
+        audioAlreadyTranscribed = true;
+        audioPreTranscriptionOk = result.ok;
+      } else if (audioMode === 'balanced') {
+        // Modo B: transcreve só se entrosão > 0 OU se é PV (isDirect=true).
+        if (isDirect || entrosaoLevel > 0) {
+          this.app.debug('AUDIO', `modo 'balanced' — transcrevendo (isDirect=${isDirect}, entrosao=${entrosaoLevel.toFixed(2)})`);
+          const result = await this.transcribeAudioInBackground(msg, chatId, senderName);
+          audioAlreadyTranscribed = true;
+          audioPreTranscriptionOk = result.ok;
+        } else {
+          this.app.debug('AUDIO', `modo 'balanced' — entrosão=0 e não é PV, pulando transcrição pré-decisão`);
+        }
+      } else {
+        // Modo C ('background'): NÃO transcreve aqui. O MessageRouter dispara em background.
+        this.app.debug('AUDIO', `modo 'background' — transcrição delegada pro MessageRouter`);
+      }
+    }
+
     // === Avaliação de chance (se não é direto) ===
     if (!isDirect) {
       // Entrosao 0 = bot QUIETO no grupo. So responde se for chamado pelo nome.
@@ -1809,8 +1887,13 @@ export class MarcioBrain {
       // === Áudio: transcreve ANTES de gerar a resposta ===
       // Já passou da decisão de chance — bot decidiu responder.
       // Agora precisa do texto do áudio pra IA poder responder ao conteúdo.
+      //
+      // IMPORTANTE: Se o áudio JÁ foi transcrito antes da decisão (modos 'always'
+      // ou 'balanced' com entrosão/PV), o texto já está no contexto. Nesse caso:
+      //  - Se a transcrição prévia funcionou → pula este bloco.
+      //  - Se a transcrição prévia falhou    → reage 🔇 e desiste (igual antes).
       let audioTranscription: string | null = null;
-      if (isAudio && this.app.audioTranscriber) {
+      if (isAudio && this.app.audioTranscriber && !audioAlreadyTranscribed) {
         this.app.log('AUDIO', `transcrevendo áudio de ${senderName || '?'} em ${chatId}…`);
         try {
           audioTranscription = await this.app.audioTranscriber.transcribe(msg);
@@ -1873,6 +1956,23 @@ export class MarcioBrain {
         try {
           await this.app.memory.maybeExtract(chatId, senderName, audioTranscription);
         } catch { /* ignora — extração de memória é best-effort */ }
+      } else if (isAudio && audioAlreadyTranscribed) {
+        // Áudio JÁ foi transcrito ANTES da decisão (modos 'always' ou 'balanced'
+        // com entrosão/PV). O texto já está no contexto (capturado por
+        // transcribeAudioInBackground).
+        //
+        // Só reage 🔇 se a transcrição prévia falhou — sem texto, o bot não tem
+        // como responder coerentemente.
+        if (!audioPreTranscriptionOk) {
+          this.app.log('AUDIO', `transcrição prévia já havia falhado — reagindo 🔇 e ficando quieto`);
+          try { await msg.react('🔇'); } catch { /* ignora */ }
+          if (this.app.retroactive && msg.id?._serialized) {
+            this.app.retroactive.markDecision(chatId, msg.id?._serialized, senderName, '[áudio não transcrito]', 'pending');
+          }
+          return;
+        }
+        // Sucesso — segue pro generateResponse usando o texto do contexto.
+        this.app.debug('AUDIO', `áudio já transcrito antes da decisão — usando texto do contexto`);
       }
 
       // Carrega histórico na 1ª vez
@@ -1984,5 +2084,139 @@ export class MarcioBrain {
         });
       }
     }
+  }
+
+  // ===========================================================================
+  // TRANSCRIBE AUDIO IN BACKGROUND — helper reutilizável
+  // ===========================================================================
+
+  /**
+   * Transcreve um áudio do WhatsApp em background e injeta no contexto + painel.
+   *
+   * Reutilizado em 3 cenários (configuráveis pelo painel):
+   *  - Modo 'always'    : chamado com `await` ANTES da decisão de chance.
+   *                       Transcreve TODO áudio, mesmo se o bot não vai responder.
+   *  - Modo 'balanced'  : chamado com `await` ANTES da decisão se entrosão > 0 OU isDirect.
+   *  - Modo 'background' : chamado SEM await (ou com .catch()) pelo MessageRouter.
+   *                       Não bloqueia a decisão de resposta do bot.
+   *
+   * Fluxo:
+   *  1. Transcreve via audioTranscriber.transcribe(msg).
+   *  2. Sucesso → injeta no contexto com prefixo `[🎵 áudio]:` + registra no
+   *     painel (retroactive.recordIncomingMessage com isAudio=true) + extrai memória.
+   *  3. Falha   → registra como `[áudio não transcrito]` no painel (badge 🎵 mas
+   *     sem texto — indica que tentou e falhou, em vez de mostrar vazio).
+   *
+   * Não bloqueia a decisão de resposta: em modo 'background' é disparado sem await.
+   * Se o bot depois decidir responder, o texto já está no contexto (capturado aqui).
+   *
+   * @returns `{ ok, text }` — status da transcrição (pra caller decidir se reage 🔇).
+   */
+  async transcribeAudioInBackground(
+    msg: Message,
+    chatId: string,
+    senderName: string,
+  ): Promise<{ ok: boolean; text: string | null }> {
+    if (!this.app.audioTranscriber) {
+      return { ok: false, text: null };
+    }
+
+    this.app.log('AUDIO', `transcrevendo áudio (background) de ${senderName || '?'} em ${chatId}…`);
+
+    let transcription: string | null = null;
+    try {
+      transcription = await this.app.audioTranscriber.transcribe(msg);
+    } catch (e) {
+      this.app.debug('AUDIO', `erro na transcrição (background): ${(e as Error).message}`);
+      transcription = null;
+    }
+
+    const msgId = msg.id?._serialized;
+
+    if (!transcription) {
+      // Falhou nos 2 modelos — registra como [áudio não transcrito] no painel.
+      // Mantém isAudio=true pra o painel mostrar a badge 🎵 mesmo sem texto.
+      if (this.app.retroactive && msgId) {
+        try {
+          this.app.retroactive.recordIncomingMessage(
+            chatId,
+            msgId,
+            senderName,
+            '[áudio não transcrito]',
+            Date.now(),
+            false,  // fromMe=false (foi o usuário que mandou o áudio)
+            undefined,
+            true,   // isAudio=true (badge 🎵)
+          );
+        } catch { /* ignora — best-effort */ }
+      }
+      // Atualiza isAudio no decisionLog entry (se já tinha uma criada pelo markDecision).
+      try {
+        if (this.app.retroactive) {
+          const entries = (this.app.retroactive as any).decisionLog?.get(chatId) as any[] | undefined;
+          if (entries) {
+            const existingEntry = entries.find((e: any) => e.msgId === msgId);
+            if (existingEntry && !existingEntry.isAudio) {
+              existingEntry.isAudio = true;
+            }
+          }
+        }
+      } catch { /* ignora */ }
+      // Notifica o painel pra fazer auto-refresh.
+      if (this.app.control) {
+        this.app.control.broadcast('conversation-update', { chatId, msgId, fromMe: false });
+      }
+      return { ok: false, text: null };
+    }
+
+    // Sucesso — injeta no contexto com prefixo `[🎵 áudio]:` (IA sabe que veio de áudio).
+    this.app.debug('AUDIO', `transcrição (background): "${transcription.slice(0, 80)}…"`);
+    const audioContextText = `[🎵 áudio]: ${transcription}`;
+    try {
+      await this.app.context.captureMessage(msg, chatId, audioContextText);
+    } catch (e) {
+      this.app.debug('AUDIO', `erro ao capturar transcrição no contexto: ${(e as Error).message}`);
+    }
+
+    // Registra no painel Conversas com isAudio=true (badge separada do texto).
+    if (this.app.retroactive && msgId) {
+      try {
+        this.app.retroactive.recordIncomingMessage(
+          chatId,
+          msgId,
+          senderName,
+          transcription,  // texto sem prefixo (painel mostra badge separado)
+          Date.now(),
+          false,  // fromMe=false
+          undefined,
+          true,   // isAudio=true
+        );
+      } catch { /* ignora */ }
+    }
+
+    // Atualiza isAudio no decisionLog entry (se já tinha uma criada pelo markDecision).
+    try {
+      if (this.app.retroactive) {
+        const entries = (this.app.retroactive as any).decisionLog?.get(chatId) as any[] | undefined;
+        if (entries) {
+          const existingEntry = entries.find((e: any) => e.msgId === msgId);
+          if (existingEntry && !existingEntry.isAudio) {
+            existingEntry.isAudio = true;
+          }
+        }
+      }
+    } catch { /* ignora */ }
+
+    // Extrai memória da transcrição (best-effort — pode ter gatilhos de fatos).
+    try {
+      await this.app.memory.maybeExtract(chatId, senderName, transcription);
+    } catch { /* ignora — extração de memória é best-effort */ }
+
+    // Notifica o painel pra fazer auto-refresh.
+    if (this.app.control) {
+      this.app.control.broadcast('conversation-update', { chatId, msgId, fromMe: false });
+    }
+
+    return { ok: true, text: transcription };
   }
 }

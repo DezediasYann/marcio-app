@@ -62,6 +62,25 @@ export interface ForceReadCallbacks {
 const CONTACT_CACHE_TTL_MS = 5 * 60 * 1000;  // 5 min
 const MEMORY_EXTRACTION_CAP = 30;             // cap por /admin ler
 
+/**
+ * Stopwords PT comuns — usadas pelo getChatTopics() pra extrair
+ * palavras-chave sem poluir o tema com "de, a, o, que...".
+ * Set lookup é O(1).
+ */
+const STOPWORDS_PT = new Set<string>([
+  'de', 'a', 'o', 'que', 'e', 'do', 'da', 'em', 'um', 'para', 'com', 'não',
+  'uma', 'os', 'no', 'se', 'na', 'por', 'mais', 'as', 'dos', 'como', 'mas',
+  'ao', 'ele', 'das', 'à', 'isso', 'este', 'esses', 'aquele', 'ela', 'entre',
+  'era', 'depois', 'sem', 'desde', 'mesmo', 'até', 'outro', 'quando', 'nem',
+  'só', 'pela', 'pelas', 'seu', 'sua', 'seus', 'suas', 'eles', 'elas',
+  'vocês', 'nós', 'também', 'já', 'ainda', 'sobre', 'tudo', 'nada',
+  'aqui', 'ali', 'lá', 'hoje', 'ontem', 'agora', 'então', 'porque', 'pra',
+  'pro', 'nas', 'nos', 'aos', 'pelo', 'pelos', 'num', 'numa', 'nosso',
+  'nossa', 'você', 'tua', 'teu', 'meu', 'minha', 'meus', 'minhas', 'tem',
+  'têm', 'tinha', 'ter', 'é', 'são', 'foi', 'foram', 'ser', 'estar', 'tá',
+  'to', 'ta', 'mano', 'cara', 'tipo', 'né', 'tô', 'tá', 'oh', 'ah',
+]);
+
 // ============================================================================
 // CONTEXT
 // ============================================================================
@@ -117,6 +136,192 @@ export class Context {
   /** Quantos chats já tiveram histórico carregado. */
   historyLoadedCount(): number {
     return this.chatsWithHistoryLoaded.size;
+  }
+
+  /**
+   * Pega mensagens recentes de MÚLTIPLOS chats ativos — visão ampla.
+   *
+   * Usado pelo BotProfile pra auto-reflexão multi-chat: em vez de olhar só
+   * pro chat atual, pega últimas N mensagens dos chats mais ativos e devolve
+   * tudo marcando de qual chat cada mensagem veio.
+   *
+   * - Inclui o chat atual no topo (normalmente é o mais relevante).
+   * - Ordena por última atividade (mais ativos primeiro).
+   * - Se o total de OUTROS chats for < 5 msgs, complementa com mais do atual.
+   * - Resultado NÃO vem embaralhado — quem chama decide se embaralha.
+   * - Não traz imageData (pesa demais pro prompt de reflexão).
+   */
+  getRecentMultiChat(
+    currentChatId: string,
+    opts: { maxChats?: number; perChat?: number; maxMessages?: number } = {},
+  ): Array<ChatMessage & { chatId: string; chatName: string; chatType: 'group' | 'private' }> {
+    const maxChats = opts.maxChats ?? 5;
+    const perChat = opts.perChat ?? 5;
+    const maxMessages = opts.maxMessages ?? 25;
+
+    if (this.chatContexts.size === 0) return [];
+
+    // 1. Lista todos os chats ativos com pelo menos 1 msg
+    const candidates = Array.from(this.chatContexts.entries())
+      .map(([chatId, msgs]) => ({
+        chatId,
+        msgs,
+        lastActivity: msgs.length > 0 ? msgs[msgs.length - 1].timestamp : 0,
+        count: msgs.length,
+      }))
+      .filter(c => c.count > 0)
+      .sort((a, b) => {
+        if (a.chatId === currentChatId && b.chatId !== currentChatId) return -1;
+        if (b.chatId === currentChatId && a.chatId !== currentChatId) return 1;
+        return b.lastActivity - a.lastActivity;
+      })
+      .slice(0, maxChats);
+
+    // 2. Pra cada chat, pega últimas `perChat` msgs (sem imageData)
+    const tagged: Array<ChatMessage & { chatId: string; chatName: string; chatType: 'group' | 'private' }> = [];
+    let currentChatMsgCount = 0;
+    let otherChatsMsgCount = 0;
+
+    for (const c of candidates) {
+      const slice = c.msgs.slice(-perChat);
+      const chatType: 'group' | 'private' = c.chatId.endsWith('@g.us') ? 'group' : 'private';
+      const chatName = this.resolveChatName(c.chatId, chatType);
+      for (const m of slice) {
+        tagged.push({
+          role: m.role,
+          content: m.content,
+          sender: m.sender,
+          timestamp: m.timestamp,
+          chatId: c.chatId,
+          chatName,
+          chatType,
+        });
+        if (c.chatId === currentChatId) currentChatMsgCount++;
+        else otherChatsMsgCount++;
+      }
+    }
+
+    // 3. Se outros chats têm < 5 msgs, complementa com mais do chat atual
+    if (otherChatsMsgCount < 5 && currentChatMsgCount > 0) {
+      const currentMsgs = this.chatContexts.get(currentChatId);
+      if (currentMsgs && currentMsgs.length > 0) {
+        const extraNeeded = Math.min(perChat, 5 - otherChatsMsgCount);
+        const alreadyIn = new Set(tagged.filter(t => t.chatId === currentChatId).map(t => t.timestamp));
+        const extras = currentMsgs.filter(m => !alreadyIn.has(m.timestamp)).slice(-extraNeeded);
+        const chatType: 'group' | 'private' = currentChatId.endsWith('@g.us') ? 'group' : 'private';
+        const chatName = this.resolveChatName(currentChatId, chatType);
+        for (const m of extras) {
+          tagged.push({
+            role: m.role,
+            content: m.content,
+            sender: m.sender,
+            timestamp: m.timestamp,
+            chatId: currentChatId,
+            chatName,
+            chatType,
+          });
+        }
+      }
+    }
+
+    // 4. Limita ao máximo total (mantém os mais recentes se passar)
+    if (tagged.length > maxMessages) {
+      tagged.sort((a, b) => a.timestamp - b.timestamp);
+      tagged.splice(0, tagged.length - maxMessages);
+    }
+
+    return tagged;
+  }
+
+  /**
+   * Resolve o nome "bonito" do chat — usa ProfileBook se tiver perfil,
+   * senão cai pros últimos 4 dígitos do chatId (antes do @).
+   */
+  private resolveChatName(chatId: string, _chatType: 'group' | 'private'): string {
+    try {
+      const profile = this.app.profileBook?.get(chatId);
+      if (profile && profile.name && profile.name !== chatId) {
+        return profile.name;
+      }
+    } catch { /* ignora */ }
+    const base = chatId.split('@')[0] || chatId;
+    if (base.length > 4) return base.slice(-4);
+    return base || 'chat';
+  }
+
+  /**
+   * Retorna um resumo dos temas sendo discutidos em cada chat ativo.
+   * NÃO expõe conteúdo exato nem quem disse — só "tema/assunto".
+   * Usado pro bot ter noção do que está acontecendo globalmente.
+   *
+   * Implementação heurística (sem chamar IA — não custa requests):
+   *  1. Lista todos os chats ativos (com pelo menos 3 msgs)
+   *  2. Pra cada um, pega últimas 10 msgs
+   *  3. Extrai palavras-chave (remove stopwords PT, conta frequência)
+   *  4. Top 3 palavras = "tema"
+   *  5. intensity = quantas msgs nos últimos 10min
+   *  6. lastActivity = timestamp da última msg
+   *  7. Ordena por lastActivity desc, limita a maxChats
+   */
+  getChatTopics(maxChats = 6): Array<{
+    chatId: string;
+    chatName: string;
+    topic: string;
+    intensity: number;
+    lastActivity: number;
+  }> {
+    const now = Date.now();
+    const tenMinAgo = now - 10 * 60 * 1000;
+
+    const results: Array<{ chatId: string; chatName: string; topic: string; intensity: number; lastActivity: number }> = [];
+
+    for (const chatId of this.chatContexts.keys()) {
+      const msgs = this.chatContexts.get(chatId);
+      if (!msgs || msgs.length < 3) continue;
+
+      const last10 = msgs.slice(-10);
+      const fullText = last10.map(m => m.content || '').join(' ').toLowerCase();
+
+      // Tokeniza (separa por não-palavra — inclui acentos PT)
+      const tokens = fullText.split(/[^a-zà-ÿ0-9]+/i).filter(t => {
+        if (!t || t.length < 3) return false;
+        if (STOPWORDS_PT.has(t)) return false;
+        if (/^\d+$/.test(t)) return false;
+        return true;
+      });
+
+      const freq = new Map<string, number>();
+      for (const tok of tokens) {
+        freq.set(tok, (freq.get(tok) || 0) + 1);
+      }
+
+      const top = Array.from(freq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([word]) => word);
+
+      const topic = top.length > 0 ? top.join(', ') : 'conversa geral';
+      const intensity = last10.filter(m => m.timestamp >= tenMinAgo).length;
+      const lastActivity = last10[last10.length - 1].timestamp;
+      const chatType: 'group' | 'private' = chatId.endsWith('@g.us') ? 'group' : 'private';
+      const chatName = this.resolveChatName(chatId, chatType);
+
+      results.push({ chatId, chatName, topic, intensity, lastActivity });
+    }
+
+    results.sort((a, b) => b.lastActivity - a.lastActivity);
+    return results.slice(0, maxChats);
+  }
+
+  /**
+   * Converte intensidade numérica em label (alta/média/baixa).
+   * 0-2 = baixa, 3-6 = média, 7+ = alta.
+   * Helper estático pra quem consome (MarcioBrain) usar no prompt.
+   */
+  static intensityLabel(intensity: number): 'baixa' | 'média' | 'alta' {
+    if (intensity >= 7) return 'alta';
+    if (intensity >= 3) return 'média';
+    return 'baixa';
   }
 
   // ===========================================================================

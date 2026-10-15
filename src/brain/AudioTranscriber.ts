@@ -27,11 +27,27 @@
 import type { MarcioApp } from '../MarcioApp';
 import type { Message } from 'whatsapp-web.js';
 
+/**
+ * Modo de transcrição de áudio (configurável pelo painel):
+ *  - 'always'     → Modo A: transcreve TODO áudio recebido, mesmo se o bot não vai responder.
+ *                   Custo alto de IA mas experiência ideal (todos os áudios aparecem no painel).
+ *  - 'balanced'   → Modo B (PADRÃO): só transcreve se entrosão > 0 OU se é PV (mensagem direta).
+ *                   Custo médio — cobre a maioria dos casos em que a transcrição é útil.
+ *  - 'background'  → Modo C: transcreve em background (não bloqueia a decisão de resposta).
+ *                   Áudios aparecem no painel depois, sem delay na resposta do bot.
+ */
+export type AudioTranscriptionMode = 'always' | 'balanced' | 'background';
+
 /** Config de transcrição de áudio (lida do ai-config.json). */
 export interface AudioTranscriptionConfig {
   enabled: boolean;
   primaryModel: string;
   fallbackModel: string;
+  /**
+   * Modo de transcrição (ver AudioTranscriptionMode).
+   * Default: 'balanced'.
+   */
+  mode: AudioTranscriptionMode;
 }
 
 /** Defaults se o ai-config.json não tem a seção audioTranscription. */
@@ -39,7 +55,16 @@ export const DEFAULT_AUDIO_CONFIG: AudioTranscriptionConfig = {
   enabled: true,
   primaryModel: 'gemini-3.5-flash-lite',
   fallbackModel: 'gemini-3.1-flash-lite',
+  mode: 'balanced',
 };
+
+/** Valida se uma string é um modo válido; retorna 'balanced' se não for. */
+function normalizeMode(value: unknown): AudioTranscriptionMode {
+  if (value === 'always' || value === 'balanced' || value === 'background') {
+    return value;
+  }
+  return 'balanced';
+}
 
 export class AudioTranscriber {
   private app: MarcioApp;
@@ -77,6 +102,8 @@ export class AudioTranscriber {
           fallbackModel: typeof raw.fallbackModel === 'string' && raw.fallbackModel.trim()
             ? raw.fallbackModel.trim()
             : DEFAULT_AUDIO_CONFIG.fallbackModel,
+          // mode validado — se for string inválida, cai pra 'balanced' (default).
+          mode: normalizeMode(raw.mode),
         };
         this.configCacheTime = now;
         return this.configCache;

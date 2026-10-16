@@ -34,7 +34,7 @@ const STICKER_WAR_MIN_STICKERS = 3;
 const STICKER_WAR_BOT_CHANCE = 0.50;
 const STICKER_WAR_BOT_COOLDOWN_MS = 5 * 1000;
 
-const VAULT_MAX_SIZE = 200;
+const VAULT_MAX_SIZE = 500;
 
 // ============================================================================
 // TIPOS
@@ -255,15 +255,30 @@ export class StickerVault {
         .filter(f => /\.(webp|png|jpg)$/.test(f))
         .sort();  // ordena por nome (timestamp crescente)
       if (files.length > VAULT_MAX_SIZE) {
-        const toRemove = files.slice(0, files.length - VAULT_MAX_SIZE);
         const meta = this.loadMeta();
-        let metaChanged = false;
-        for (const f of toRemove) {
-          try { fs.unlinkSync(path.join(this.vaultDir, f)); } catch { /* ignora */ }
-          if (meta[f]) { delete meta[f]; metaChanged = true; }
+
+        // BUG FIX: antes removia as mais antigas sem checar se tinham nome ou eram favoritas.
+        // Agora só remove figurinhas que NÃO têm nome E NÃO são favoritas.
+        // Se todas têm nome/favoritas, o vault cresce além do limite (preferível a perder dados).
+        const candidates = files.filter(f => {
+          const m = meta[f];
+          return !m?.name && !m?.favorite;
+        });
+
+        const excess = files.length - VAULT_MAX_SIZE;
+        const toRemove = candidates.slice(0, Math.min(excess, candidates.length));
+
+        if (toRemove.length === 0) {
+          this.app.debug('VAULT', `${files.length} figurinhas (acima do limite ${VAULT_MAX_SIZE}) mas todas nomeadas/favoritas — não removendo nenhuma`);
+        } else {
+          let metaChanged = false;
+          for (const f of toRemove) {
+            try { fs.unlinkSync(path.join(this.vaultDir, f)); } catch { /* ignora */ }
+            if (meta[f]) { delete meta[f]; metaChanged = true; }
+          }
+          if (metaChanged) this.saveMeta(meta);
+          this.app.debug('VAULT', `limpeza: removeu ${toRemove.length} figurinha(s) antiga(s) sem nome (preservou nomeadas/favoritas)`);
         }
-        if (metaChanged) this.saveMeta(meta);
-        this.app.debug('VAULT', `limpeza: removeu ${toRemove.length} figurinha(s) antiga(s)`);
       }
       return { filename, isDuplicate: false };
     } catch (e) {
@@ -463,9 +478,13 @@ export class StickerVault {
         senderName = contact.pushname || contact.name || contact.shortName || 'Alguém';
       } catch { /* ignora */ }
 
+      // Pega as configurações de figurinha (joinWaves, joinWars)
+      const stickerCfg = this.app.brain?.getAIConfig?.()?.stickerBehavior;
+
       // Verifica onda (2+ pessoas mandando a mesma figurinha)
+      // Só se joinWaves=true (default). Permite desativar via painel.
       const wave = this.registerAndCheckWave(chatId, media.data, senderName);
-      if (wave.joinWave && wave.hash) {
+      if (wave.joinWave && wave.hash && stickerCfg?.joinWaves !== false) {
         const filename = this.findStickerByHash(wave.hash);
         if (filename) {
           const stickerPath = path.join(this.vaultDir, filename);
@@ -478,13 +497,15 @@ export class StickerVault {
             this.app.debug('WAVE', `erro ao entrar na onda: ${(e as Error).message}`);
           }
         }
+      } else if (wave.joinWave && !stickerCfg?.joinWaves) {
+        this.app.debug('WAVE', `onda detectada (${wave.count} pessoas) mas joinWaves=false — não entrando`);
       }
 
       // Verifica guerra (3+ figurinhas em 30s, mesmo diferentes)
-      // Calcula o hash da figurinha atual pra passar pro detector
+      // Só se joinWars=true (default). Permite desativar via painel.
       const currentHash = this.hashMediaData(media.data);
       const war = this.registerAndCheckWar(chatId, currentHash);
-      if (war.joinWar) {
+      if (war.joinWar && stickerCfg?.joinWars !== false) {
         // Se a maioria das figurinhas na guerra é a mesma (cultura Twitter de
         // repetir), o bot responde com a mesma. Se são diferentes, improvisa
         // (favorita ou aleatória).
@@ -518,6 +539,8 @@ export class StickerVault {
             this.app.debug('WAR', `erro ao entrar na guerra: ${(e as Error).message}`);
           }
         }
+      } else if (war.joinWar && !stickerCfg?.joinWars) {
+        this.app.debug('WAR', `guerra detectada mas joinWars=false — não entrando`);
       }
     } catch (e) {
       this.app.debug('VAULT', `erro ao baixar figurinha: ${(e as Error).message}`);

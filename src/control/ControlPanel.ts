@@ -1832,6 +1832,16 @@ export class ControlPanel {
           if (body?.selfAwarenessModel !== undefined) {
             next.selfAwarenessModel = body.selfAwarenessModel || null;
           }
+          // === Comportamento de figurinha (ondas, guerras, auto-nomear) ===
+          if (body?.stickerBehavior && typeof body.stickerBehavior === 'object') {
+            const sb = body.stickerBehavior;
+            const current = existing.stickerBehavior || {};
+            next.stickerBehavior = {
+              joinWaves: typeof sb.joinWaves === 'boolean' ? sb.joinWaves : (current.joinWaves !== false),
+              joinWars: typeof sb.joinWars === 'boolean' ? sb.joinWars : (current.joinWars !== false),
+              autoNameStickers: typeof sb.autoNameStickers === 'boolean' ? sb.autoNameStickers : (current.autoNameStickers !== false),
+            };
+          }
           fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf8');
           // Invalida cache do Brain — próxima chamada de getAIConfig() re-lê.
           this.app.brain.aiConfigCacheTime = 0;

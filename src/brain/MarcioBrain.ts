@@ -248,6 +248,15 @@ interface RuntimeAIConfig {
   stickerCooldownSec?: number;
   /** Modelo de IA dedicado pra auto-reflexão (self-awareness). Se null, usa o modelo principal. */
   selfAwarenessModel?: string | null;
+  /** Configurações de figurinha (guerra, onda, resposta automática). */
+  stickerBehavior?: {
+    /** Se true, bot entra em ondas de figurinha (2+ pessoas mandando a mesma). Default: true. */
+    joinWaves: boolean;
+    /** Se true, bot entra em guerras de figurinha (3+ figurinhas em 30s). Default: true. */
+    joinWars: boolean;
+    /** Se true, bot pergunta nome de figurinha sem nome automaticamente. Default: true. */
+    autoNameStickers: boolean;
+  };
 }
 
 interface GeminiResult {
@@ -283,6 +292,14 @@ export class MarcioBrain {
 
   /** chatId → timestamp da última resposta. Também guarda keys especiais como `_last_sticker_time_<chatId>` e `_ai_offline_log`. */
   lastAutoResponse = new Map<string, number>();
+
+  /**
+   * Map: msgId do bot → { stickerFilename, suggestedName, chatId, timestamp }
+   * Quando o bot pergunta "essa figurinha é sobre X?", registra aqui.
+   * Quando o usuário responde citando essa msg do bot, sabemos qual figurinha nomear.
+   * TTL: 5 min (se o usuário não respondeu, esquece).
+   */
+  private pendingStickerNames = new Map<string, { stickerFilename: string; suggestedName: string; chatId: string; timestamp: number }>();
 
   /** Chats onde a IA foi desativada via /ia off. */
   aiDisabledChats = new Set<string>();
@@ -372,6 +389,11 @@ export class MarcioBrain {
             audioTranscription,
             stickerCooldownSec: typeof parsed.stickerCooldownSec === 'number' ? parsed.stickerCooldownSec : 60,
             selfAwarenessModel: parsed.selfAwarenessModel || null,
+            stickerBehavior: {
+              joinWaves: parsed.stickerBehavior?.joinWaves !== false,  // default true
+              joinWars: parsed.stickerBehavior?.joinWars !== false,    // default true
+              autoNameStickers: parsed.stickerBehavior?.autoNameStickers !== false,  // default true
+            },
           };
           this.aiConfigCacheTime = now;
           return this.aiConfigCache;
@@ -392,6 +414,11 @@ export class MarcioBrain {
       temperature: AI_DEFAULTS.temperature,
       provider: null,
       audioTranscription: undefined,  // AudioTranscriber vai usar defaults
+      stickerBehavior: {
+        joinWaves: true,
+        joinWars: true,
+        autoNameStickers: true,
+      },
     };
     this.aiConfigCacheTime = now;
     return this.aiConfigCache;
@@ -1905,6 +1932,27 @@ export class MarcioBrain {
     // Não tem body — mas talvez a gente queira transcrever e responder.
     const isAudio = this.app.audioTranscriber?.isAudioMessage(msg) ?? false;
 
+    // === DETECTA RESPOSTA À PERGUNTA DE NOMEAR FIGURINHA (ANTES de tudo) ===
+    // RODA ANTES do filtro de body curto e do check de isDirect.
+    // Motivo: em PV, isDirect=true sempre (bug original fazia o bloco nunca rodar).
+    // Além disso, respostas curtas ("sim", "👍", "y") eram filtradas pelo body < 3.
+    // Agora roda primeiro: se a msg cita uma pergunta do bot sobre figurinha, processa.
+    if (msg.hasQuotedMsg && this.pendingStickerNames.size > 0) {
+      try {
+        const quoted = await msg.getQuotedMessage();
+        if (quoted.fromMe) {
+          const quotedMsgId = quoted.id?._serialized;
+          if (quotedMsgId && this.pendingStickerNames.has(quotedMsgId)) {
+            const pending = this.pendingStickerNames.get(quotedMsgId)!;
+            this.pendingStickerNames.delete(quotedMsgId);
+            this.app.debug('STICKER-AUTO', `resposta detectada pra pergunta sobre figurinha ${pending.stickerFilename}`);
+            await this._handleStickerNameReply(msg, quoted, pending, chatId);
+            return;  // já resolveu — não processa mais nada dessa msg
+          }
+        }
+      } catch { /* ignora */ }
+    }
+
     // === Detecção de menção ===
     let isDirect = false;
     let isMention = false;       // chamado ativo — sempre responde
@@ -2048,6 +2096,50 @@ export class MarcioBrain {
         } catch (e) {
           this.app.debug('AI-STICKER', `erro ao identificar figurinha: ${(e as Error).message}`);
         }
+      }
+    }
+
+    // === FIGURINHA SEM NOME: pergunta automaticamente o que é ===
+    // Se a figurinha não tem nome e o bot não perguntou recentemente (cooldown 60s),
+    // manda a figurinha pro Gemini (multimodal) pra descrever, depois pergunta no chat.
+    // IMPORTANTE: figurinhas sem nome NÃO disparam a IA completa (desperdício de tokens).
+    // Só perguntam sobre o nome e retornam.
+    // Pode ser desativado via painel (stickerBehavior.autoNameStickers=false).
+    const stickerCfgAuto = this.getAIConfig()?.stickerBehavior;
+    if (isSticker && this.app.stickers && stickerCfgAuto?.autoNameStickers !== false) {
+      try {
+        const identified = await this.app.stickers.identify(msg);
+        if (identified && !identified.name && identified.filename) {
+          // Cooldown pra não perguntar toda hora
+          const lastQuestion = this.lastAutoResponse.get(`_sticker_question_${chatId}`) || 0;
+          if (Date.now() - lastQuestion > 60000) {  // 60s
+            const description = await this.describeStickerWithAI(msg);
+            if (description) {
+              // Pergunta no chat (sem chamar IA de novo — resposta direta)
+              const question = `essa figurinha é sobre "${description}"?`;
+              const sentMsg = await this.app.whatsapp.client.sendMessage(chatId, question);
+              const botMsgId = (sentMsg as any)?.id?._serialized;
+              if (botMsgId) {
+                this.pendingStickerNames.set(botMsgId, {
+                  stickerFilename: identified.filename,
+                  suggestedName: description,
+                  chatId,
+                  timestamp: Date.now(),
+                });
+                this.lastAutoResponse.set(`_sticker_question_${chatId}`, Date.now());
+                this.app.debug('STICKER-AUTO', `perguntou sobre figurinha ${identified.filename}: "${description}"`);
+              }
+              // Limpa TTL (5 min)
+              this._cleanupPendingStickerNames();
+              return;  // não processa mais nada dessa msg
+            }
+          }
+          // Figurinha sem nome mas em cooldown ou IA falhou — não chama IA completa
+          this.app.debug('STICKER-AUTO', `figurinha sem nome ${identified.filename} — cooldown ou IA falhou, não processando mais`);
+          return;
+        }
+      } catch (e) {
+        this.app.debug('STICKER-AUTO', `erro: ${(e as Error).message}`);
       }
     }
 
@@ -2572,5 +2664,179 @@ export class MarcioBrain {
     }
 
     return { ok: true, text: transcription };
+  }
+
+  // ===========================================================================
+  // AUTO-NOMEAÇÃO DE FIGURINHAS — fluxo natural via conversa
+  // ===========================================================================
+
+  /**
+   * Remove perguntas pendentes velhas (TTL 5 min).
+   * Se o usuário não respondeu à pergunta do bot "essa figurinha é sobre X?"
+   * dentro de 5 minutos, a pergunta é esquecida (não nomeia mais nada se
+   * ele responder tarde demais).
+   */
+  private _cleanupPendingStickerNames(): void {
+    const now = Date.now();
+    const TTL = 5 * 60 * 1000;  // 5 min
+    for (const [k, v] of this.pendingStickerNames) {
+      if (now - v.timestamp > TTL) this.pendingStickerNames.delete(k);
+    }
+  }
+
+  /**
+   * Usa IA multimodal pra descrever uma figurinha.
+   * Retorna uma descrição curta (2-5 palavras) que pode ser usada como nome.
+   * Ex: "gato rindo", "pessoa confusa", "meme do falido".
+   */
+  private async describeStickerWithAI(msg: Message): Promise<string | null> {
+    try {
+      const media = await msg.downloadMedia();
+      if (!media || !media.data) return null;
+
+      // Limite de 2MB — figurinhas muito grandes podem falhar no Gemini ou demorar.
+      // (figurinhas típicas do WhatsApp têm 10-100KB, então 2MB é folgado)
+      const approxBytes = media.data.length * 0.75;
+      if (approxBytes > 2 * 1024 * 1024) {
+        this.app.debug('STICKER-AI', `figurinha muito grande (${Math.round(approxBytes / 1024)}KB) — pulando descrição automática`);
+        return null;
+      }
+
+      const aiConfig = this.getAIConfig();
+      const provider = aiConfig.provider || (aiConfig.apiUrl.includes('googleapis') ? 'gemini' : 'openai');
+
+      const systemPrompt = [
+        'Você é um bot de WhatsApp. Alguém mandou uma figurinha.',
+        'Descreva o que a figurinha representa em 2-5 palavras (será usado como nome).',
+        'Regras:',
+        '- Use português brasileiro',
+        '- Seja específico mas curto (ex: "gato rindo", "pessoa confusa", "meme do falido")',
+        '- NÃO use aspas nem pontuação final',
+        '- Se tem texto na figurinha, pode incluir (ex: "eita meme")',
+        '- Se é um personagem famoso, use o nome (ex: "ana maria braga", "chaves")',
+        '- Responda SÓ com a descrição, sem comentários',
+      ].join('\n');
+
+      const userPrompt = 'Descreva essa figurinha em 2-5 palavras:';
+
+      if (provider === 'gemini') {
+        const systemInstruction = { parts: [{ text: systemPrompt }] };
+        const contents = [{
+          role: 'user',
+          parts: [
+            { text: userPrompt },
+            { inlineData: { mimeType: media.mimetype || 'image/webp', data: media.data } },
+          ],
+        }];
+
+        const allModels = this.getAllFallbackModels();
+        for (const modelName of allModels) {
+          try {
+            const result = await this.callGemini(modelName, contents, systemInstruction, aiConfig);
+            const cleaned = this.cleanResponse(result.content).trim();
+            // Limita a 5 palavras
+            const words = cleaned.split(/\s+/).slice(0, 5).join(' ');
+            // Remove aspas se tiver
+            return words.replace(/^["']|["']$/g, '').toLowerCase();
+          } catch (err) {
+            const status = (err as any).status;
+            if (status === 429 || status === 503) continue;
+            throw err;
+          }
+        }
+        return null;
+      } else {
+        // OpenAI-compatible: manda image_url com data URL
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (aiConfig.apiKey) headers['Authorization'] = `Bearer ${aiConfig.apiKey}`;
+        const dataUrl = `data:${media.mimetype || 'image/webp'};base64,${media.data}`;
+        const messages = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: [
+            { type: 'text', text: userPrompt },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ]},
+        ];
+        const response = await fetch(aiConfig.apiUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ model: aiConfig.model, messages, max_tokens: 50, temperature: 0.3 }),
+        });
+        if (!response.ok) return null;
+        const data = await response.json() as any;
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) return null;
+        const cleaned = content.trim();
+        const words = cleaned.split(/\s+/).slice(0, 5).join(' ');
+        return words.replace(/^["']|["']$/g, '').toLowerCase();
+      }
+    } catch (e) {
+      this.app.debug('STICKER-AI', `erro ao descrever: ${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Interpreta a resposta do usuário à pergunta "essa figurinha é sobre X?"
+   * e nomeia a figurinha no StickerVault.
+   *
+   * Padrões aceitos:
+   * - Confirmação: "sim", "isso", "exato", "certo", "é isso", "isso mesmo", "exato", "y", "yes", "👍"
+   * - Negação simples: "não", "errado", "não é" → pede pra digitar o nome
+   * - Negação + correção: "não, é X", "na verdade é Y", "errado, é Z" → usa X/Y/Z
+   * - Apenas o nome: se não bate com nenhum padrão, assume que é o nome
+   */
+  private async _handleStickerNameReply(
+    userMsg: Message,
+    botQuotedMsg: Message,
+    pending: { stickerFilename: string; suggestedName: string; chatId: string; timestamp: number },
+    chatId: string,
+  ): Promise<void> {
+    const text = (userMsg.body || '').trim().toLowerCase();
+    if (!text) return;
+
+    try {
+      let finalName: string | null = null;
+      let responseText = '';
+
+      // Padrões de confirmação
+      if (/^(sim|isso|exato|certo|é isso|isso mesmo|isso ai|isso aí|exatamente|correto|y|yes|👍|✅|confirmo)/.test(text)) {
+        finalName = pending.suggestedName;
+        responseText = `boaa, salvei como "${finalName}" 📌`;
+      }
+      // Padrões de negação + correção: "não, é X" / "na verdade é Y" / "errado, é Z"
+      else {
+        const correctionMatch = text.match(/^(?:n[aã]o|errado|nao é|n é|na verdade|nem|ne)(?:[,.\s]+(?:é|e|seria|eh|eh o))?[\s,]*([a-zà-ÿ0-9].+)$/);
+        if (correctionMatch) {
+          finalName = correctionMatch[1].trim();
+          responseText = `entendi, vou salvar como "${finalName}" 📌`;
+        }
+        // Negação simples
+        else if (/^(n[aã]o|errado|nao|n é|nem|ne)\b/.test(text)) {
+          responseText = `blz, qual seria o nome certo então? manda aí (/fig nome ou só fala)`;
+          // Re-abre a pergunta (não nomeia ainda)
+        }
+        // Se não bate com nada, assume que o usuário digitou o nome direto
+        else if (text.length >= 2 && text.length <= 50) {
+          finalName = text;
+          responseText = `salvei como "${finalName}" 📌`;
+        }
+      }
+
+      // Nomeia a figurinha
+      if (finalName && this.app.stickers) {
+        this.app.stickers.setMeta(pending.stickerFilename, { name: finalName });
+        this.app.debug('STICKER-AUTO', `figurinha ${pending.stickerFilename} nomeada: "${finalName}"`);
+        this.app.log('STICKER', `Figurinha nomeada automaticamente: "${finalName}" (sugerido: "${pending.suggestedName}")`);
+      }
+
+      // Responde no chat
+      if (responseText) {
+        const quotedId = userMsg.id?._serialized;
+        await this.app.whatsapp.client.sendMessage(chatId, responseText, { quotedMessageId: quotedId });
+      }
+    } catch (e) {
+      this.app.debug('STICKER-AUTO', `erro ao processar resposta: ${(e as Error).message}`);
+    }
   }
 }

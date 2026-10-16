@@ -3096,6 +3096,26 @@
                   <input type="number" id="aiStickerCooldown" placeholder="60" min="0" max="3600">
                   <span class="muted small">0 = sem cooldown. Default: 60s.</span>
                 </div>
+
+                <!-- Comportamento de figurinha -->
+                <div class="form-row" style="margin-top:12px;">
+                  <label>🎭 Comportamento de Figurinhas</label>
+                  <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+                      <input type="checkbox" id="stickerJoinWaves" style="cursor:pointer;">
+                      <span>Entrar em <b>ondas</b> (2+ pessoas mandando a mesma figurinha)</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+                      <input type="checkbox" id="stickerJoinWars" style="cursor:pointer;">
+                      <span>Entrar em <b>guerras</b> (3+ figurinhas em 30s)</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+                      <input type="checkbox" id="stickerAutoName" style="cursor:pointer;">
+                      <span><b>Auto-nomear</b> figurinhas (pergunta no chat o que é)</span>
+                    </label>
+                  </div>
+                  <span class="muted small">Desmarque pra desativar cada comportamento individualmente.</span>
+                </div>
               </div>
 
               <!-- Last.fm Config -->
@@ -5646,6 +5666,11 @@
         const radioEl = document.querySelector(`input[name="audioMode"][value="${audioMode}"]`);
         if (radioEl) (radioEl).checked = true;
         $('#aiStickerCooldown').value = r.stickerCooldownSec != null ? r.stickerCooldownSec : 60;
+        // Carrega toggles de comportamento de figurinha
+        const sb = r.stickerBehavior || {};
+        $('#stickerJoinWaves').checked = sb.joinWaves !== false;
+        $('#stickerJoinWars').checked = sb.joinWars !== false;
+        $('#stickerAutoName').checked = sb.autoNameStickers !== false;
         $('#aiConfigStatus').textContent = 'config carregada ✓';
       } catch (e) {
         $('#aiConfigStatus').textContent = '❌ ' + e.message + ' — endpoint /api/ai-config ainda não existe';
@@ -6211,6 +6236,11 @@
           mode: getSelectedAudioMode(),
         },
         stickerCooldownSec: parseInt($('#aiStickerCooldown').value, 10) || 0,
+        stickerBehavior: {
+          joinWaves: $('#stickerJoinWaves').checked,
+          joinWars: $('#stickerJoinWars').checked,
+          autoNameStickers: $('#stickerAutoName').checked,
+        },
       };
       try {
         await apiPost('/api/ai-config', cfg);

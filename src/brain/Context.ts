@@ -384,7 +384,7 @@ export class Context {
       }
     }
 
-    // --- 4. Captura imagem (se < 500KB) ---
+    // --- 4. Captura imagem (se < 2MB) ---
     let imageData: string | null = null;
     let imageMimetype: string | null = null;
     if (msg.hasMedia && msg.type === 'image') {
@@ -392,12 +392,14 @@ export class Context {
         const media = await msg.downloadMedia();
         if (media && media.data) {
           const approxBytes = media.data.length * 0.75;
-          if (approxBytes < 500 * 1024) {
+          // Limite de 2MB — imagens maiores podem falhar no Gemini ou demorar.
+          // (antes era 500KB, muito restritivo — muita foto legítima era ignorada)
+          if (approxBytes < 2 * 1024 * 1024) {
             imageData = media.data;
             imageMimetype = media.mimetype;
             this.app.debug('AI-CTX', `imagem capturada pro contexto (${Math.round(approxBytes / 1024)}KB, ${media.mimetype})`);
           } else {
-            this.app.debug('AI-CTX', `imagem muito grande (${Math.round(approxBytes / 1024)}KB), ignorando`);
+            this.app.debug('AI-CTX', `imagem muito grande (${Math.round(approxBytes / 1024)}KB > 2MB), ignorando`);
           }
         }
       } catch (e) {

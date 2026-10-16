@@ -529,6 +529,293 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.3-9",
+      "date": "2025-10-16",
+      "title": "🚀 Pre-release 1.0.3 — consolidado de todas as betas (1.0.3-1 a 1.0.3-9)",
+      "sections": [
+        {
+          "icon": "🧠",
+          "title": "Autoconsciência do Bot (BotProfile)",
+          "items": [
+            "Sistema de self-awareness: bot reflete sobre própria identidade a cada 30 interações",
+            "Evolui convicções, traços, gostos e desgostos ao longo do tempo",
+            "Reflexão multi-chat: usa conversas de TODOS os chats ativos (não só do atual)",
+            "Contexto global entre chats: sabe temas de outros grupos pra associar referências (sem fofocar)",
+            "Identidade injetada no prompt (bot age com base no que 'acredita')",
+            "Painel 'Mente do Bot' redesenhado com tabs e glassmorphism",
+            "Converse com o Pensamento: chat pra falar direto com a mente do bot (injeções influenciam respostas)",
+            "Auditoria total: adicionar, editar, remover convicções/traços/gostos/desgostos",
+            "Botão de forçar auto-reflexão imediata",
+            "IA dedicada pra auto-reflexão (selfAwarenessModel configurável)",
+            "Suporta Gemini 2.5 Flash, 3 Flash, 2.5 Pro, 3.1 Flash Lite"
+          ]
+        },
+        {
+          "icon": "🔮",
+          "title": "Leitura de Tarô",
+          "items": [
+            "Baralho completo de 78 cartas (22 Arcanos Maiores + 56 Menores)",
+            "Cada carta tem significado upright + reversed (invertida)",
+            "3 tipos de tiragem: single (1 carta), passado/presente/futuro (3), celta (10)",
+            "IA interpreta as cartas com base na pergunta/contexto (místico mas honesto)",
+            "Usa identidade real do bot (não vira 'outro leitor de tarô')",
+            "Marcador [TARO: tipo] processado pelo sistema",
+            "Comando !taro [single|3|celtic] pra tiragem rápida sem IA",
+            "Reforço anti-recusa: bot nunca diz 'não sei fazer tarô'",
+            "Regra: não inventar carta na primeira resposta (só marcador)"
+          ]
+        },
+        {
+          "icon": "🎭",
+          "title": "Auto-nomeação de Figurinhas",
+          "items": [
+            "Figurinha sem nome chega → bot 'vê' (multimodal) e pergunta no chat",
+            "IA de visão gera descrição curta (2-5 palavras) pra sugerir nome",
+            "Responda confirmando ('sim', 'isso', '👍') pra salvar com nome sugerido",
+            "Responda corrigindo ('não, é X') pra salvar com nome correto",
+            "Responda negando ('não') pra o bot pedir o nome certo",
+            "Cooldown de 60s entre perguntas (não enche o chat)",
+            "TTL de 5 min: se não responder, pergunta expira",
+            "Funciona em PV e grupos (cita a msg do bot pra responder)",
+            "Limite de 2MB pra figurinha (evita timeout no Gemini)",
+            "Vault aumentado pra 500 figurinhas (era 200)",
+            "GC protege figurinhas nomeadas/favoritas (não remove as importantes)",
+            "/fig nome continua funcionando como fallback manual"
+          ]
+        },
+        {
+          "icon": "🎵",
+          "title": "Last.fm Collage",
+          "items": [
+            "Comando !last gera colagem de álbuns mais ouvidos (grid 2x2 a 3x3)",
+            "IA pode pedir colagem em linguagem natural (ex: 'faz minha colagem')",
+            "Suporte a períodos: 7day, 1month, 3month, 6month, 12month, overall",
+            "Composição de imagem com jimp (sem dependência externa)",
+            "Configuração de API key no painel de controle",
+            "Erros do Last.fm explicam o motivo (sem scrobble, usuário não existe, API key inválida)",
+            "IA sempre consulta memórias antes de pedir usuário do Last.fm",
+            "Regra crítica: SÓ usa collage em pedido explícito (não em conversa normal)"
+          ]
+        },
+        {
+          "icon": "🤖",
+          "title": "IA e Contexto",
+          "items": [
+            "Contexto aumentado: 30 msgs (antes 20), histórico 35 (antes 25), max msg length 500 (antes 250)",
+            "Cooldown de figurinha ajustável via painel (stickerCooldownSec)",
+            "Entrosão 0 agora bloqueia TODOS os triggers (antes ainda respondia perguntas)",
+            "maxTokens configurável (até 8196)",
+            "Otimização do prompt: buildSelfAwareness reduzido de 10KB pra 5KB (menos tokens, mais rápido)",
+            "Fila de mensagens por chat: msgs não se perdem quando IA está pensando",
+            "Lock por chat: 1 chamada à IA por vez por chat (evita rate limit)",
+            "Auto-skip de msgs com >5 min na fila (contexto já mudou)",
+            "Áudios aparecem no painel mesmo quando bot não responde",
+            "Comando implícito: responder a áudio com 'transcreve' força transcrição",
+            "3 modos de transcrição: Sempre / Equilibrado / Background (selecionável no painel)",
+            "IA de visão aceita imagens até 2MB (era 500KB, muito restritivo)"
+          ]
+        },
+        {
+          "icon": "🖼️",
+          "title": "Visão Multimodal (Imagens e Figurinhas)",
+          "items": [
+            "Bot 'vê' imagens enviadas no chat (multimodal Gemini)",
+            "Limite de 2MB pra imagens no contexto (era 500KB)",
+            "describeStickerWithAI: usa visão pra descrever figurinha em 2-5 palavras",
+            "Limite de 2MB pra figurinha no describeStickerWithAI",
+            "Suporta PNG, JPEG e WEBP",
+            "Figurinha sem nome não dispara IA completa (economia de tokens)"
+          ]
+        },
+        {
+          "icon": "🩺",
+          "title": "ErrorTracker — Captura Centralizada de Erros",
+          "items": [
+            "Sistema de captura de erros com 4 níveis: info, warn, error, critical",
+            "Persistência em data/error-log.json (sobrevive reinícios)",
+            "Dedupe dentro de janela de 5 min (incrementa contador em vez de duplicar)",
+            "Captura unhandledRejection + uncaughtException global",
+            "WebSocket broadcast pra painel em tempo real",
+            "Endpoints: GET /api/errors, DELETE /api/errors, GET /api/errors/export"
+          ]
+        },
+        {
+          "icon": "📊",
+          "title": "Diagnósticos no Painel",
+          "items": [
+            "Nova seção 'Diagnósticos' no painel (dev-only via FeatureFlags)",
+            "Cards de saúde: WhatsApp conectado, IA online, memória, etc.",
+            "Lista de erros capturados em tempo real",
+            "Exportar log de erros em texto formatado",
+            "GET /api/health retorna status consolidado do app"
+          ]
+        },
+        {
+          "icon": "🔄",
+          "title": "Update Wizard",
+          "items": [
+            "Modal de atualização com barra de progresso e velocidade de download",
+            "Preview do changelog antes de atualizar",
+            "Botão 'Desejo atualizar' (não atualiza mais sem confirmação)",
+            "Toggle 'Aceitar versões beta' (filtra releases por versão com hífen)",
+            "GET/POST /api/update-settings persiste preferências"
+          ]
+        },
+        {
+          "icon": "🚪",
+          "title": "Fechar Janela Inteligente",
+          "items": [
+            "Modal de confirmação ao fechar: 'Desligar bot' ou 'Minimizar pro tray'",
+            "Evento 'close-requested' emitido do Rust (não esconde direto)",
+            "quit_app command em Rust (std::process::exit(0) no tray quit)"
+          ]
+        },
+        {
+          "icon": "🖼️",
+          "title": "Mídia no Histórico",
+          "items": [
+            "Retroactive agora registra mediaType, mediaThumbnail, stickerName, imageDescription",
+            "MessageRouter detecta tipo de mídia sincronamente (sticker/image/video/document/ptt/audio)",
+            "enrichMediaInBackground() baixa mídia e identifica nome da figurinha em background",
+            "Thumbnail limitado a 60KB base64",
+            "Badge '🎵 áudio' e outras badges de mídia no painel Conversas",
+            "Bot registra própria msg no painel mesmo sem msgId real (fallback com ID estável)",
+            "Dedupe evita duplicação quando backfill pega msg real depois"
+          ]
+        },
+        {
+          "icon": "📦",
+          "title": "Backup Nativo (ZipBundle)",
+          "items": [
+            "Extração de ZIP com crate nativo (zip = 9) — sem dependência externa",
+            "extract_zip_native() em Rust (fallback pra extract_zip com PowerShell/unzip)",
+            "Funciona em Windows, macOS e Linux sem dependências do sistema"
+          ]
+        },
+        {
+          "icon": "🚪",
+          "title": "Citação Seletiva de Mensagens",
+          "items": [
+            "Bot só cita msg quando faz sentido (grupo + trigger)",
+            "Em PV: não cita (desnecessário)",
+            "Em resposta por sorte (sem trigger): não cita (evita confusão)",
+            "Em grupo + reply/menção/nome/alias: cita a msg trigger",
+            "Fix do bug de 'bot responde msg do queue mas cita trigger nova'"
+          ]
+        },
+        {
+          "icon": "🔄",
+          "title": "Fila de Mensagens por Chat",
+          "items": [
+            "Arquitetura de 'atenção': msgs não se perdem quando IA está pensando",
+            "Fila por chatId (cada chat tem própria fila independente)",
+            "Lock por chat: 1 chamada à IA por vez por chat",
+            "Quando IA termina, drena fila (decide se responde cada uma)",
+            "Auto-skip de msgs com >5 min na fila (contexto mudou)",
+            "Evita rate limit da API e respostas desencontradas"
+          ]
+        },
+        {
+          "icon": "🏷️",
+          "title": "Renomeação do App",
+          "items": [
+            "productName mudou de 'Márcio App' para 'Marcio.App' (sem acento, sem espaço)",
+            "Elimina 100% o risco de 404 no updater (GitHub não normaliza nomes seguros)",
+            "Identifier NÃO mudou (com.marcio.app) — dados de produção preservados",
+            "Bot continua se chamando 'Márcio' (persona não mudou)",
+            "Todos os logs, títulos de janela, tray tooltip e branding atualizados"
+          ]
+        },
+        {
+          "icon": "🔧",
+          "title": "Correção Definitiva do Updater (404)",
+          "items": [
+            "Bug histórico: updater dava 404 em TODAS as releases (1.0.2 a 1.0.3-6)",
+            "Causa: tauri build gera latest.json com productName cru, GitHub normaliza nomes",
+            "7 releases publicadas corrigidas retroativamente",
+            "Script Node (scripts/fix-all-releases.js) corrige todas as releases",
+            "Script de CI (scripts/fix-latest-json-ci.js) corrige automaticamente próximas releases",
+            "Mapeamento plataforma → asset por extensão (não quebra mais Linux)",
+            "Com productName 'Marcio.App', nome do asset já nasce correto (zero risco)",
+            "Fix do restart: isFreshMessage usa readyTime (quando WA ficou pronto) em vez de startTime",
+            "Bot não reprocessa mais histórico ao reiniciar (Ctrl+C + restart)"
+          ]
+        },
+        {
+          "icon": "🚪",
+          "title": "Fix do CI/CD",
+          "items": [
+            "tauri-plugin-updater sem feature `zip` (default-features=false) — crate zip yanked",
+            "prepare-bundle.js robusto: remove .zip velho + symlinks (-y -X) + fallback",
+            "Sem mais 'Zip file structure invalid' no GitHub Actions",
+            "Workflow converte chave privada pra base64 antes do build",
+            "Step de correção do latest.json após upload (rede de segurança)",
+            "Diagnóstico de signing antes do build",
+            "Upload via GitHub CLI (gh release upload) em vez de softprops/action"
+          ]
+        },
+        {
+          "icon": "🔌",
+          "title": "Endpoints Novos no Painel",
+          "items": [
+            "GET /api/feature-flags — retorna canal (dev/beta/stable) + features habilitadas",
+            "GET/POST /api/update-settings — config de update (aceitar beta, etc.)",
+            "GET /api/health — status consolidado (WA, IA, memória)",
+            "GET/DELETE /api/errors — lista/limpa erros capturados",
+            "GET /api/errors/export — erros em texto formatado",
+            "GET/POST/DELETE /api/bot-profile — perfil do bot (identidade evolutiva)",
+            "POST /api/bot-profile/reflect — força auto-reflexão",
+            "POST /api/bot-profile/converse — converse com o pensamento do bot",
+            "DELETE /api/bot-profile/injections — limpa conversa interna",
+            "GET/POST /api/audio-config — config de transcrição de áudio (mode, models)"
+          ]
+        },
+        {
+          "icon": "🛠️",
+          "title": "Ferramentas para Dev",
+          "items": [
+            "npm run fix-releases — corrige todas as releases publicadas",
+            "npm run fix-releases -- vX.Y.Z — corrige uma release específica",
+            "npm run fix-releases:dry — dry-run (só mostra o que mudaria)",
+            "Scripts: fix-all-releases.js (Node), fix-all-releases.ps1 (PowerShell), fix-latest-json-ci.js (CI)"
+          ]
+        },
+        {
+          "icon": "🐛",
+          "title": "Correções de Bugs",
+          "items": [
+            "CommandRegistry era inicializado 2x (causava VoteSystem duplicado)",
+            "LASTCOLLAGE enviado como texto puro quando vinha junto com FIGURINHA",
+            "Cooldown de figurinha não era salvo pelo painel",
+            "loadMemories() não existia — trocado por loadProfiles()",
+            "clear-stickers sempre reportava '0 figurinhas limpas' mesmo deletando 50",
+            "killLeftoverChromium usava wmic depreciado (Win11) — trocado por PowerShell",
+            "Variável errada no catch do EADDRINUSE",
+            "_convRefreshPending vazava memória quando request falhava",
+            "Porta hardcoded 3001 no getHealthStatus — agora usa campo dinâmico",
+            "activeChatId e currentChatId eram redundantes — unificado",
+            "openChat fazia fetch redundante de /api/chats",
+            "Bot não registrava própria msg no painel (sendResponse retornava string, não Message)",
+            "Áudios transcritos não apareciam no painel (texto não era atualizado)",
+            "SenderName vazio em áudios (mostrava @lid em vez do nome)",
+            "Bot reprocessava histórico ao reiniciar (isFreshMessage com buffer de 10s)",
+            "Bot citava msg errada (sempre que isDirect=true, mesmo em sorte)",
+            "IA gerava LASTCOLLAGE em toda resposta (instrução ambígua)",
+            "IA inventava carta de tarô em vez de só usar marcador",
+            "Marcador [TARO:] chegava cru ao usuário quando handler falhava",
+            "GC do StickerVault removia figurinhas nomeadas/favoritas",
+            "describeStickerWithAI sem limite de tamanho (podia dar timeout)",
+            "Imagens no contexto limitadas a 500KB (muita foto legítima ignorada)",
+            "Detecção de resposta de figurinha não rodava em PV (isDirect=true)",
+            "Respostas curtas (sim, 👍) filtradas antes de chegar à detecção",
+            "Figurinhas sem nome não chegavam ao maybeAutoRespond (filtradas no MessageRouter)",
+            "Zip crate 2.x e 3.0.0 yanked do crates.io — atualizado pra 9.x",
+            "tauri-plugin-updater puxava zip yanked por feature default"
+          ]
+        }
+      ]
     }
   ]
 }

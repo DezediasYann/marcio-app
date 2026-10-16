@@ -1,6 +1,6 @@
 [package]
 name = "marcio-app"
-version = "1.0.3-8"
+version = "1.0.3-9"
 description = "Márcio App — bot do WhatsApp com IA"
 authors = []
 edition = "2021"

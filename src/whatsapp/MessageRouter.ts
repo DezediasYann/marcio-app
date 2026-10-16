@@ -171,11 +171,13 @@ export class MessageRouter {
     }
 
     // Se msg sem body (figurinha/áudio sem texto) — captura no contexto foi o último passo.
-    // - Figurinha: já disparou onda/guerra no passo 3. IA não responde a figurinha sem texto.
-    // - Áudio: NÃO pula aqui! Passa pro brain.maybeAutoRespond — o brain decide
+    // - Áudio: NÃO pula! Passa pro brain.maybeAutoRespond — o brain decide
     //   se vai transcrever (baseado em chance/mention/PV) e responder.
+    // - Figurinha: passa pro brain SE StickerVault existe (pra auto-nomear).
+    //   O brain decide se pergunta sobre o nome da figurinha.
     const isAudioMsg = this.app.audioTranscriber?.isAudioMessage(msg) ?? false;
-    if (!msg.body && !isAudioMsg) {
+    const isStickerMsg = msg.hasMedia && msg.type === 'sticker';
+    if (!msg.body && !isAudioMsg && !isStickerMsg) {
       return;
     }
 

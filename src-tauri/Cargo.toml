@@ -20,7 +20,13 @@ tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
-tauri-plugin-updater = "2"
+# BUG FIX: tauri-plugin-updater por padrão habilita feature `zip` (que puxa
+# o crate `zip` como dependência). Todas as versões 2.x e 4.x do crate `zip`
+# foram yanked do crates.io, quebrando o build.
+# Solução: desabilitar default-features e habilitar só o necessário (sem `zip`).
+# Pra nosso caso (Windows NSIS .exe + Linux AppImage), não precisamos extrair
+# .zip em runtime — o installer do Windows é .exe auto-extraível.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Crate nativo pra extrair ZIPs sem depender de comando externo (unzip/powershell).

@@ -120,19 +120,37 @@ function zipNodeModules() {
 
   console.log('[prepare-bundle] Compactando node_modules (pode demorar)...');
   try {
+    // BUG FIX: se o .zip existente tá corrompido, `zip -r` tenta atualizar
+    // em vez de criar novo, e falha com "Zip file structure invalid".
+    // Solução: sempre remover o .zip existente antes de criar.
+    try { fs.unlinkSync(dst); } catch { /* ok se não existe */ }
+    try { fs.unlinkSync(dst + '.hash'); } catch { /* ok se não existe */ }
+
     if (isWindows) {
       execSync(`powershell -Command "Compress-Archive -Path '${src}/*' -DestinationPath '${dst}' -Force"`, { stdio: 'inherit' });
     } else {
       // BUG FIX: antes usava `-i '*'` que causava "Zip file structure invalid" no
       // GitHub Actions (Ubuntu). O `-i '*'` é redundante — `zip -r` já inclui tudo.
-      // Sem o `-i`, o zip é criado corretamente.
-      execSync(`zip -r -q '${dst}' .`, { cwd: src, stdio: 'inherit' });
+      // Removido também o `-q` (quiet) pra mostrar warnings reais em caso de erro.
+      // Flag `-y` armazena symlinks como symlinks (não segue) — node_modules tem muitos.
+      // Flag `-X` não salva atributos extras que podem quebrar em filesystems diferentes.
+      execSync(`zip -r -y -X '${dst}' .`, { cwd: src, stdio: 'inherit' });
     }
     saveCacheHash(dst, sourceHash);
     const sizeMB = (fs.statSync(dst).size / 1024 / 1024).toFixed(1);
     console.log(`[prepare-bundle] ✅ node_modules.zip criado (${sizeMB}MB)`);
   } catch (e) {
     console.error(`[prepare-bundle] ❌ Erro ao criar zip: ${e.message}`);
+    // Fallback: tenta sem -y -X (compatibilidade)
+    try { fs.unlinkSync(dst); } catch { /* ok */ }
+    try {
+      execSync(`zip -r '${dst}' .`, { cwd: src, stdio: 'inherit' });
+      saveCacheHash(dst, sourceHash);
+      const sizeMB = (fs.statSync(dst).size / 1024 / 1024).toFixed(1);
+      console.log(`[prepare-bundle] ✅ node_modules.zip criado via fallback (${sizeMB}MB)`);
+    } catch (e2) {
+      console.error(`[prepare-bundle] ❌ Fallback também falhou: ${e2.message}`);
+    }
   }
 }
 
@@ -148,16 +166,28 @@ function zipDist() {
 
   console.log('[prepare-bundle] Compactando dist/...');
   try {
+    // BUG FIX: sempre remover o .zip existente antes de criar (evita "Zip file structure invalid")
+    try { fs.unlinkSync(dst); } catch { /* ok se não existe */ }
+
     if (isWindows) {
       execSync(`powershell -Command "Compress-Archive -Path '${src}/*' -DestinationPath '${dst}' -Force"`, { stdio: 'inherit' });
     } else {
-      // BUG FIX: removido `-i '*'` (causava "Zip file structure invalid" no Linux CI)
-      execSync(`zip -r -q '${dst}' .`, { cwd: src, stdio: 'inherit' });
+      // Sem -q (pra mostrar warnings), com -y (symlinks) e -X (sem atributos extras)
+      execSync(`zip -r -y -X '${dst}' .`, { cwd: src, stdio: 'inherit' });
     }
     const sizeMB = (fs.statSync(dst).size / 1024 / 1024).toFixed(1);
     console.log(`[prepare-bundle] ✅ dist-bundle.zip criado (${sizeMB}MB)`);
   } catch (e) {
     console.error(`[prepare-bundle] ❌ Erro ao criar zip do dist: ${e.message}`);
+    // Fallback: tenta sem -y -X
+    try { fs.unlinkSync(dst); } catch { /* ok */ }
+    try {
+      execSync(`zip -r '${dst}' .`, { cwd: src, stdio: 'inherit' });
+      const sizeMB = (fs.statSync(dst).size / 1024 / 1024).toFixed(1);
+      console.log(`[prepare-bundle] ✅ dist-bundle.zip criado via fallback (${sizeMB}MB)`);
+    } catch (e2) {
+      console.error(`[prepare-bundle] ❌ Fallback do dist também falhou: ${e2.message}`);
+    }
   }
 }
 

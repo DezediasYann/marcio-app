@@ -816,6 +816,48 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.3-10",
+      "date": "2025-10-16",
+      "title": "🚀 Pre-release 2 — Fix auto-nomeação de figurinhas + toggles de guerra/onda",
+      "sections": [
+        {
+          "icon": "🎭",
+          "title": "Fix: Auto-nomeação de Figurinhas",
+          "items": [
+            "Bug: 'é sim' salvava 'é sim' como nome (regex só batia no início da frase)",
+            "Agora detecta palavra de confirmação EM QUALQUER POSIÇÃO da frase",
+            "Aceita: 'é sim', 'sim, é', 'é isso mesmo', 'pode ser', 'blz', 'beleza'",
+            "Proteção contra falso positivo quando tem negação forte ('não, é X')",
+            "Emojis isolados (👍, ✅, 👌, 🟢) também confirmam",
+            "Nomes diretos (2-50 chars sem palavra de confirmação) ainda funcionam"
+          ]
+        },
+        {
+          "icon": "🎭",
+          "title": "Toggles de Comportamento de Figurinhas",
+          "items": [
+            "Novo: toggle 'Entrar em ondas' (2+ pessoas mandando a mesma figurinha)",
+            "Novo: toggle 'Entrar em guerras' (3+ figurinhas em 30s)",
+            "Novo: toggle 'Auto-nomear figurinhas' (pergunta no chat o que é)",
+            "Cada um pode ser desativado individualmente no painel IA",
+            "Salvo em ai-config.json: stickerBehavior.{joinWaves, joinWars, autoNameStickers}",
+            "Aplica em runtime (sem restart) — cache invalidado quando salva",
+            "Default: todos ligados"
+          ]
+        },
+        {
+          "icon": "📦",
+          "title": "Mudanças de Vault",
+          "items": [
+            "Vault aumentado de 200 pra 500 figurinhas",
+            "GC protege figurinhas nomeadas/favoritas (não remove as importantes)",
+            "Limite de 2MB pra figurinha no describeStickerWithAI (evita timeout)",
+            "Limite de 2MB pra imagens no contexto (era 500KB, muito restritivo)"
+          ]
+        }
+      ]
     }
   ]
 }

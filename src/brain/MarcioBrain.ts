@@ -2799,28 +2799,47 @@ export class MarcioBrain {
       let finalName: string | null = null;
       let responseText = '';
 
-      // Padrões de confirmação
-      if (/^(sim|isso|exato|certo|é isso|isso mesmo|isso ai|isso aí|exatamente|correto|y|yes|👍|✅|confirmo)/.test(text)) {
+      // === Padrões de confirmação ===
+      // Detecta palavras de confirmação EM QUALQUER POSIÇÃO da frase.
+      // Bug original: regex `^(sim|...)` só batia no início. "é sim" não batia
+      // e caía no fallback salvando "é sim" como nome.
+      //
+      // Padrões aceitos (em qualquer posição):
+      // - "sim", "isso", "exato", "certo", "exatamente", "correto", "exato"
+      // - "é isso", "isso mesmo", "isso ai", "isso aí", "isso"
+      // - "y", "yes", "👍", "✅", "confirmo", "pode ser", "blz", "beleza"
+      // - "é sim", "sim é", "isso mesmo é", "é isso mesmo"
+      const confirmRegex = /\b(sim|isso|exato|certo|exatamente|correto|confirmo|pode ser|blz|beleza|y|yes)\b|^(👍|✅|é isso|isso mesmo|isso ai|isso aí)/;
+      const isConfirmation = confirmRegex.test(text);
+
+      // Mas NÃO é confirmação se a frase também tem negação forte
+      // (ex: "não, é X" tem "é" mas é correção, não confirmação)
+      const hasNegation = /^(n[aã]o|errado|nao é|n é|na verdade|nem|ne)\b/.test(text);
+
+      if (isConfirmation && !hasNegation) {
         finalName = pending.suggestedName;
         responseText = `boaa, salvei como "${finalName}" 📌`;
       }
-      // Padrões de negação + correção: "não, é X" / "na verdade é Y" / "errado, é Z"
-      else {
+      // === Padrões de negação + correção: "não, é X" / "na verdade é Y" / "errado, é Z" ===
+      else if (hasNegation) {
         const correctionMatch = text.match(/^(?:n[aã]o|errado|nao é|n é|na verdade|nem|ne)(?:[,.\s]+(?:é|e|seria|eh|eh o))?[\s,]*([a-zà-ÿ0-9].+)$/);
         if (correctionMatch) {
           finalName = correctionMatch[1].trim();
           responseText = `entendi, vou salvar como "${finalName}" 📌`;
-        }
-        // Negação simples
-        else if (/^(n[aã]o|errado|nao|n é|nem|ne)\b/.test(text)) {
+        } else {
+          // Negação simples sem correção
           responseText = `blz, qual seria o nome certo então? manda aí (/fig nome ou só fala)`;
-          // Re-abre a pergunta (não nomeia ainda)
         }
-        // Se não bate com nada, assume que o usuário digitou o nome direto
-        else if (text.length >= 2 && text.length <= 50) {
-          finalName = text;
-          responseText = `salvei como "${finalName}" 📌`;
-        }
+      }
+      // === Emoji isolado de confirmação (👍, ✅) ===
+      else if (/^(👍|✅|👌|🟢)$/.test(text)) {
+        finalName = pending.suggestedName;
+        responseText = `boaa, salvei como "${finalName}" 📌`;
+      }
+      // === Se não bate com nada, assume que o usuário digitou o nome direto ===
+      else if (text.length >= 2 && text.length <= 50) {
+        finalName = text;
+        responseText = `salvei como "${finalName}" 📌`;
       }
 
       // Nomeia a figurinha

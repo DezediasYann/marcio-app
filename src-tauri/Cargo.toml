@@ -25,8 +25,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Crate nativo pra extrair ZIPs sem depender de comando externo (unzip/powershell).
 # Funciona em Windows, macOS e Linux sem dependências do sistema.
-# Versão 2.x foi yanked do crates.io — usar 3.x ou superior.
-zip = "3"
+# Versões 2.x e 3.0.0 foram yanked do crates.io — usar 9.x (mais recente disponível).
+zip = "9"
 
 [features]
 # Esta feature é usada pra produção (gera .exe standalone).

@@ -123,7 +123,10 @@ function zipNodeModules() {
     if (isWindows) {
       execSync(`powershell -Command "Compress-Archive -Path '${src}/*' -DestinationPath '${dst}' -Force"`, { stdio: 'inherit' });
     } else {
-      execSync(`zip -r -q '${dst}' . -i '*'`, { cwd: src, stdio: 'inherit' });
+      // BUG FIX: antes usava `-i '*'` que causava "Zip file structure invalid" no
+      // GitHub Actions (Ubuntu). O `-i '*'` é redundante — `zip -r` já inclui tudo.
+      // Sem o `-i`, o zip é criado corretamente.
+      execSync(`zip -r -q '${dst}' .`, { cwd: src, stdio: 'inherit' });
     }
     saveCacheHash(dst, sourceHash);
     const sizeMB = (fs.statSync(dst).size / 1024 / 1024).toFixed(1);
@@ -148,7 +151,8 @@ function zipDist() {
     if (isWindows) {
       execSync(`powershell -Command "Compress-Archive -Path '${src}/*' -DestinationPath '${dst}' -Force"`, { stdio: 'inherit' });
     } else {
-      execSync(`zip -r -q '${dst}' . -i '*'`, { cwd: src, stdio: 'inherit' });
+      // BUG FIX: removido `-i '*'` (causava "Zip file structure invalid" no Linux CI)
+      execSync(`zip -r -q '${dst}' .`, { cwd: src, stdio: 'inherit' });
     }
     const sizeMB = (fs.statSync(dst).size / 1024 / 1024).toFixed(1);
     console.log(`[prepare-bundle] ✅ dist-bundle.zip criado (${sizeMB}MB)`);

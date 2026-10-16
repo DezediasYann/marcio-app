@@ -123,6 +123,12 @@ export class BasicCommands implements CommandModule {
         handler: (msg, chatId) => this.handleLast(msg, chatId),
         help: 'cria collage do Last.fm. Ex: !last user 4x4 7d (grid 2-6, período 7d/1m/3m/6m/12m/overall).',
       },
+      {
+        name: '!taro',
+        aliases: ['/taro', '!tarô', '/tarô'],
+        handler: (msg, chatId) => this.handleTaro(msg, chatId),
+        help: 'tira cartas de tarô. !taro (1 carta) | !taro 3 (passado/presente/futuro) | !taro celtic (10 cartas).',
+      },
       // === Ops only ===
       {
         name: '/ia',
@@ -197,6 +203,7 @@ export class BasicCommands implements CommandModule {
       '*Comandos:*',
       '!figurinha — cria figurinha (responda uma imagem)',
       '!pergunta <texto> — fala comigo diretamente',
+      '!taro [3|celtic] — tira cartas de tarô',
       '!last <user> [grid] [período] — collage do Last.fm',
       '/resumo — resumo da conversa recente',
       '/entrosao [0-2] — ajusta minha participação',
@@ -896,6 +903,55 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
 
     await this.app.notify(chatId, lines.join('\n'));
     await this.app.react(msg, EMOJI.SUCCESS);
+  }
+
+  // ===========================================================================
+  // !taro — tiragem rápida de cartas de tarô (sem IA, mais direta)
+  // ===========================================================================
+
+  /**
+   * Comando !taro — tira cartas de tarô e mostra-as diretamente (sem interpretar via IA).
+   * Útil pra quem quer tiragem rápida sem interpretação longa.
+   *
+   * Sintaxe:
+   *  - !taro              → 1 carta (carta do dia)
+   *  - !taro 3            → 3 cartas (passado/presente/futuro)
+   *  - !taro celtic       → 10 cartas (Cruz Celta — leitura completa)
+   *
+   * A interpretação mística fica a cargo da IA quando o usuário pede tarô em
+   * linguagem natural (ex: "tira um tarô pra mim" → o bot usa [TARO: tiragem]).
+   * O !taro é o atalho "direto", mostrando só as cartas + significados.
+   */
+  private async handleTaro(msg: Message, chatId: string): Promise<void> {
+    await this.app.react(msg, EMOJI.LOADING);
+
+    const arg = msg.body.replace(/^[!/]\s*tar[ôo]\s*/i, '').trim().toLowerCase();
+    let spread: 'single' | 'past-present-future' | 'celtic-cross';
+    let title: string;
+
+    if (arg === '' || arg === '1' || arg === 'single' || arg === 'dia' || arg === 'carta') {
+      spread = 'single';
+      title = '🔮 Carta do dia';
+    } else if (arg === '3' || arg === 'tres' || arg === 'três' || arg === 'tiragem' || arg === 'ppf') {
+      spread = 'past-present-future';
+      title = '🔮 Tiragem — Passado / Presente / Futuro';
+    } else if (arg === 'celtic' || arg === 'celta' || arg === '10' || arg === 'cruz') {
+      spread = 'celtic-cross';
+      title = '🔮 Cruz Celta — Leitura Completa (10 cartas)';
+    } else {
+      await this.app.reportError(msg, chatId, 'use *!taro* (1 carta), *!taro 3* (passado/presente/futuro) ou *!taro celtic* (10 cartas).');
+      return;
+    }
+
+    try {
+      const drawn = this.app.taroDeck.drawSpread(spread);
+      const text = this.app.taroDeck.formatForUser(drawn, title);
+      await this.app.notify(chatId, text);
+      await this.app.react(msg, EMOJI.SUCCESS);
+      this.app.debug('TARO', `!taro ${spread} (${drawn.length} cartas) em ${chatId}`);
+    } catch (error) {
+      await this.app.reportError(msg, chatId, 'não consegui tirar as cartas agora.', error as Error);
+    }
   }
 
   // ===========================================================================

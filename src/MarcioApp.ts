@@ -42,6 +42,7 @@ import { ControlPanel } from './control/ControlPanel';
 import { ErrorTracker } from './control/ErrorTracker';
 import { FeatureFlags } from './control/FeatureFlags';
 import { LastCollage } from './services/LastCollage';
+import { TaroDeck } from './services/TaroDeck';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -107,6 +108,11 @@ export class MarcioApp {
   errors!: ErrorTracker;
   features!: FeatureFlags;
   lastCollage!: LastCollage;
+
+  // === TaroDeck — baralho de tarô (78 cartas) ===
+  // Serviço stateless (sem I/O, sem dependência de app) — instanciado uma vez
+  // e reutilizado pelo brain (marcador [TARO:]) e pelo comando !taro.
+  taroDeck: TaroDeck = new TaroDeck();
 
   // Todos os subsistemas estão instanciados (Fase 3 + 4 + 5a completa).
 

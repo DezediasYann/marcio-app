@@ -40,6 +40,15 @@ export class WhatsAppClient {
   lastReconnect: number = 0;
 
   /**
+   * Timestamp (epoch ms) de quando o WA ficou 'ready' (conectado e pronto).
+   * Usado pelo MessageRouter.isFreshMessage pra filtrar msgs antigas:
+   * só processa msgs com timestamp >= readyTime.
+   * Isso evita que o bot reprocesse histórico ao reiniciar (Ctrl+C + restart).
+   * 0 significa que ainda não conectou — isFreshMessage cai pro fallback de startTime.
+   */
+  readyTime: number = 0;
+
+  /**
    * IDs das mensagens enviadas pelo próprio bot (loop-guard).
    * Quando o bot manda uma msg, registra o ID aqui por 10s.
    * O handler de message_create ignora essas msgs — sem isso, comandos
@@ -122,6 +131,9 @@ export class WhatsAppClient {
       this.lastQr = null;
       // Registra o timestamp deste (re)connect — exposto no /api/bot/status.
       this.lastReconnect = Date.now();
+      // Registra quando o WA ficou pronto — usado pelo MessageRouter.isFreshMessage
+      // pra não reprocessar msgs que chegaram antes/durante o boot.
+      this.readyTime = Date.now();
     });
 
     this.client.on('disconnected', (reason: string) => {

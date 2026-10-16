@@ -304,6 +304,26 @@ export class Retroactive {
     if (!this.historyLog.has(chatId)) this.historyLog.set(chatId, []);
     const entries = this.historyLog.get(chatId)!;
 
+    // === DEDUPE DE MSGS DO BOT (fromMe=true) ===
+    // Quando o bot manda uma msg, registramos com ID fallback `bot_${chatId}_${ts}_${len}`
+    // (porque sendResponse retorna string, não o objeto Message com ID real).
+    // Depois, se o backfill pegar a msg real (com ID verdadeiro do WhatsApp),
+    // essa dedup evita criar uma entry duplicada — procura por msg do bot com
+    // timestamp similar (±10s) e mesmo texto, e atualiza o msgId dela.
+    if (fromMe && msgId && !msgId.startsWith('bot_')) {
+      const similar = entries.find(e =>
+        e.fromMe &&
+        e.msgId.startsWith('bot_') &&
+        Math.abs((e.timestamp || 0) - timestamp) < 10000 &&
+        e.text === trimmed
+      );
+      if (similar) {
+        // Atualiza o msgId da entry existente pro real (do WhatsApp)
+        similar.msgId = msgId;
+        return; // não cria entry nova
+      }
+    }
+
     const existing = entries.find(e => e.msgId === msgId);
     if (existing) {
       // Atualiza senderName se ficou melhor (backfill às vezes pega '?')
@@ -322,7 +342,20 @@ export class Retroactive {
       if (mediaThumbnail && !existing.mediaThumbnail) existing.mediaThumbnail = mediaThumbnail;
       if (stickerName && !existing.stickerName) existing.stickerName = stickerName;
       if (imageDescription && !existing.imageDescription) existing.imageDescription = imageDescription;
-      // Não muda mais nada (text/timestamp já estão corretos)
+      // === BUG FIX: atualiza texto quando transcrição de áudio chega depois ===
+      // Cenário: MessageRouter registra áudio com texto vazio (porque áudio não tem body).
+      // Depois, transcribeAudioInBackground chama de novo com a transcrição.
+      // Antes: texto não era atualizado → áudio aparecia sem transcrição no painel.
+      // Agora: se a entry tem texto vazio OU placeholder de áudio, e a nova chamada
+      // tem texto real (transcrição), atualiza.
+      if (trimmed && trimmed.trim().length > 0) {
+        const existingText = existing.text || '';
+        const isPlaceholder = /^\[(áudio|audio)\]$|^\[áudio não transcrito\]$|^\s*$/.test(existingText);
+        if (isPlaceholder || existingText.trim().length === 0) {
+          existing.text = trimmed;
+        }
+      }
+      // Não muda mais nada (timestamp já está correto)
       return;
     }
 

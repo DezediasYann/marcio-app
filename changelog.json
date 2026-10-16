@@ -496,6 +496,39 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.3-8",
+      "date": "2025-10-15",
+      "title": "🧪 Beta — Tarô + tudo de 1.0.3-7",
+      "sections": [
+        {
+          "icon": "🔮",
+          "title": "Leitura de Tarô",
+          "items": [
+            "Baralho completo de 78 cartas (22 Arcanos Maiores + 56 Menores)",
+            "Cada carta tem significado upright + reversed (invertida)",
+            "3 tipos de tiragem: single (1 carta), passado/presente/futuro (3), celta (10)",
+            "IA interpreta as cartas com base na pergunta/contexto (místico mas honesto)",
+            "Marcador [TARO: tipo] processado pelo sistema",
+            "Comando !taro [single|3|celtic] pra tiragem rápida sem IA",
+            "Instrução reforçada: bot nunca diz 'não sei fazer tarô' ou recusa"
+          ]
+        },
+        {
+          "icon": "ℹ️",
+          "title": "Esta versão inclui tudo de 1.0.3-7",
+          "items": [
+            "Painel BotProfile redesignado (tabs, glassmorphism)",
+            "Converse com o Pensamento (chat pra falar com a mente do bot)",
+            "Reflexão multi-chat (bot reflete usando conversas de todos os chats)",
+            "Contexto global entre chats (associa referências cruzadas sem fofocar)",
+            "Seletor de modo de transcrição de áudio (Sempre/Equilibrado/Background)",
+            "Áudios aparecem no painel mesmo quando bot não responde",
+            "Correção definitiva do 404 no updater (productName Marcio.App)"
+          ]
+        }
+      ]
     }
   ]
 }

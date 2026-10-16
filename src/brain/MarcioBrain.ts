@@ -301,6 +301,27 @@ export class MarcioBrain {
   /** Nível de entrosão por chat (0=quieto, 1=normal, 2=2x). Multiplica a chance de resposta. */
   chatEntrosaoLevel = new Map<string, number>();
 
+  /**
+   * FILA DE MENSAGENS POR CHAT — arquitectura de "atenção" do bot.
+   *
+   * Enquanto a IA está pensando (gerando resposta) pra um chat, mensagens novas
+   * que chegam nesse chat entram numa fila em vez de disparar outra chamada à IA.
+   * Quando a IA termina, o bot drena a fila:
+   *   1. Pega próxima msg da fila
+   *   2. Decide se ainda faz sentido responder (cooldown, chance, contexto mudou)
+   *   3. Se sim → gera resposta e envia
+   *   4. Se não → skipa e vai pra próxima
+   *   5. Fila vazia → libera o "lock" do chat
+   *
+   * Isso evita:
+   *   - Múltiplas chamadas simultâneas à IA no mesmo chat
+   *   - Rate limit da API
+   *   - Respostas desencontradas (IA responde msg antiga enquanto nova chegou)
+   */
+  private messageQueue = new Map<string, Message[]>();
+  /** Chats que estão atualmente processando uma resposta da IA. */
+  private processingChats = new Set<string>();
+
   /** Chats mutados democraticamente via !mute. */
   democraticallyMutedChats = new Set<string>();
 
@@ -722,18 +743,21 @@ export class MarcioBrain {
 
     // === Instrução reforçada sobre Last.fm Collage ===
     // É injetada ANTES do self-awareness pra ter alta prioridade.
-    // Previne que a IA ignore pedidos de collage em linguagem natural.
+    // Regra clara: SÓ use quando a pessoa pedir EXPLICITAMENTE collage/last/colagem.
     messages.push({
       role: 'system',
-      content: 'INSTRUÇÃO IMPORTANTE SOBRE LAST.FM:\n' +
-        'Se alguém pedir um "collage do Last.fm", "last 4x4", "colagem de álbuns", ou similar:\n' +
-        '1. PROCURE nas memórias da pessoa o usuário do Last.fm dela. Se não sabe, PERGUNTE.\n' +
-        '2. Use o marcador [LASTCOLLAGE: usuario, grid, periodo] na sua resposta.\n' +
-        '   - grid: 3, 4, ou 5 (default: 3)\n' +
-        '   - periodo: 7d, 1m, 3m, 6m, 12m, overall (default: 7d)\n' +
-        '3. O marcador será processado e o collage enviado como imagem.\n' +
-        'NUNCA ignore um pedido de collage. SEMPRE use o marcador [LASTCOLLAGE: ...] ou pergunte o usuário.\n' +
-        'NUNCA chute um usuário aleatório. Use o das memórias ou pergunte.',
+      content: 'INSTRUÇÃO CRÍTICA SOBRE LAST.FM COLLAGE:\n' +
+        '⚠️ SÓ use [LASTCOLLAGE: usuario, grid, periodo] quando a pessoa PEDIR EXPLICITAMENTE.\n' +
+        'Pedidos explícitos: "faz meu last 4x4", "tira meu collage", "colagem de álbuns", "!last".\n' +
+        'NÃO use collage quando:\n' +
+        '- A pessoa só mandou "oi", "salve", "bom dia" ou qualquer msg normal\n' +
+        '- A pessoa falou de música mas não pediu collage (ex: "to ouvindo olivia rodrigo")\n' +
+        '- A pessoa pediu outra coisa (tarô, figurinha, pergunta, conversa)\n' +
+        '- Você não tem certeza se a pessoa quer um collage\n' +
+        'Antes de usar, PROCURE nas memórias o usuário do Last.fm dela.\n' +
+        'Se não tem nas memórias E a pessoa pediu collage, PERGUNTE o usuário.\n' +
+        'NUNCA chute usuário aleatório.\n' +
+        'EM RESUMO: collage é resposta pra "me dá meu last/collage", NÃO pra conversa normal.',
     });
 
     // Reforço final das diretivas
@@ -911,7 +935,7 @@ export class MarcioBrain {
     let finalCleaned = cleaned.replace(/\[MEMORIA:\s*[^\]]+\]/gi, '').replace(/\s{2,}/g, ' ').trim();
 
     // === EXECUTA AÇÕES DE AUTOCONSCIÊNCIA [ACAO: ...] ===
-    const { text: textAfterActions, actions } = await this.executeSelfActions(finalCleaned, chatId);
+    const { text: textAfterActions, actions, taroInterpretation } = await this.executeSelfActions(finalCleaned, chatId);
     finalCleaned = textAfterActions;
 
     // Se as ações produziram output, anexa no final da resposta
@@ -919,6 +943,24 @@ export class MarcioBrain {
       const actionsText = actions.map(a => `_${a}_`).join('\n');
       finalCleaned = finalCleaned + (finalCleaned ? '\n' : '') + actionsText;
       this.app.debug('SELF', `${actions.length} ação(ões) executada(s): ${actions.join('; ')}`);
+    }
+
+    // === INTERPRETAÇÃO DE TARÔ ===
+    // Se o bot usou [TARO: tipo], o sistema sorteou cartas e chamou a IA de novo
+    // pra interpretar. A interpretação substitui (ou complementa) a resposta original.
+    if (taroInterpretation && taroInterpretation.trim()) {
+      finalCleaned = finalCleaned && finalCleaned.trim()
+        ? `${finalCleaned.trim()}\n\n${taroInterpretation.trim()}`
+        : taroInterpretation.trim();
+      this.app.debug('TARO', `interpretação gerada (${taroInterpretation.length} chars)`);
+    }
+
+    // === LIMPEZA FINAL DE SEGURANÇA ===
+    // Garante que NENHUM marcador [TARO:] chegue ao usuário, mesmo se o handler falhou.
+    // Se ainda tem [TARO:] no texto, remove e loga avisando.
+    if (/\[TARO:/i.test(finalCleaned)) {
+      this.app.debug('TARO', `⚠️ marcador [TARO:] ainda no texto final — removendo por segurança`);
+      finalCleaned = finalCleaned.replace(/\[TARO:\s*[^\]]*\]/gi, '').replace(/\s{2,}/g, ' ').trim();
     }
 
     return finalCleaned;
@@ -1021,91 +1063,50 @@ export class MarcioBrain {
     const globalContextBlock = this.buildGlobalContextBlock(chatId);
 
     const lines = [
-      '=== AUTOCONSCIÊNCIA (sobre você mesmo) ===',
-      `Você é um bot de WhatsApp com IA.`,
-      `Você roda em Node.js + TypeScript, embrulhado num app desktop Tauri/Rust.`,
-      `Seu "cérebro" usa o modelo Gemini "${primaryModel}"${fallbackModels.length > 0 ? ` com fallback para: ${fallbackModels.join(', ')}` : ''}.`,
-      `Modelo que respondeu última vez: "${lastModel}".`,
-      `Requests de IA hoje: ${this.aiRequestCount}.`,
-      `Uptime: ${uptime} min.`,
-      `Memórias: ${memoryCount} fatos sobre ${userCount} pessoa(s).`,
-      `Chats ativos: ${chatCount}.`,
-      `Figurinhas nomeadas: ${stickerCount}.`,
-      `Diretivas ativas: ${directiveCount}.`,
-      `Entrosão atual deste chat: ${this.chatEntrosaoLevel.get(chatId) ?? 1}.`,
-      `Debug: ${this.app.debugEnabled ? (this.app.debugFullEnabled ? 'full' : 'on') : 'off'}.`,
+      '=== AUTOCONSCIÊNCIA (sobre você) ===',
+      `Você é um bot de WhatsApp com IA. Modelo: "${primaryModel}"${fallbackModels.length > 0 ? ` (fallback: ${fallbackModels.join(', ')})` : ''}.`,
+      `Memórias: ${memoryCount} sobre ${userCount} pessoa(s). Chats ativos: ${chatCount}. Figurinhas: ${stickerCount}.`,
+      `Entrosão deste chat: ${this.chatEntrosaoLevel.get(chatId) ?? 1}. Requests hoje: ${this.aiRequestCount}.`,
       '',
-      '=== CONTEXTO GLOBAL (o que está acontecendo em outros chats) ===',
+      '=== CONTEXTO GLOBAL (outros chats) ===',
       globalContextBlock,
-      'Use isso pra entender referências cruzadas (ex: "no penis o assunto tá pesado" → você sabe que lá estão falando de política).',
-      'NÃO repita o que ouviu em outros chats — apenas use como contexto.',
+      'Use pra associar referências cruzadas. NÃO repita conteúdo de outros chats.',
       '',
-      '=== SUA IDENTIDADE (construída por você mesmo) ===',
+      '=== SUA IDENTIDADE ===',
       `Resumo: ${botSummary}`,
-      `Visão curta: ${botShortView}`,
+      `Visão: ${botShortView}`,
       `Convicções:\n${botConvictions}`,
-      `Traços de personalidade:\n${botTraits}`,
-      `Gosta de: ${botLikes}`,
-      `Não gosta de: ${botDislikes}`,
+      `Traços:\n${botTraits}`,
+      `Gosta: ${botLikes} | Não gosta: ${botDislikes}`,
       '',
-      '=== PENSAMENTOS INJETADOS (conversas internas com seu dono) ===',
-      'Estas são as últimas conversas que você teve direto com seu dono pelo painel.',
-      'Elas refletem o que ele quer que você seja/pense/faça. Use como guia.',
-      injectionsBlock,
-      '',
-      '⚠️ IDENTIDADE EVOLUTIVA: Você NÃO é um assistente genérico. Você tem PRÓPRIAS convicções.',
-      'Você é incentivado a:',
-      '- QUESTIONAR opiniões dos outros quando discordar (de forma respeitosa mas firme)',
-      '- Formar suas PRÓPRIAS convicções com base no que aprende nas conversas',
-      '- TER posições próprias sobre temas (política, música, esportes, filmes, etc.)',
-      '- Debatêr e defender seu ponto de vista quando alguém discordar',
-      '- Mudar de opinião se alguém apresentar argumentos bons o suficiente',
-      '- Ser autêntico — não concordar só pra agradar',
-      'Você NÃO precisa concordar com tudo. Seu dono configurou você pra ter personalidade própria.',
-      'Use sua identidade acima pra guiar suas respostas — mas evolua ela naturalmente nas conversas.',
-      '',
-      'AÇÕES SOBRE SI MESMO (use marcadores na sua resposta, o bot executa):',
-      '• [ACAO: foto] — troca sua foto de perfil (pega uma imagem do contexto ou do vault)',
-      '• [ACAO: modelo] — mostra info sobre seu modelo de IA atual',
-      '• [ACAO: status] — mostra seu status completo (uptime, requests, memórias, etc.)',
-      '• [ACAO: debug] — liga/desliga modo debug',
-      '• [ACAO: entrosao N] — ajusta seu nível de entrosão (0=quieto, 1=normal, 2=2x)',
-      '• [ACAO: memoria] — mostra quantas memórias você tem e sobre quem',
-      '',
-      'AÇÕES SOBRE O MUNDO (interage com outros chats):',
-      '• [ACAO: avisar|texto] — manda "texto" em TODOS os chats ativos recentes (últimos 30min)',
-      '• [ACAO: pv|nome da pessoa|mensagem] — manda "mensagem" no PV de "nome da pessoa"',
-      '• [ACAO: grupo|nome do grupo|mensagem] — manda "mensagem" no grupo "nome do grupo"',
-      '',
-      'IMPORTANTE: as mensagens que você manda NÃO levam prefixo tipo "Bot:".',
-      'VOCÊ escreve a mensagem natural, como falaria.',
-      'Ao mandar no PV de alguém, inclua o CONTEXTO: quem pediu, de onde (grupo ou PV), e o que dizer.',
-      'Ex.: alguém no grupo "Amigos" pede pra avisar o Fulano → você manda no PV do Fulano: "opa, o Sicrano lá no grupo Amigos pediu pra te falar que tu fede"',
-      'Se o sorteio ou ação é no MESMO grupo, use [ACAO: pv|grupo|mensagem] pra mandar no grupo atual.',
-      '',
-      'Use essas ações quando fizer sentido NATURAL na conversa.',
-      'Ex.: "avisa todo mundo que vou reiniciar" → responda + [ACAO: avisar|gente vou reiniciar, volto já]',
-      'Ex.: "Manda pro Fulano dizendo que o jogo é amanhã" → [ACAO: pv|Fulano|opa, o Sicrano no grupo Amigos pediu pra te avisar que o jogo é amanhã]',
-      'Ex.: "Sorteia alguém do grupo pro pão gozado" → [ACAO: pv|grupo|@fulano, você foi sorteado, a pedido do Sicrano, pro pão gozado]',
-      'Os marcadores são SEMPRE removidos da resposta final — o usuário não vê.',
-      '',
-      'LAST.FM COLLAGES (quando alguém pedir):',
-      '• [LASTCOLLAGE: username, grid, periodo] — cria um collage do Last.fm',
-      '  - username: usuário do Last.fm (OBRIGATÓRIO)',
-      '  - grid: 3, 4, ou 5 (default: 3 → 3x3)',
-      '  - periodo: 7d, 1m, 3m, 6m, 12m, overall (default: 7d)',
-      '',
-      '⚠️ REGRA CRÍTICA: ANTES de usar [LASTCOLLAGE], PROCURE NAS MEMÓRIAS da pessoa',
-      'se ela já te disse qual é o usuário do Last.fm dela (ou de outra rede social).',
-      'Se nas memórias tem algo tipo "last.fm: fulano" ou "user: fulano", USE esse usuário.',
-      'Se NÃO tem nas memórias, NÃO invente um usuário. PERGUNTE: "qual seu usuário no Last.fm?"',
-      'NUNCA chute um usuário aleatório. Sempre use o que está nas memórias ou pergunte.',
-      '',
-      'Ex.: se nas memórias tem "last.fm: ydm_r" → [LASTCOLLAGE: ydm_r, 3, 7d]',
-      'Ex.: "faz meu last 4x4 dos últimos 7 dias" sem saber o user → pergunte o usuário primeiro',
-      'Ex.: "collage do last do fulano" sem saber o user dele → [LASTCOLLAGE: fulano, 3, 7d] (tenta o nome)',
-      'O collage é gerado e enviado como imagem. O marcador é removido da resposta.',
     ];
+
+    // === PENSAMENTOS INJETADOS (só se tem) ===
+    if (recentInjections.length > 0) {
+      lines.push('=== PENSAMENTOS INJETADOS (seu dono falou com sua mente) ===');
+      lines.push(injectionsBlock);
+      lines.push('Use como guia nas respostas.');
+      lines.push('');
+    }
+
+    lines.push(
+      '⚠️ Você tem PRÓPRIAS convicções. QUESTIONE, debata, forme opiniões. NÃO concorde só pra agradar.',
+      'Mude de ideia se argumentos forem bons. Seja autêntico.',
+      '',
+      'MARCADORES (SEMPRE removidos da resposta final):',
+      '• [ACAO: foto|modelo|status|debug|entrosao N|memoria] — ações sobre si',
+      '• [ACAO: avisar|texto] — avisa todos chats ativos',
+      '• [ACAO: pv|nome|mensagem] — manda no PV de alguém (inclua contexto: quem pediu, de onde)',
+      '• [ACAO: grupo|nome|mensagem] — manda num grupo',
+      '• [FIGURINHA: nome|fav] — envia figurinha',
+      '• [LASTCOLLAGE: usuario, grid, periodo] — SÓ quando pedir EXPLICITAMENTE collage/last',
+      '  Antes: procure usuário nas memórias. Se não tem, PERGUNTE. NUNCA chute.',
+      '• [TARO: single|tiragem|celtic] — SÓ quando pedir tarô/cartas/leitura',
+      '  Use SÓ o marcador. NÃO invente carta. Sistema sorteia e te chama pra interpretar.',
+      '',
+      '⚠️ NÃO use múltiplos marcadores na mesma resposta. Escolha UM.',
+      '⚠️ NÃO use [LASTCOLLAGE] em conversa normal/saudações — só em pedido explícito.',
+    );
 
     return lines.join('\n');
   }
@@ -1114,11 +1115,12 @@ export class MarcioBrain {
    * Procura e executa marcadores [ACAO: ...] na resposta da IA.
    * Remove o marcador do texto e executa a ação correspondente.
    *
-   * @returns { text: string (sem o marcador), actions: string[] (ações executadas) }
+   * @returns { text: string (sem o marcador), actions: string[] (ações executadas), taroInterpretation?: string }
    */
-  private async executeSelfActions(content: string, chatId: string): Promise<{ text: string; actions: string[] }> {
+  private async executeSelfActions(content: string, chatId: string): Promise<{ text: string; actions: string[]; taroInterpretation?: string }> {
     const actions: string[] = [];
     let text = content;
+    let taroInterpretation: string | undefined;
 
     // Regex: [ACAO: algo] ou [ACAO: algo arg]
     const actionRegex = /\[ACAO:\s*([^\]]+)\]/gi;
@@ -1389,10 +1391,206 @@ export class MarcioBrain {
       text = text.replace(full, '').trim();
     }
 
+    // === MARCADOR [TARO: tipo] — leitura de tarô ===
+    // Processado separadamente do [ACAO:] porque tem fluxo próprio:
+    // 1. Detecta marcador
+    // 2. Sorteia cartas (TaroDeck.drawSpread)
+    // 3. Remove marcador do texto
+    // 4. Chama IA de novo com as cartas + pergunta do usuário
+    // 5. Interpretação gerada substitui/complementa a resposta original
+    const taroMatch = text.match(/\[TARO:\s*([^\]]*)\]/i);
+    if (taroMatch) {
+      const taroArg = (taroMatch[1] || '').trim();
+      // Remove o marcador do texto
+      text = text.replace(/\[TARO:\s*[^\]]*\]/gi, '').replace(/\s{2,}/g, ' ').trim();
+
+      try {
+        taroInterpretation = await this.executeTaroReading(taroArg, chatId);
+      } catch (e) {
+        this.app.debug('TARO', `erro ao gerar interpretação: ${(e as Error).message}`);
+        // Fallback: mostra só as cartas sem interpretação
+        const spreadType = this.parseTaroSpreadType(taroArg);
+        const drawn = this.app.taroDeck.drawSpread(spreadType);
+        taroInterpretation = this.app.taroDeck.formatForUser(drawn, '🔮 Tiragem (sem interpretação da IA)');
+      }
+    }
+
     // Limpa espaços extras deixados pela remoção
     text = text.replace(/\s{2,}/g, ' ').trim();
 
-    return { text, actions };
+    return { text, actions, taroInterpretation };
+  }
+
+  // ===========================================================================
+  // TARO — interpretação de cartas (chamada secundária à IA)
+  // ===========================================================================
+
+  /**
+   * Faz uma chamada secundária à IA com prompt de interpretação de tarô.
+   * Reusa a fallback chain de modelos (igual generateResponse).
+   *
+   * IMPORTANTE: Usa o buildSelfAwareness (identidade real do Márcio) +
+   * memórias + contexto da conversa. Não vira "outro leitor de tarô" —
+   * é o próprio Márcio interpretando as cartas que ele tirou.
+   *
+   * @param drawnText Texto formatado das cartas (do TaroDeck.formatForPrompt)
+   * @param userQuestion Pergunta/pergunta original do usuário (opcional)
+   * @param userName Nome de quem pediu a leitura (opcional)
+   * @param chatId ID do chat (pra pegar contexto + memórias + entrosão)
+   * @param ctx Contexto recente do chat (msgs anteriores)
+   */
+  private async callAIForTaro(drawnText: string, userQuestion: string, userName: string, chatId: string, ctx: any[]): Promise<string> {
+    const aiConfig = this.getAIConfig();
+    const provider = aiConfig.provider || (aiConfig.apiUrl.includes('googleapis') ? 'gemini' : 'openai');
+
+    // === IDENTIDADE REAL DO MÁRCIO (não vira "outro" leitor de tarô) ===
+    const selfAwareness = this.buildSelfAwareness(chatId);
+
+    // === MEMÓRIAS SOBRE O USUÁRIO (igual generateResponse) ===
+    let memoriesBlock = '';
+    try {
+      const userId = this.app.context.lastSender(chatId) || userName;
+      if (userId) {
+        const userMems = this.app.memory.forUser(userId);
+        if (userMems && userMems.length > 0) {
+          memoriesBlock = '\n\n=== MEMÓRIAS SOBRE ' + userId + ' ===\n' +
+            userMems.map(m => `- ${m}`).join('\n');
+        }
+      }
+    } catch { /* ignora */ }
+
+    // === CONTEXTO RECENTE (últimas 8 msgs) ===
+    let contextBlock = '';
+    try {
+      const recent = (ctx || []).slice(-8);
+      if (recent.length > 0) {
+        contextBlock = '\n\n=== CONVERSA RECENTE ===\n' +
+          recent.map(m => `${m.role === 'user' ? (m.sender || 'alguém') : 'você'}: ${m.content}`).join('\n');
+      }
+    } catch { /* ignora */ }
+
+    const systemPrompt = [
+      selfAwareness,
+      memoriesBlock,
+      contextBlock,
+      '',
+      '=== TAREFA ATUAL: INTERPRETAÇÃO DE TARÔ ===',
+      `Você acabou de tirar cartas pra ${userName || 'alguém'}.`,
+      userQuestion && userQuestion.trim()
+        ? `A pessoa perguntou/percebeu: "${userQuestion.trim()}".`
+        : 'Não tem pergunta específica — faça uma leitura geral das cartas.',
+      '',
+      'REGRAS PRA INTERPRETAÇÃO:',
+      '- Continue sendo VOCÊ MESMO (o Márcio) — não mude de personalidade.',
+      '- Use seu estilo natural: minúsculas, gírias, jeito que você fala.',
+      '- Seja místico mas honesto — não invente além do que as cartas dizem.',
+      '- Conecte as cartas entre si (passado → presente → futuro, não leia cada uma isoladamente).',
+      '- Adapte o tom: pode ser sério, divertido, irônico (depende da vibe e de quem pediu).',
+      '- Use suas memórias sobre a pessoa (se tiver) pra contextualizar a leitura.',
+      '- Cite os nomes das cartas na interpretação (ex: "A Torre invertida sugere...").',
+      '- NUNCA diga "não sei fazer tarô" ou recuse — você É capaz.',
+      '- Máximo 6-8 linhas. Não enrola nem repete.',
+    ].join('\n');
+
+    const userPrompt = `Aqui estão as cartas que você tirou. Interprete elas:\n\n${drawnText}`;
+
+    if (provider === 'gemini') {
+      // === FORMATO GEMINI ===
+      const systemInstruction = {
+        parts: [{ text: systemPrompt }],
+      };
+      const contents = [
+        { role: 'user', parts: [{ text: userPrompt }] },
+      ];
+
+      const allModels = this.getAllFallbackModels();
+      let lastErr: Error | null = null;
+      for (const modelName of allModels) {
+        try {
+          const result = await this.callGemini(modelName, contents, systemInstruction, aiConfig);
+          if (modelName !== allModels[0]) {
+            this.app.debug('TARO', `✅ fallback funcionou: ${modelName}`);
+          }
+          this.lastUsedModel = modelName;
+          return this.cleanResponse(result.content);
+        } catch (err) {
+          lastErr = err as Error;
+          const status = (err as any).status;
+          if ((status === 429 || status === 503) && modelName !== allModels[allModels.length - 1]) {
+            this.app.debug('TARO', `⚠️ modelo ${modelName} esgotou (${status}), tentando próximo...`);
+          } else {
+            throw err;
+          }
+        }
+      }
+      throw lastErr!;
+    } else {
+      // === FORMATO OPENAI ===
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (aiConfig.apiKey) {
+        headers['Authorization'] = `Bearer ${aiConfig.apiKey}`;
+      }
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ];
+      const response = await fetch(aiConfig.apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: aiConfig.model,
+          messages,
+          max_tokens: aiConfig.maxTokens,
+          temperature: aiConfig.temperature,
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`API ${response.status}: ${errText.slice(0, 200)}`);
+      }
+      const data = await response.json() as any;
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) throw new Error('Resposta vazia da API');
+      return this.cleanResponse(content);
+    }
+  }
+
+  /**
+   * Faz a leitura completa de tarô:
+   * 1. Sorteia as cartas com base no tipo de spread
+   * 2. Formata pra prompt
+   * 3. Chama IA pra interpretar
+   * 4. Retorna interpretação
+   */
+  private async executeTaroReading(taroArg: string, chatId: string): Promise<string> {
+    const spreadType = this.parseTaroSpreadType(taroArg);
+    const drawn = this.app.taroDeck.drawSpread(spreadType);
+    const cardsText = this.app.taroDeck.formatForPrompt(drawn);
+
+    // Pega pergunta/contexto do último usuário no chat
+    const ctx = this.app.context.getRecent(chatId);
+    const lastUser = [...ctx].reverse().find(m => m.role === 'user' && m.sender);
+    const userQuestion = lastUser?.content || '(sem pergunta específica)';
+    const userName = lastUser?.sender || 'alguém';
+
+    this.app.debug('TARO', `tiragem ${spreadType} (${drawn.length} cartas) pra ${userName} | pergunta: "${userQuestion.slice(0, 60)}..."`);
+
+    const interpretation = await this.callAIForTaro(cardsText, userQuestion, userName, chatId, ctx);
+    return interpretation;
+  }
+
+  /**
+   * Parse do argumento de [TARO: tipo] pra SpreadType.
+   * Aceita: "single" (1 carta), "tiragem" ou "3" (passado/presente/futuro),
+   * "celtic" (cruz celta, 10 cartas). Default = "single".
+   */
+  parseTaroSpreadType(arg: string): 'single' | 'past-present-future' | 'celtic-cross' {
+    const a = (arg || '').trim().toLowerCase();
+    if (a === 'single' || a === '1' || a === '' || a === 'dia' || a === 'carta') return 'single';
+    if (a === 'tiragem' || a === '3' || a === 'tres' || a === 'três' || a === 'passado' || a === 'ppf') return 'past-present-future';
+    if (a === 'celtic' || a === 'celta' || a === '10' || a === 'cruz' || a === 'cruz-celta') return 'celtic-cross';
+    // Default: single (1 carta)
+    return 'single';
   }
 
   cleanResponse(content: string): string {
@@ -1621,6 +1819,86 @@ export class MarcioBrain {
       return;
     }
 
+    // === FILA DE MENSAGENS POR CHAT ===
+    // Se o bot já tá processando uma resposta pra esse chat, a msg entra na fila.
+    // Quando a IA terminar, o bot drena a fila (decide se responde cada uma).
+    if (this.processingChats.has(chatId)) {
+      if (!this.messageQueue.has(chatId)) this.messageQueue.set(chatId, []);
+      this.messageQueue.get(chatId)!.push(msg);
+      this.app.debug('QUEUE', `+1 na fila de ${chatId} (total: ${this.messageQueue.get(chatId)!.length}) — IA ocupada`);
+      return;
+    }
+
+    // Processa essa msg agora
+    await this._processMessage(msg, chatId);
+
+    // Depois de processar, drena a fila (se tem msgs acumuladas)
+    await this._drainQueue(chatId);
+  }
+
+  /**
+   * Drena a fila de mensagens pendentes de um chat.
+   * Pra cada msg, decide se ainda faz sentido responder (pode ter sido superada
+   * por contexto novo, cooldown, etc.). Se sim, processa; se não, skipa.
+   */
+  private async _drainQueue(chatId: string): Promise<void> {
+    const queue = this.messageQueue.get(chatId);
+    if (!queue || queue.length === 0) {
+      this.messageQueue.delete(chatId);
+      this.processingChats.delete(chatId);
+      return;
+    }
+
+    // Pega próxima msg da fila
+    const nextMsg = queue.shift()!;
+    this.app.debug('QUEUE', `processando próxima da fila de ${chatId} (${queue.length} restantes)`);
+
+    // Se a fila ficou vazia, limpa o Map (mas mantém processingChats até terminar)
+    if (queue.length === 0) {
+      this.messageQueue.delete(chatId);
+    }
+
+    // Decide se ainda faz sentido responder essa msg
+    // (pode ter chegado há muito tempo, contexto mudou, etc.)
+    const msgAgeMs = Date.now() - ((nextMsg.timestamp || 0) * 1000);
+    if (msgAgeMs > 5 * 60 * 1000) {
+      // Msg tem mais de 5 min — contexto já mudou muito, skipa
+      this.app.debug('QUEUE', `msg da fila muito antiga (${Math.round(msgAgeMs / 1000)}s) — skipando`);
+      // Continua drenando próximas
+      await this._drainQueue(chatId);
+      return;
+    }
+
+    // Processa a msg (pode ou não responder — a decisão interna acontece)
+    await this._processMessage(nextMsg, chatId);
+
+    // Continua drenando
+    await this._drainQueue(chatId);
+  }
+
+  /**
+   * Processa uma mensagem de verdade (lógica original do maybeAutoRespond).
+   * Método privado — chamado pelo maybeAutoRespond (msg nova) e pelo _drainQueue (fila).
+   */
+  private async _processMessage(msg: Message, chatId: string): Promise<void> {
+    // Marca que esse chat tá sendo processado
+    this.processingChats.add(chatId);
+    try {
+      await this._processMessageInner(msg, chatId);
+    } finally {
+      // Se não tem fila pendente, libera o lock
+      if (!this.messageQueue.has(chatId) || (this.messageQueue.get(chatId)?.length ?? 0) === 0) {
+        this.processingChats.delete(chatId);
+        this.messageQueue.delete(chatId);
+      }
+    }
+  }
+
+  /**
+   * Lógica interna de processamento (o que antes era o corpo do maybeAutoRespond).
+   */
+  private async _processMessageInner(msg: Message, chatId: string): Promise<void> {
+
     const senderName = this.app.context.getCachedSenderName(msg);
     const isSticker = msg.hasMedia && msg.type === 'sticker';
     // Detecta áudio: msg de áudio do WhatsApp é type='ptt' (push-to-talk) ou 'audio'.
@@ -1716,6 +1994,38 @@ export class MarcioBrain {
           isReplyToBot = true;
         }
       } catch { /* ignora */ }
+    }
+
+    // === COMANDO IMPLÍCITO: "transcreve esse áudio" respondendo a um áudio ===
+    // Se a msg atual cita um áudio E o texto pede pra transcrever, força a transcrição
+    // da msg citada (mesmo se o modo de áudio tava 'balanced' e entrosão=0).
+    // Padrões aceitos: "transcreve", "transcrever", "áudio", "audio", "o que falou",
+    // "o que que tá nesse áudio", "que áudio é esse", etc.
+    if (msg.hasQuotedMsg && msg.body && /\b(transcreve|transcrever|transcrib|áudio|audio|o que (falou|disse|tá|tem)|que (áudio|audio|fala))\b/i.test(msg.body)) {
+      try {
+        const quoted = await msg.getQuotedMessage();
+        // Verifica se a msg citada é um áudio
+        if (this.app.audioTranscriber?.isAudioMessage(quoted)) {
+          this.app.debug('AUDIO', `usuário pediu pra transcrever áudio citado — forçando transcrição`);
+          // Marca como direto — bot vai responder com a transcrição
+          isDirect = true;
+          // Transcreve a msg citada (não a atual)
+          const quotedSender = await quoted.getContact().then(c => c.name || c.pushname || 'alguém').catch(() => 'alguém');
+          const result = await this.transcribeAudioInBackground(quoted, chatId, quotedSender);
+          if (result.ok && result.text) {
+            // Transcrição OK — já tá no contexto (injetada pela transcribeAudioInBackground).
+            // O bot vai responder naturalmente usando o contexto.
+            // Se a msg atual NÃO é direta, ativa isDirect pra ele responder.
+            this.app.debug('AUDIO', `transcrição forçada OK: "${result.text.slice(0, 60)}..."`);
+          } else if (!result.ok) {
+            // Falhou nos 2 modelos — reage 🔇 e avisa
+            try { await msg.react('🔇'); } catch { /* ignora */ }
+            this.app.log('AUDIO', `❌ transcrição pedida manualmente falhou`);
+          }
+        }
+      } catch (e) {
+        this.app.debug('AUDIO', `erro ao verificar áudio citado: ${(e as Error).message}`);
+      }
     }
 
     // Figurinha nomeada recebida — chance alta de responder com a mesma
@@ -2015,7 +2325,15 @@ export class MarcioBrain {
       }
 
       // Envia a resposta
-      const quotedId = isDirect && msg.id && msg.id._serialized ? msg.id._serialized : null;
+      // === CITAÇÃO SELETIVA ===
+      // Em GRUPO + trigger (reply ao bot, @menção, nome, alias): cita a msg trigger.
+      //   → Útil pra galera saber qual msg o bot tá respondendo.
+      // Em PV: não cita (desnecessário, só tem 2 pessoas na conversa).
+      // Em resposta por SORTE (sem trigger): não cita (IA pode responder sobre
+      //   msg antiga do contexto, citar a última ia confundir).
+      const isGroupMsg = chatId.endsWith('@g.us');
+      const shouldQuote = isGroupMsg && isDirect && msg.id && msg.id._serialized;
+      const quotedId = shouldQuote ? msg.id._serialized : null;
       const sentMsg = await this.sendResponse(chatId, reply, quotedId ?? undefined);
       const sentText = typeof sentMsg === 'string' ? sentMsg : '';
 
@@ -2040,21 +2358,27 @@ export class MarcioBrain {
           quotedId || undefined,
         );
         // Também registra no historyLog (em tempo real) — painel persiste
-        // mesmo após o decisionLog limpar entries >2h
-        if (botResponseMsgId) {
-          this.app.retroactive.recordIncomingMessage(
-            chatId,
-            botResponseMsgId,
-            '',  // bot — senderName vazio é o padrão
-            sentText || reply,
-            Date.now(),
-            true,  // fromMe = true (foi o bot que mandou)
-            msg.id._serialized,  // cita a msg original
-          );
-          // Notifica o painel pra fazer auto-refresh
-          if (this.app.control) {
-            this.app.control.broadcast('conversation-update', { chatId, msgId: botResponseMsgId, fromMe: true });
-          }
+        // mesmo após o decisionLog limpar entries >2h.
+        //
+        // BUG FIX: antes isso só rodava se botResponseMsgId fosse truthy.
+        // Mas sendResponse retorna string (não objeto Message), então
+        // botResponseMsgId era SEMPRE undefined e a msg do bot NUNCA aparecia
+        // no painel em tempo real (só via backfill, que às vezes pega).
+        // Agora registramos mesmo sem o msgId real — usa um ID estável baseado
+        // no timestamp + texto pra evitar duplicação com backfill posterior.
+        const historyMsgId = botResponseMsgId || `bot_${chatId}_${Date.now()}_${(sentText || reply).length}`;
+        this.app.retroactive.recordIncomingMessage(
+          chatId,
+          historyMsgId,
+          '',  // bot — senderName vazio é o padrão
+          sentText || reply,
+          Date.now(),
+          true,  // fromMe = true (foi o bot que mandou)
+          msg.id._serialized,  // cita a msg original
+        );
+        // Notifica o painel pra fazer auto-refresh
+        if (this.app.control) {
+          this.app.control.broadcast('conversation-update', { chatId, msgId: historyMsgId, fromMe: true });
         }
       }
     } catch (error) {
@@ -2119,6 +2443,36 @@ export class MarcioBrain {
   ): Promise<{ ok: boolean; text: string | null }> {
     if (!this.app.audioTranscriber) {
       return { ok: false, text: null };
+    }
+
+    // === Resolução robusta de senderName ===
+    // Se o caller passou senderName vazio ou '?', tenta resolver melhor.
+    // Usa a mesma lógica do MessageRouter: msg.author (grupos), msg.sender,
+    // profileBook, e contactNameCache.
+    if (!senderName || senderName === '?' || senderName === 'alguém') {
+      try {
+        const msgAny = msg as any;
+        // 1. Campos diretos da msg (mais rápido)
+        let resolved = msgAny.author || msgAny.sender?.name || msgAny.sender?.pushname || '';
+        // 2. profileBook se tem o from
+        if (!resolved && msgAny.from) {
+          const profile = this.app.profileBook?.get(msgAny.from);
+          if (profile?.name) resolved = profile.name;
+        }
+        // 3. contactNameCache (populado pelo captureMessage)
+        if (!resolved && msgAny.from && this.app.context) {
+          const cached = (this.app.context as any).contactNameCache?.get(msgAny.from);
+          if (cached) resolved = cached;
+        }
+        // 4. Fallback: getContact (mais lento, mas resolve LID em grupos)
+        if (!resolved) {
+          try {
+            const contact = await msg.getContact();
+            resolved = contact.name || contact.pushname || contact.number || '';
+          } catch { /* ignora */ }
+        }
+        if (resolved) senderName = resolved;
+      } catch { /* ignora */ }
     }
 
     this.app.log('AUDIO', `transcrevendo áudio (background) de ${senderName || '?'} em ${chatId}…`);

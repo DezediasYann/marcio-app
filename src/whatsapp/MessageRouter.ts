@@ -283,14 +283,23 @@ export class MessageRouter {
   }
 
   /**
-   * Verifica se a msg é "fresca" (depois do bot ligar + 10s buffer).
+   * Verifica se a msg é "fresca" (depois do WA ficar pronto + 2s buffer).
    * Evita reprocessar histórico quando o bot reinicia.
+   *
+   * BUG FIX: antes usava `startTime - 10000` (10s antes do boot começar).
+   * Em restart com Ctrl+C, isso pegava msgs que já tinham sido processadas
+   * antes de morrer, e o bot respondia msg antiga do histórico.
+   *
+   * Agora usa `readyTime` (quando o WA ficou pronto de verdade) + 2s buffer.
+   * Só processa msgs que chegaram DEPOIS do WA estar pronto.
    */
   private isFreshMessage(msg: Message): boolean {
     const msgTs = (msg.timestamp || 0) * 1000;
-    const startup = this.app.startTime;
-    // 10s de buffer pra não perder msgs que chegaram enquanto o bot iniciava
-    return msgTs >= (startup - 10000);
+    // readyTime = quando WA ficou conectado. Fallback pra startTime se 0 (nunca conectou).
+    const threshold = this.app.whatsapp.readyTime || this.app.startTime;
+    // 2s de buffer (em vez de 10s) — só pra não perder msgs que chegaram
+    // exatamente no momento que o WA ficou pronto.
+    return msgTs >= (threshold - 2000);
   }
 
   /**

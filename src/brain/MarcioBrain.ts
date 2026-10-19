@@ -507,7 +507,7 @@ export class MarcioBrain {
       // === Busca contexto dinâmico: analisa conversa atual e detecta menções ===
       // Pega últimas 15 msgs do chat atual e procura por nomes de pessoas/grupos conhecidos
       const recentMsgs = this.app.context.getRecent(chatId);
-      const recentText = recentMsgs.slice(-15).map(m => m.text || '').join(' ');
+      const recentText = recentMsgs.slice(-15).map(m => m.content || '').join(' ');
       const mentionedContexts = this.findMentionedContexts(recentText, chatId);
 
       if (mentionedContexts.people.length > 0) {

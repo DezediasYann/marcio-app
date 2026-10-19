@@ -858,6 +858,159 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.3",
+      "date": "2025-10-19",
+      "title": "🚀 1.0.3 estável — Autoconsciência + Tarô + Fofoca + Fila de Mensagens + Auto-nomeação + Fix do Updater",
+      "sections": [
+        {
+          "icon": "🧠",
+          "title": "Autoconsciência do Bot (BotProfile)",
+          "items": [
+            "Sistema de self-awareness: bot reflete sobre própria identidade a cada 30 interações",
+            "Evolui convicções, traços, gostos e desgostos ao longo do tempo",
+            "Reflexão multi-chat: usa conversas de TODOS os chats ativos",
+            "Contexto global entre chats: sabe temas de outros grupos (só no modo fofoca)",
+            "Identidade injetada no prompt (bot age com base no que 'acredita')",
+            "Painel 'Mente do Bot' redesenhado com tabs e glassmorphism",
+            "Converse com o Pensamento: chat pra falar direto com a mente do bot",
+            "IA dedicada pra auto-reflexão (selfAwarenessModel configurável)",
+            "Tom empático: bot é AMIGO por padrão, não crítico"
+          ]
+        },
+        {
+          "icon": "💬",
+          "title": "Modo Fofoca",
+          "items": [
+            "Comando /fofoca (só operador) — ativa/desativa modo fofoca no grupo",
+            "Quando ativo: bot busca contexto dinâmico de pessoas/grupos mencionados na conversa",
+            "Trai perfil da pessoa mencionada (traits, aiSummary) + últimas msgs dela em outros grupos",
+            "Trai histórico de grupos mencionados (até 10 msgs)",
+            "Por padrão, bot pode fofocar sobre TUDO e TODOS",
+            "/fofoca proibir <nome> — proíbe fofocar SOBRE esse grupo (lista negra)",
+            "/fofoca listar — lista grupos conhecidos com nome e status",
+            "Painel de Fofoca: status, grupos ativos, lista negra, gerenciar por nome",
+            "Endpoints: GET/POST /api/gossip"
+          ]
+        },
+        {
+          "icon": "🔮",
+          "title": "Leitura de Tarô",
+          "items": [
+            "Baralho completo de 78 cartas (22 Arcanos Maiores + 56 Menores)",
+            "3 tipos de tiragem: single, passado/presente/futuro, celta (10)",
+            "IA interpreta com a própria identidade (não vira 'outro leitor')",
+            "Comando !taro [single|3|celtic] pra tiragem rápida"
+          ]
+        },
+        {
+          "icon": "🎭",
+          "title": "Auto-nomeação de Figurinhas",
+          "items": [
+            "Figurinha sem nome → bot 'vê' (multimodal) e pergunta no chat",
+            "Confirmação em qualquer posição da frase ('é sim', 'pode ser', '👍')",
+            "Correção natural ('não, é X') extrai e salva o nome correto",
+            "Vault de 500 figurinhas, GC protege nomeadas/favoritas",
+            "Toggles: ondas, guerras, auto-nomear (desligáveis individualmente)"
+          ]
+        },
+        {
+          "icon": "🔄",
+          "title": "Fila de Mensagens por Chat",
+          "items": [
+            "Arquitetura de 'atenção': msgs não se perdem quando IA está pensando",
+            "Lock por chat: 1 chamada à IA por vez por chat",
+            "Auto-skip de msgs com >5 min na fila"
+          ]
+        },
+        {
+          "icon": "🎵",
+          "title": "Last.fm Collage",
+          "items": [
+            "Comando !last gera colagem de álbuns mais ouvidos",
+            "IA só usa em pedido explícito (não em conversa normal)"
+          ]
+        },
+        {
+          "icon": "🤖",
+          "title": "IA e Contexto",
+          "items": [
+            "3 modos de transcrição de áudio: Sempre/Equilibrado/Background",
+            "Comando implícito: responder a áudio com 'transcreve' força transcrição",
+            "Áudios aparecem no painel mesmo quando bot não responde",
+            "Otimização do prompt: buildSelfAwareness reduzido de 10KB pra 5KB",
+            "Citação seletiva: só cita em grupo + trigger (não em sorte)",
+            "Fix do restart: bot não reprocessa histórico ao reiniciar"
+          ]
+        },
+        {
+          "icon": "🩺",
+          "title": "ErrorTracker + Diagnósticos",
+          "items": [
+            "Captura centralizada de erros com 4 níveis (info/warn/error/critical)",
+            "Painel de Diagnósticos: cards de saúde, lista de erros em tempo real",
+            "WebSocket broadcast pra painel"
+          ]
+        },
+        {
+          "icon": "🔄",
+          "title": "Update Wizard",
+          "items": [
+            "Modal de atualização com progresso e changelog preview",
+            "Toggle 'Aceitar versões beta'",
+            "Correção definitiva do 404 no updater (productName Marcio.App)",
+            "Scripts: npm run fix-releases (corrige todas as releases)"
+          ]
+        },
+        {
+          "icon": "🖼️",
+          "title": "Mídia no Histórico",
+          "items": [
+            "Bot registra própria msg no painel mesmo sem msgId real",
+            "Dedupe evita duplicação quando backfill pega msg real",
+            "Áudios transcritos aparecem com badge 🎵 no painel",
+            "SenderName resolvido robustamente (sem @lid)"
+          ]
+        },
+        {
+          "icon": "🏷️",
+          "title": "Renomeação do App",
+          "items": [
+            "productName: Marcio.App (sem acento, sem espaço)",
+            "Identifier NÃO mudou (com.marcio.app) — dados preservados",
+            "Bot continua se chamando 'Márcio' (persona não mudou)"
+          ]
+        },
+        {
+          "icon": "🔧",
+          "title": "Fix do CI/CD",
+          "items": [
+            "tauri-plugin-updater sem feature zip (default-features=false)",
+            "prepare-bundle.js robusto: remove .zip velho + symlinks + fallback",
+            "zip crate atualizado pra v9 (2.x e 3.0.0 yanked)"
+          ]
+        },
+        {
+          "icon": "🐛",
+          "title": "Correções de Bugs",
+          "items": [
+            "CommandRegistry duplicado (causava VoteSystem em duplicata)",
+            "Bot não registrava própria msg no painel",
+            "Áudios transcritos não apareciam no painel",
+            "SenderName vazio em áudios (mostrava @lid)",
+            "Bot reprocessava histórico ao reiniciar",
+            "Bot citava msg errada em resposta por sorte",
+            "IA gerava LASTCOLLAGE em toda resposta",
+            "IA inventava carta de tarô em vez de só usar marcador",
+            "GC do StickerVault removia figurinhas nomeadas/favoritas",
+            "'é sim' salvava 'é sim' como nome (regex só batia no início)",
+            "Figurinhas sem nome não chegavam ao maybeAutoRespond",
+            "Detecção de resposta de figurinha não rodava em PV",
+            "Zip crate yanked do crates.io"
+          ]
+        }
+      ]
     }
   ]
 }

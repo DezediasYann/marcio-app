@@ -187,6 +187,7 @@ export class MarcioApp {
     // === FASE 2.5: MarcioBrain (o cérebro — IA, prompt, fallback) ===
     this.brain = new MarcioBrain(this);
     this.brain.loadBotConfig();  // carrega bot-config.json (nome + aliases customizados)
+    this.brain.loadGossipConfig();  // carrega gossip-config.json (modo fofoca por grupo)
     this.log('BOOT', `Brain inicializado — modelo=${this.brain.getAIConfig().model} fallbacks=${this.brain.getAllFallbackModels().length - 1} botName=${this.config.botName}`);
 
     // === FASE 6b: ChatSettings (persiste IA/entrosão/mute por chat) ===

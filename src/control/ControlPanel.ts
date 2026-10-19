@@ -628,6 +628,48 @@ export class ControlPanel {
         return this.json(res, this.getHealthStatus());
       }
 
+      // === MODO FOFOCA — endpoints pra painel ===
+
+      // GET /api/gossip — retorna chats com fofoca ativa + proibidos
+      if (method === 'GET' && pathname === '/api/gossip') {
+        return this.json(res, {
+          active: Array.from(this.app.brain.gossipChats),
+          forbidden: Array.from(this.app.brain.gossipForbiddenChats),
+        });
+      }
+
+      // POST /api/gossip — body: { chatId, action: 'activate'|'deactivate'|'forbid'|'allow' }
+      if (method === 'POST' && pathname === '/api/gossip') {
+        const body = await this.readJsonBody(req);
+        const chatId = String(body?.chatId || '').trim();
+        const action = String(body?.action || '').trim();
+        if (!chatId || !action) {
+          return this.json(res, { ok: false, error: 'chatId e action são obrigatórios' }, 400);
+        }
+        let result: { ok: boolean; message: string };
+        switch (action) {
+          case 'activate':
+            // Ativa (mesmo proibido — painel é operador)
+            this.app.brain.gossipForbiddenChats.delete(chatId);
+            this.app.brain.gossipChats.add(chatId);
+            result = { ok: true, message: 'fofoca ativada' };
+            break;
+          case 'deactivate':
+            this.app.brain.gossipChats.delete(chatId);
+            result = { ok: true, message: 'fofoca desativada' };
+            break;
+          case 'forbid':
+            result = this.app.brain.setGossipForbidden(chatId, true);
+            break;
+          case 'allow':
+            result = this.app.brain.setGossipForbidden(chatId, false);
+            break;
+          default:
+            result = { ok: false, message: 'action inválido (use activate/deactivate/forbid/allow)' };
+        }
+        return this.json(res, result);
+      }
+
       // GET /api/feature-flags — retorna canal atual + features habilitadas
       // O painel usa pra mascarar botões que não devem aparecer em release estável.
       if (method === 'GET' && pathname === '/api/feature-flags') {

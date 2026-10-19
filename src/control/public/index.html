@@ -2626,6 +2626,9 @@
           <span class="icon">🩺</span><span>Diagnóstico</span>
           <span class="nav-badge" id="diagBadge" style="display:none;"></span>
         </button>
+        <button class="nav-item" data-section="gossip" onclick="showSection('gossip')">
+          <span class="icon">💬</span><span>Fofoca</span>
+        </button>
         <button class="nav-item" data-section="bot-mind" onclick="showSection('bot-mind')">
           <span class="icon">🧠</span><span>Mente</span>
         </button>
@@ -3571,6 +3574,51 @@
           </div>
         </section>
 
+        <!-- === SEÇÃO FOFOCA === -->
+        <section class="section" id="section-gossip">
+          <div class="glass-card">
+            <div class="card-title">💬 Modo Fofoca</div>
+            <div class="card-subtitle">Bot tem consciência plena de todas as conversas e pode fofocar sobre qualquer pessoa/grupo mencionado</div>
+
+            <!-- Status resumo -->
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">📊 Status</div>
+              <div id="gossipStatus" style="margin-top:8px;">
+                <div class="muted small">Carregando...</div>
+              </div>
+            </div>
+
+            <!-- Grupos ativos -->
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">✅ Grupos com fofoca ativa</div>
+              <div class="muted small mt-1">Grupos onde o bot tem consciência plena (use /fofoca no grupo pra ativar)</div>
+              <div id="gossipActiveList" style="margin-top:8px;"></div>
+            </div>
+
+            <!-- Lista negra -->
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">🚫 Grupos proibidos (lista negra)</div>
+              <div class="muted small mt-1">Bot NÃO fofoca sobre esses grupos, mesmo quando fofoca tá ativa em outro lugar</div>
+              <div id="gossipForbiddenList" style="margin-top:8px;"></div>
+            </div>
+
+            <!-- Gerenciar -->
+            <div class="card mt-3" style="padding:16px;">
+              <div class="card-title small">⚙️ Gerenciar</div>
+              <div class="muted small mt-1">Adicione/remove grupos da lista negra pelo nome (precisa conhecer o grupo)</div>
+              <div class="row-flex mt-2" style="gap:6px;">
+                <input type="text" id="gossipGroupName" placeholder="nome do grupo..." style="flex:1;font-size:13px;" onkeydown="if(event.key==='Enter')gossipAddForbidden()">
+                <button class="ghost sm" onclick="gossipAddForbidden()">🚫 Proibir</button>
+              </div>
+              <div class="muted small mt-2" style="font-size:11px;">
+                Comandos no WhatsApp: /fofoca (ativa no grupo), /fofoca listar, /fofoca proibir &lt;nome&gt;, /fofoca permitir &lt;nome&gt;
+              </div>
+            </div>
+
+            <button class="ghost mt-3" onclick="loadGossipConfig()">🔄 Recarregar</button>
+          </div>
+        </section>
+
         <section class="section" id="section-about">
           <div class="glass-card">
             <div class="about-hero">
@@ -3948,6 +3996,7 @@
         case 'backup': loadBackupComponents(); break;
         case 'diagnostic': loadHealth(); loadErrors(); break;
         case 'bot-mind': loadBotProfile(); break;
+        case 'gossip': loadGossipConfig(); break;
       }
     }
     function toggleSidebar(force) {
@@ -5713,6 +5762,102 @@
           const msgs = $('#botMindChatMsgs');
           if (msgs) msgs.scrollTop = msgs.scrollHeight;
         }, 50);
+      }
+    }
+
+    // === MODO FOFOCA — funções do painel ===
+    async function loadGossipConfig() {
+      try {
+        const r = await apiGet('/api/gossip');
+        const active = r.active || [];
+        const forbidden = r.forbidden || [];
+
+        // Status
+        const statusEl = $('#gossipStatus');
+        if (statusEl) {
+          if (active.length === 0 && forbidden.length === 0) {
+            statusEl.innerHTML = '<div class="muted small">Nenhuma configuração de fofoca ainda. Use <b>/fofoca</b> num grupo pra ativar.</div>';
+          } else {
+            statusEl.innerHTML = `
+              <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                <div><span style="font-size:20px;font-weight:700;color:var(--accent);">${active.length}</span> <span class="muted small">grupo(s) ativo(s)</span></div>
+                <div><span style="font-size:20px;font-weight:700;color:var(--error);">${forbidden.length}</span> <span class="muted small">grupo(s) proibido(s)</span></div>
+              </div>
+            `;
+          }
+        }
+
+        // Grupos ativos
+        const activeEl = $('#gossipActiveList');
+        if (activeEl) {
+          if (active.length === 0) {
+            activeEl.innerHTML = '<div class="muted small">Nenhum grupo ativo. Use /fofoca no grupo pra ativar.</div>';
+          } else {
+            // Resolve nomes via profileBook
+            activeEl.innerHTML = active.map(id => {
+              return `<div class="pill" style="margin:2px;background:rgba(48,209,88,0.15);">✅ ${escapeHtml(id)} <span class="x" onclick="gossipRemoveActive('${escapeHtml(id)}')" style="cursor:pointer;color:var(--error);">x</span></div>`;
+            }).join('');
+          }
+        }
+
+        // Lista negra
+        const forbiddenEl = $('#gossipForbiddenList');
+        if (forbiddenEl) {
+          if (forbidden.length === 0) {
+            forbiddenEl.innerHTML = '<div class="muted small">Nenhum grupo proibido. Por padrão, o bot pode fofocar sobre todos.</div>';
+          } else {
+            forbiddenEl.innerHTML = forbidden.map(id => {
+              return `<div class="pill" style="margin:2px;background:rgba(239,68,68,0.15);">🚫 ${escapeHtml(id)} <span class="x" onclick="gossipRemoveForbidden('${escapeHtml(id)}')" style="cursor:pointer;color:var(--accent);">↩</span></div>`;
+            }).join('');
+          }
+        }
+      } catch (e) {
+        console.error('[GOSSIP] erro:', e);
+      }
+    }
+
+    async function gossipAddForbidden() {
+      const name = $('#gossipGroupName').value.trim();
+      if (!name) return;
+      // Busca o ID pelo nome usando profileBook
+      try {
+        // Tenta resolver via API de chats
+        const chats = await apiGet('/api/chats');
+        const found = (chats.items || chats || []).find(c => {
+          const cname = (c.name || c.chatName || '').toLowerCase();
+          return cname.includes(name.toLowerCase()) || name.toLowerCase().includes(cname);
+        });
+        const chatId = found?.id || found?.chatId;
+        if (!chatId) {
+          toast('Grupo não encontrado. Use o nome exato do grupo.', 'error');
+          return;
+        }
+        const r = await apiPost('/api/gossip', { chatId, action: 'forbid' });
+        toast(r.message || 'proibido', 'success');
+        $('#gossipGroupName').value = '';
+        await loadGossipConfig();
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+      }
+    }
+
+    async function gossipRemoveForbidden(chatId) {
+      try {
+        await apiPost('/api/gossip', { chatId, action: 'allow' });
+        toast('Grupo liberado pra fofoca', 'success');
+        await loadGossipConfig();
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+      }
+    }
+
+    async function gossipRemoveActive(chatId) {
+      try {
+        await apiPost('/api/gossip', { chatId, action: 'deactivate' });
+        toast('Fofoca desativada no grupo', 'success');
+        await loadGossipConfig();
+      } catch (e) {
+        toast('Erro: ' + e.message, 'error');
       }
     }
 

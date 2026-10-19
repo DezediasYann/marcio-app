@@ -129,6 +129,13 @@ export class BasicCommands implements CommandModule {
         handler: (msg, chatId) => this.handleTaro(msg, chatId),
         help: 'tira cartas de tarô. !taro (1 carta) | !taro 3 (passado/presente/futuro) | !taro celtic (10 cartas).',
       },
+      {
+        name: '/fofoca',
+        aliases: ['!fofoca'],
+        handler: (msg, chatId) => this.handleFofoca(msg, chatId),
+        help: 'ativa/desativa modo fofoca nesse grupo (só operador). /fofoca listar — lista grupos. /fofoca proibir <nome> — proíbe por nome.',
+        opOnly: true,
+      },
       // === Ops only ===
       {
         name: '/ia',
@@ -205,6 +212,7 @@ export class BasicCommands implements CommandModule {
       '!pergunta <texto> — fala comigo diretamente',
       '!taro [3|celtic] — tira cartas de tarô',
       '!last <user> [grid] [período] — collage do Last.fm',
+      '/fofoca — ativa/desativa modo fofoca nesse grupo',
       '/resumo — resumo da conversa recente',
       '/entrosao [0-2] — ajusta minha participação',
       '!mute / !unmute — vota silenciar/desmutar',
@@ -1115,6 +1123,124 @@ Máximo 5-6 linhas. Foque no que foi discutido, não em quem disse o quê.`;
 
     await this.app.notify(chatId, 'use */alias* (lista), */alias add <nome>*, ou */alias remove <nome>*');
     await this.app.react(msg, EMOJI.ERROR);
+  }
+
+  // === /fofoca — ativa/desativa modo fofoca no grupo ===
+  // SÓ operador. Só funciona em grupos.
+  // - /fofoca            → toggle on/off no grupo atual
+  // - /fofoca status     → mostra status do grupo atual
+  // - /fofoca listar      → lista todos os grupos conhecidos (com nome)
+  // - /fofoca proibir <nome> → proíbe fofocar SOBRE esse grupo (lista negra)
+  // - /fofoca permitir <nome> → libera fofocar sobre esse grupo
+  //
+  // Lista negra (gossipForbiddenChats): grupos sobre os quais o bot NÃO pode fofocar.
+  // Por padrão, o bot pode fofocar sobre TODOS os grupos quando modo ativo.
+  private async handleFofoca(msg: Message, chatId: string): Promise<void> {
+    const isGroup = chatId.endsWith('@g.us');
+    if (!isGroup) {
+      await this.app.notify(chatId, 'modo fofoca só funciona em grupos, não no PV.');
+      await this.app.react(msg, EMOJI.ERROR);
+      return;
+    }
+
+    const args = msg.body.trim().split(/\s+/).slice(1);
+    const subcommand = (args[0] || '').toLowerCase();
+
+    // /fofoca listar — lista todos os grupos conhecidos
+    if (subcommand === 'listar' || subcommand === 'lista') {
+      const groups = this.app.profileBook.byType('group');
+      if (groups.length === 0) {
+        await this.app.notify(chatId, 'nenhum grupo conhecido ainda. Manda msg em algum grupo primeiro.');
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      const lines = ['*Grupos conhecidos:*'];
+      for (const g of groups) {
+        const active = this.app.brain.isGossipActive(g.id) ? '✅' : '❌';
+        const forbidden = this.app.brain.isGossipForbidden(g.id) ? '🚫' : '';
+        lines.push(`${active}${forbidden} ${g.name}`);
+      }
+      lines.push('', '_✅ = modo fofoca ativo aqui, 🚫 = proibido fofocar sobre, ❌ = inativo_');
+      await this.app.notify(chatId, lines.join('\n'));
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    // /fofoca proibir <nome ou id> — proíbe fofocar SOBRE esse grupo
+    if (subcommand === 'proibir' || subcommand === 'bloquear') {
+      const target = args.slice(1).join(' ').trim();
+      if (!target) {
+        await this.app.notify(chatId, 'use */fofoca proibir <nome do grupo>* (proíbe fofocar SOBRE ele). Ex: /fofoca proibir Família');
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      const targetId = this.resolveGroupId(target);
+      if (!targetId) {
+        await this.app.notify(chatId, `não achei grupo com nome "${target}". Use */fofoca listar* pra ver os grupos.`);
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      const r = this.app.brain.setGossipForbidden(targetId, true);
+      const groupName = this.app.profileBook.get(targetId)?.name || targetId;
+      await this.app.notify(chatId, `🚫 ${r.message} em "${groupName}"`);
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    // /fofoca permitir <nome ou id> — libera fofocar SOBRE esse grupo
+    if (subcommand === 'permitir' || subcommand === 'liberar') {
+      const target = args.slice(1).join(' ').trim();
+      if (!target) {
+        await this.app.notify(chatId, 'use */fofoca permitir <nome do grupo>*');
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      const targetId = this.resolveGroupId(target);
+      if (!targetId) {
+        await this.app.notify(chatId, `não achei grupo com nome "${target}".`);
+        await this.app.react(msg, EMOJI.ERROR);
+        return;
+      }
+      const r = this.app.brain.setGossipForbidden(targetId, false);
+      const groupName = this.app.profileBook.get(targetId)?.name || targetId;
+      await this.app.notify(chatId, `✅ ${r.message} em "${groupName}"`);
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    // /fofoca status — mostra status do grupo atual
+    if (subcommand === 'status') {
+      const active = this.app.brain.isGossipActive(chatId);
+      const forbidden = this.app.brain.isGossipForbidden(chatId);
+      let status = 'desativado';
+      if (active) status = '✅ ativado';
+      else if (forbidden) status = '🚫 proibido fofocar sobre';
+      await this.app.notify(chatId, `modo fofoca nesse grupo: ${status}`);
+      await this.app.react(msg, EMOJI.SUCCESS);
+      return;
+    }
+
+    // /fofoca (sem args) — toggle on/off no grupo atual
+    const r = this.app.brain.toggleGossip(chatId);
+    await this.app.notify(chatId, r.message);
+    await this.app.react(msg, r.ok ? EMOJI.SUCCESS : EMOJI.ERROR);
+  }
+
+  /**
+   * Resolve nome de grupo pra chatId. Aceita nome (busca no profileBook)
+   * ou ID direto (se terminar com @g.us).
+   */
+  private resolveGroupId(nameOrId: string): string | null {
+    const trimmed = nameOrId.trim();
+    if (!trimmed) return null;
+    // Se parece com ID de grupo
+    if (trimmed.endsWith('@g.us')) return trimmed;
+    // Busca no profileBook por nome
+    const matches = this.app.profileBook.resolveByName(trimmed, 'group');
+    if (matches.length > 0) {
+      return matches[0].profile.id;
+    }
+    return null;
   }
 
   // === !last — Last.fm Collage ===

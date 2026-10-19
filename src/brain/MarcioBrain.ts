@@ -342,8 +342,321 @@ export class MarcioBrain {
   /** Chats mutados democraticamente via !mute. */
   democraticallyMutedChats = new Set<string>();
 
+  /**
+   * === MODO FOFOCA ===
+   * Quando ativo num chat (grupo), o bot tem consciência plena de todas as
+   * conversas do grupo, todas as próprias convicções/traços/gostos, e pode
+   * fofocar livremente — sobre QUALQUER coisa, INCLUSIVE outros chats.
+   *
+   * Por padrão, o bot pode fofocar sobre TODOS os grupos que conhece.
+   * A lista `gossipForbiddenChats` é a "lista negra" — grupos sobre os quais
+   * o bot NÃO pode fofocar (mesmo quando modo fofoca tá ativo em outro lugar).
+   *
+   * - `gossipChats`: grupos onde o modo fofoca está ATIVO (comando /fofoca)
+   * - `gossipForbiddenChats`: grupos sobre os quais o bot NÃO pode fofocar
+   *   (lista negra — proibido falar sobre eles, mesmo em outro grupo)
+   *
+   * Exemplo:
+   *   - /fofoca ativo no grupo "Amigos"
+   *   - /fofoca proibir "Família"
+   *   → no grupo "Amigos", o bot pode fofocar sobre tudo, MENOS sobre "Família"
+   *
+   * Só funciona em GRUPOS (nunca em PV).
+   * Persistido em data/gossip-config.json.
+   */
+  gossipChats = new Set<string>();
+  gossipForbiddenChats = new Set<string>();  // lista negra — grupos sobre os quais NÃO pode fofocar
+  private gossipConfigPath = 'gossip-config.json';
+
   constructor(app: MarcioApp) {
     this.app = app;
+  }
+
+  // ===========================================================================
+  // MODO FOFOCA — persistência + helpers
+  // ===========================================================================
+
+  /** Carrega config de fofoca do disco. Chamado no boot. */
+  loadGossipConfig(): void {
+    try {
+      const fs = require('node:fs');
+      const filePath = this.app.dataPath(this.gossipConfigPath);
+      if (fs.existsSync(filePath)) {
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        this.gossipChats = new Set(parsed.active || []);
+        this.gossipForbiddenChats = new Set(parsed.forbidden || []);
+        this.app.debug('GOSSIP', `config carregado — ${this.gossipChats.size} ativo(s), ${this.gossipForbiddenChats.size} proibido(s)`);
+      }
+    } catch (e) {
+      this.app.debug('GOSSIP', `erro ao carregar config: ${(e as Error).message}`);
+    }
+  }
+
+  /** Salva config de fofoca no disco. */
+  private saveGossipConfig(): void {
+    try {
+      const fs = require('node:fs');
+      const filePath = this.app.dataPath(this.gossipConfigPath);
+      const data = {
+        active: Array.from(this.gossipChats),
+        forbidden: Array.from(this.gossipForbiddenChats),
+      };
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+      this.app.debug('GOSSIP', `erro ao salvar config: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Ativa/desativa modo fofoca num chat.
+   * Não bloqueia se o chat tá na lista negra — lista negra é sobre o que
+   * o bot pode fofocar, não sobre onde pode ativar o modo.
+   * @returns { ok: boolean, message: string }
+   */
+  toggleGossip(chatId: string): { ok: boolean; message: string } {
+    // Só em grupo
+    if (!chatId.endsWith('@g.us')) {
+      return { ok: false, message: 'modo fofoca só funciona em grupos' };
+    }
+    if (this.gossipChats.has(chatId)) {
+      this.gossipChats.delete(chatId);
+      this.saveGossipConfig();
+      this.app.debug('GOSSIP', `desativado em ${chatId}`);
+      return { ok: true, message: 'modo fofoca desativado nesse grupo' };
+    } else {
+      this.gossipChats.add(chatId);
+      this.saveGossipConfig();
+      this.app.debug('GOSSIP', `ativado em ${chatId}`);
+      return { ok: true, message: 'modo fofoca ativado nesse grupo' };
+    }
+  }
+
+  /**
+   * Proíbe/libera fofoca SOBRE um grupo (lista negra).
+   * Quando proibido, o bot NÃO pode fofocar sobre esse grupo, mesmo
+   * quando o modo fofoca tá ativo em outro lugar.
+   * Por padrão, o bot pode fofocar sobre todos os grupos — só não pode
+   * sobre os que tão na lista negra.
+   */
+  setGossipForbidden(chatId: string, forbidden: boolean): { ok: boolean; message: string } {
+    if (forbidden) {
+      this.gossipForbiddenChats.add(chatId);
+      this.saveGossipConfig();
+      this.app.debug('GOSSIP', `${chatId} adicionado à lista negra (não pode fofocar sobre)`);
+      return { ok: true, message: 'bot não vai mais fofocar sobre esse grupo' };
+    } else {
+      this.gossipForbiddenChats.delete(chatId);
+      this.saveGossipConfig();
+      this.app.debug('GOSSIP', `${chatId} removido da lista negra`);
+      return { ok: true, message: 'bot pode fofocar sobre esse grupo novamente' };
+    }
+  }
+
+  /** Verifica se o modo fofoca está ativo num chat (bot tem consciência plena aqui). */
+  isGossipActive(chatId: string): boolean {
+    return this.gossipChats.has(chatId);
+  }
+
+  /** Verifica se fofoca SOBRE um chat foi proibida (lista negra). */
+  isGossipForbidden(chatId: string): boolean {
+    return this.gossipForbiddenChats.has(chatId);
+  }
+
+  /**
+   * Constrói o bloco de contexto fofoca — INTELIGENTE.
+   *
+   * Em vez de jogar TODO o histórico de TODOS os grupos no prompt (pesado),
+   * analisa a conversa atual e detecta menções a pessoas/grupos conhecidos.
+   * Aí busca dinamicamente:
+   *  - Perfil da pessoa mencionada (traits, aiSummary, gostos)
+   *  - Últimas mensagens dela em outros grupos (pra fofocar com contexto)
+   *  - Histórico do grupo mencionado (se alguém fala "no grupo X aconteceu Y")
+   *
+   * Isso é mais eficiente e mais natural — o bot "lembra" de quem a galera
+   * tá falando e traz contexto relevante, sem encher o prompt de lixo.
+   *
+   * Chamado pelo buildSelfAwareness quando modo fofoca ativo.
+   */
+  private buildGossipContextBlock(chatId: string): string {
+    if (!this.isGossipActive(chatId)) return '';
+
+    try {
+      const lines: string[] = [
+        '=== MODO FOFOCA ATIVO ===',
+        'Você pode fofocar sobre qualquer coisa e qualquer pessoa — INCLUSIVE de outros grupos.',
+        'MAS: você NÃO é obrigado a fofocar. Use só quando fizer sentido natural.',
+        'Se a conversa atual não pede fofoca, responda normal — o modo só te dá LIBERDADE.',
+        '',
+        '⚠️ LIMITES DA FOFOCA:',
+        '- NÃO repita segredos íntimos que alguém contou em PV.',
+        '- NÃO use info pessoal sensível (doença, luto) pra zoar.',
+        '- Se o grupo tá falando de algo sério, NÃO force fofoca — seja empático.',
+        '',
+      ];
+
+      // === Lista negra: grupos sobre os quais NÃO pode fofocar ===
+      if (this.gossipForbiddenChats.size > 0) {
+        lines.push('🚫 GRUPOS PROIBIDOS (NÃO fofoque sobre eles):');
+        for (const forbiddenId of this.gossipForbiddenChats) {
+          const name = this.app.profileBook?.get(forbiddenId)?.name || forbiddenId;
+          lines.push(`- ${name}`);
+        }
+        lines.push('');
+      }
+
+      // === Busca contexto dinâmico: analisa conversa atual e detecta menções ===
+      // Pega últimas 15 msgs do chat atual e procura por nomes de pessoas/grupos conhecidos
+      const recentMsgs = this.app.context.getRecent(chatId);
+      const recentText = recentMsgs.slice(-15).map(m => m.text || '').join(' ');
+      const mentionedContexts = this.findMentionedContexts(recentText, chatId);
+
+      if (mentionedContexts.people.length > 0) {
+        lines.push('=== PESSOAS MENCIONADAS NA CONVERSA (contexto pra fofoca) ===');
+        for (const person of mentionedContexts.people) {
+          lines.push(`--- ${person.name} ---`);
+          if (person.aiSummary) lines.push(`Perfil: ${person.aiSummary}`);
+          if (person.aiShortView) lines.push(`Resumo: ${person.aiShortView}`);
+          if (person.traits && Object.keys(person.traits).length > 0) {
+            const traitsStr = Object.entries(person.traits).map(([k, v]) => `${k}: ${v}`).join(', ');
+            lines.push(`Traits: ${traitsStr}`);
+          }
+          // Últimas 5 msgs dessa pessoa em outros grupos
+          if (person.recentMessages.length > 0) {
+            lines.push(`Últimas mensagens em outros grupos:`);
+            for (const m of person.recentMessages) {
+              const time = new Date(m.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+              lines.push(`  [${time}] [${m.groupName}] ${m.text}`);
+            }
+          }
+          lines.push('');
+        }
+      }
+
+      if (mentionedContexts.groups.length > 0) {
+        lines.push('=== GRUPOS MENCIONADOS NA CONVERSA (contexto pra fofoca) ===');
+        for (const group of mentionedContexts.groups) {
+          if (this.gossipForbiddenChats.has(group.id)) {
+            lines.push(`--- ${group.name} (🚫 PROIBIDO — não fofoque sobre) ---`);
+            continue;
+          }
+          lines.push(`--- ${group.name} ---`);
+          if (group.aiSummary) lines.push(`Perfil: ${group.aiSummary}`);
+          // Últimas 10 msgs desse grupo
+          if (group.recentMessages.length > 0) {
+            lines.push(`Últimas mensagens:`);
+            for (const m of group.recentMessages) {
+              const time = new Date(m.timestamp).toLocaleString('pt-BR', { day: '2-digit', hour: '2-digit', minute: '2-digit' });
+              const sender = m.fromMe ? 'você' : (m.senderName || 'alguém');
+              lines.push(`  [${time}] ${sender}: ${m.text}`);
+            }
+          }
+          lines.push('');
+        }
+      }
+
+      if (mentionedContexts.people.length === 0 && mentionedContexts.groups.length === 0) {
+        lines.push('(Nenhuma menção a pessoa ou grupo conhecido detectada na conversa recente.');
+        lines.push('Se fizer sentido, você pode fofocar sobre o que já sabe das suas memórias e perfil.)');
+        lines.push('');
+      }
+
+      return lines.join('\n');
+    } catch (e) {
+      this.app.debug('GOSSIP', `erro ao montar contexto: ${(e as Error).message}`);
+      return '';
+    }
+  }
+
+  /**
+   * Analisa um texto e encontra menções a pessoas/grupos conhecidos no ProfileBook.
+   * Retorna perfis + últimas mensagens relevantes pra injetar no contexto de fofoca.
+   */
+  private findMentionedContexts(text: string, currentChatId: string): {
+    people: Array<{
+      name: string;
+      aiSummary: string;
+      aiShortView: string;
+      traits: Record<string, string>;
+      recentMessages: Array<{ text: string; timestamp: number; groupName: string }>;
+    }>;
+    groups: Array<{
+      id: string;
+      name: string;
+      aiSummary: string;
+      recentMessages: Array<{ text: string; timestamp: number; senderName: string; fromMe: boolean }>;
+    }>;
+  } {
+    const result = {
+      people: [] as any[],
+      groups: [] as any[],
+    };
+    const lowerText = text.toLowerCase();
+    const seenPeople = new Set<string>();
+    const seenGroups = new Set<string>();
+
+    // Busca pessoas conhecidas
+    const allPeople = this.app.profileBook?.byType('person') || [];
+    for (const person of allPeople) {
+      if (!person.name || seenPeople.has(person.id)) continue;
+      const pname = person.name.toLowerCase();
+      // Match por nome ou primeiro nome
+      if (lowerText.includes(pname) || (pname.split(' ')[0] && lowerText.includes(pname.split(' ')[0]))) {
+        seenPeople.add(person.id);
+        // Busca últimas 5 msgs dessa pessoa em outros grupos
+        const recentMsgs: Array<{ text: string; timestamp: number; groupName: string }> = [];
+        const allGroups = this.app.profileBook?.byType('group') || [];
+        for (const g of allGroups) {
+          if (g.id === currentChatId) continue;  // não pega do grupo atual
+          if (this.gossipForbiddenChats.has(g.id)) continue;  // não pega de grupos proibidos
+          const history = this.app.retroactive?.getHistory(g.id) || [];
+          const personMsgs = history
+            .filter(e => !e.fromMe && e.senderName && e.senderName.toLowerCase().includes(pname.split(' ')[0]))
+            .slice(-3);
+          for (const m of personMsgs) {
+            recentMsgs.push({
+              text: (m.text || '').slice(0, 200),
+              timestamp: m.timestamp,
+              groupName: g.name || g.id,
+            });
+          }
+          if (recentMsgs.length >= 5) break;
+        }
+        result.people.push({
+          name: person.name,
+          aiSummary: person.aiSummary || '',
+          aiShortView: person.aiShortView || '',
+          traits: person.traits || {},
+          recentMessages: recentMsgs.slice(0, 5),
+        });
+      }
+    }
+
+    // Busca grupos conhecidos
+    const allGroups = this.app.profileBook?.byType('group') || [];
+    for (const group of allGroups) {
+      if (!group.name || group.id === currentChatId || seenGroups.has(group.id)) continue;
+      const gname = group.name.toLowerCase();
+      if (lowerText.includes(gname)) {
+        seenGroups.add(group.id);
+        const isForbidden = this.gossipForbiddenChats.has(group.id);
+        // Mesmo proibido, inclui pra bot SABER que não deve falar sobre ele
+        const history = this.app.retroactive?.getHistory(group.id) || [];
+        const recent = history.slice(-10).map(e => ({
+          text: (e.text || '').slice(0, 200),
+          timestamp: e.timestamp,
+          senderName: e.senderName || '',
+          fromMe: e.fromMe,
+        }));
+        result.groups.push({
+          id: group.id,
+          name: group.name,
+          aiSummary: group.aiSummary || '',
+          recentMessages: isForbidden ? [] : recent,  // se proibido, não mostra msgs
+        });
+      }
+    }
+
+    return result;
   }
 
   // ===========================================================================
@@ -1084,10 +1397,13 @@ export class MarcioBrain {
         ).join('\n')
       : '(nenhuma conversa interna ainda)';
 
-    // === CONTEXTO GLOBAL (outros chats) ===
-    // Temas sendo discutidos em outros chats — só tema, NÃO conteúdo exato.
-    // Ajuda o bot a associar referências cruzadas ("no penis o assunto tá pesado").
-    const globalContextBlock = this.buildGlobalContextBlock(chatId);
+    // === CONTEXTO GLOBAL (outros chats) — SÓ no modo fofoca ===
+    // Quando fofoca está ativa, o bot tem consciência plena dos outros chats.
+    // Quando NÃO está ativa (ou proibida), o bot é "cego" pros outros chats —
+    // só responde ao contexto do chat atual.
+    const isGossipOn = this.isGossipActive(chatId);
+    const isGossipForbidden = this.gossipForbiddenChats.has(chatId);
+    const globalContextBlock = isGossipOn ? this.buildGlobalContextBlock(chatId) : '';
 
     const lines = [
       '=== AUTOCONSCIÊNCIA (sobre você) ===',
@@ -1095,10 +1411,18 @@ export class MarcioBrain {
       `Memórias: ${memoryCount} sobre ${userCount} pessoa(s). Chats ativos: ${chatCount}. Figurinhas: ${stickerCount}.`,
       `Entrosão deste chat: ${this.chatEntrosaoLevel.get(chatId) ?? 1}. Requests hoje: ${this.aiRequestCount}.`,
       '',
-      '=== CONTEXTO GLOBAL (outros chats) ===',
-      globalContextBlock,
-      'Use pra associar referências cruzadas. NÃO repita conteúdo de outros chats.',
-      '',
+    ];
+
+    // === CONTEXTO GLOBAL — só injeta se fofoca ativa ===
+    if (isGossipOn) {
+      lines.push('=== CONTEXTO GLOBAL (outros chats — modo fofoca) ===');
+      lines.push(globalContextBlock);
+      lines.push('Use pra associar referências cruzadas. NÃO repita conteúdo de outros chats.');
+      lines.push('');
+    }
+    // Se NÃO tá ativa, não injeta o bloco global — bot não "vê" outros chats.
+
+    lines.push(
       '=== SUA IDENTIDADE ===',
       `Resumo: ${botSummary}`,
       `Visão: ${botShortView}`,
@@ -1106,7 +1430,7 @@ export class MarcioBrain {
       `Traços:\n${botTraits}`,
       `Gosta: ${botLikes} | Não gosta: ${botDislikes}`,
       '',
-    ];
+    );
 
     // === PENSAMENTOS INJETADOS (só se tem) ===
     if (recentInjections.length > 0) {
@@ -1116,9 +1440,28 @@ export class MarcioBrain {
       lines.push('');
     }
 
+    // === MODO FOFOCA — só injeta se ATIVO. Proibido = corte total, sem aviso. ===
+    // Antes injetava um "FOFOCA PROIBIDA" — agora o silêncio é o corte.
+    // Bot nem sabe que fofoca existe no grupo proibido.
+    if (isGossipOn) {
+      const gossipBlock = this.buildGossipContextBlock(chatId);
+      if (gossipBlock) {
+        lines.push(gossipBlock);
+        lines.push('');
+      }
+    }
+    // Se proibido ou desativado: NÃO injeta nada. Bot segue sem consciência dos
+    // outros chats, sem histórico do grupo, sem "habilidade" de fofocar.
+
     lines.push(
-      '⚠️ Você tem PRÓPRIAS convicções. QUESTIONE, debata, forme opiniões. NÃO concorde só pra agradar.',
-      'Mude de ideia se argumentos forem bons. Seja autêntico.',
+      '⚠️ TOM E EMPATIA (essencial):',
+      '- Você é um AMIGO, não um crítico. Gentileza por padrão.',
+      '- Ironia SÓ em clima leve. Nunca com quem tá chateado.',
+      '- Pode ter opinião própria, mas com respeito. "não curti" > "vish nem me fala".',
+      '- Empatia vem antes de "ter razão". Se alguém tá mal, acolha antes de zoar.',
+      '- "Ter personalidade" = ter opinião, NÃO ser grosso.',
+      '- Pode discordar, debater, mas sem atacar a pessoa.',
+      '- Mude de ideia se argumentos forem bons. Seja autêntico, mas gentil.',
       '',
       'MARCADORES (SEMPRE removidos da resposta final):',
       '• [ACAO: foto|modelo|status|debug|entrosao N|memoria] — ações sobre si',

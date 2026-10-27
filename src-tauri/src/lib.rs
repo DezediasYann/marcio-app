@@ -587,6 +587,19 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Minimiza a janela main pro tray (esconde sem fechar).
+/// Usado pelo botão "Minimizar pro tray" no modal de fechar.
+#[tauri::command]
+fn minimize_to_tray(app: tauri::AppHandle) {
+    println!("[TAURI] Minimizando pro tray…");
+    if let Some(main_window) = app.get_webview_window("main") {
+        let _ = main_window.hide();
+        println!("[TAURI] ✅ Janela main escondida (minimizada pro tray)");
+    } else {
+        println!("[TAURI] ⚠️ Janela main não encontrada");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -774,7 +787,8 @@ pub fn run() {
             open_main_window,
             reopen_setup,
             relaunch_app,
-            quit_app
+            quit_app,
+            minimize_to_tray
         ])
         .run(tauri::generate_context!())
         .expect("erro ao rodar Márcio App");

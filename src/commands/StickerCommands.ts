@@ -23,7 +23,8 @@ import { MessageMedia } from 'whatsapp-web.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import Jimp from 'jimp';
+// jimp é importado dinamicamente (lazy) pra evitar crash em produção
+// se o módulo não tiver sido empacotado corretamente no node_modules.zip
 
 // ============================================================================
 // CONSTS
@@ -159,6 +160,7 @@ export class StickerCommands implements CommandModule {
       if (isImage) {
         // === IMAGEM: jimp lê dimensões e corta ===
         try {
+          const Jimp = (await import('jimp')).default;
           const buf = Buffer.from(media.data, 'base64');
           const image = await Jimp.read(buf);
           const w = image.bitmap.width;

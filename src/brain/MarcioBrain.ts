@@ -3167,7 +3167,7 @@ export class MarcioBrain {
         const y = Math.floor((h - side) / 2);
         image.crop(x, y, side, side);
         image.resize(512, 512);
-        const outBuf = await image.getBufferAsync(Jimp.MIME_PNG);
+        const outBuf = await image.getBufferAsync('image/png');
         const outBase64 = outBuf.toString('base64');
 
         const media = new MessageMedia('image/png', outBase64, 'sticker.png');

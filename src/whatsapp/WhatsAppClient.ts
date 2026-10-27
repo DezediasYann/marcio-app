@@ -151,6 +151,50 @@ export class WhatsAppClient {
       await this.handleMessage(msg);
     });
 
+    // === Evento de reação (👍 na msg do bot) ===
+    // Detecta quando alguém reage a uma mensagem com emoji.
+    // Usado pra: aceitar corte de figurinha com 👍
+    this.client.on('message_reaction', async (reaction: any) => {
+      try {
+        // O whatsapp-web.js manda reaction.msgId como objeto aninhado:
+        // { msgId: { fromMe: true, remote: "chat@g.us", id: "ABC123", $1: "true_chat@g.us_ABC123_user@lid" } }
+        // O $1 é o _serialized completo.
+        const msgIdObj = reaction?.msgId || reaction?.id;
+        const msgId = msgIdObj?.$1
+          || msgIdObj?.id?._serialized
+          || msgIdObj?._serialized
+          || (typeof msgIdObj === 'string' ? msgIdObj : null);
+        const emoji = reaction?.text || reaction?.emoji || reaction?.reaction || reaction?.aggregateEmoji;
+        const reactorId = typeof reaction?.senderId === 'string'
+          ? reaction.senderId
+          : (reaction?.senderId?._serialized || (reaction?.sender?.id?._serialized) || reaction?.from);
+
+        this.app.debug('REACTION', `raw: ${JSON.stringify(reaction).slice(0, 300)}`);
+        this.app.debug('REACTION', `parsed: msgId=${msgId}, emoji=${emoji}, reactor=${reactorId}`);
+
+        if (!msgId || !emoji) return;
+
+        // Só processa 👍 (thumbs up) — todas as variações de tom de pele
+        if (!emoji.includes('👍')) return;
+
+        this.app.debug('REACTION', `👍 recebido na msg ${msgId}`);
+
+        // Verifica se é uma pendente de formato de figurinha
+        const brain = this.app.brain as any;
+        if (brain?.pendingStickerFormats?.has(msgId)) {
+          const pending = brain.pendingStickerFormats.get(msgId);
+          brain.pendingStickerFormats.delete(msgId);
+          this.app.debug('STICKER', `👍 detectado — cortando automático pra ${pending.chatId}`);
+
+          // Cria um fake msg pro handler
+          const fakeMsg = { body: 'sim', id: { _serialized: msgId }, fromMe: false, hasQuotedMsg: false } as any;
+          await brain._handleStickerFormatReply(fakeMsg, pending, pending.chatId);
+        }
+      } catch (e) {
+        this.app.debug('REACTION', `erro: ${(e as Error).message}`);
+      }
+    });
+
     // Inicializa (dispara o fluxo de QR/ready)
     await this.client.initialize();
   }

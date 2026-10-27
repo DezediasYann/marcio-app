@@ -2544,6 +2544,19 @@
 </head>
 <body>
 
+  <!-- === OVERLAY "INICIANDO" — mostra enquanto backend não tá pronto === -->
+  <div id="bootingOverlay" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:var(--bg, #0a0a0a);flex-direction:column;gap:16px;">
+    <div style="font-size:48px;animation:spin 2s linear infinite;" id="bootingIcon">⚙️</div>
+    <div style="font-size:18px;font-weight:600;color:var(--text-primary, #fff);">Iniciando Márcio…</div>
+    <div id="bootingStatus" style="font-size:13px;color:var(--text-muted, #888);">Conectando ao backend…</div>
+    <!-- Botão de reconectar WhatsApp (escondido até backend ficar pronto) -->
+    <div id="bootingActions" style="display:none;flex-direction:column;gap:8px;align-items:center;margin-top:8px;">
+      <button onclick="bootReconnect()" style="padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:var(--text-primary, #fff);cursor:pointer;font-size:13px;">🔄 Reconectar WhatsApp</button>
+      <button onclick="bootLogout()" style="padding:6px 14px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:12px;">🚪 Logout (reler QR)</button>
+    </div>
+  </div>
+  <style>@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }</style>
+
   <!-- Hamburger (mobile) -->
   <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
   <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
@@ -3774,6 +3787,7 @@
     var _marcio_state = {
       ws: null,
       wsConnected: false,
+      wsEverConnected: false,
       currentSection: 'dashboard',
       currentChatId: null,
       logLines: [],          // all log lines for filtering
@@ -4031,6 +4045,7 @@
       }
       _marcio_state.ws.onopen = () => {
         _marcio_state.wsConnected = true;
+        _marcio_state.wsEverConnected = true;
         setStatus('online', 'online');
         dbg('WS', '✓ connected');
         appendLogLine('SYSTEM', 'WebSocket conectado.', { cls: 'system' });
@@ -4043,7 +4058,11 @@
         _marcio_state.wsConnected = false;
         setStatus('offline', 'reconectando em 3s…');
         dbg('WS', 'disconnected:', ev.code, ev.reason || '(no reason)');
-        appendLogLine('SYSTEM', 'WebSocket desconectado. Reconectando…', { cls: 'system' });
+        // Só loga "desconectado" se já tinha conectado antes.
+        // Evita spam de log no boot quando WS tenta conectar antes do backend estar pronto.
+        if (_marcio_state.wsEverConnected) {
+          appendLogLine('SYSTEM', 'WebSocket desconectado. Reconectando…', { cls: 'system' });
+        }
         setTimeout(connectWs, 3000);
       };
       _marcio_state.ws.onerror = (ev) => {
@@ -7598,10 +7617,135 @@
     function init() {
       console.log('[MARCIO] init() start');
       try {
+        // === WAIT FOR BACKEND — não tenta carregar nada até backend responder ===
+        // Evita erros falsos de "Failed to fetch" e "WebSocket desconectado"
+        // enquanto o Node.js ainda tá inicializando.
+        waitForBackend().then(() => {
+          console.log('[MARCIO] Backend pronto — carregando painel');
+          _initAfterBackendReady();
+        }).catch(err => {
+          console.error('[MARCIO] Erro esperando backend:', err);
+          // Mesmo com erro, tenta carregar (fallback)
+          _initAfterBackendReady();
+        });
+      } catch (e) {
+        console.error('[MARCIO] init() error:', e);
+      }
+    }
+
+    /**
+     * Faz polling leve em /api/health até o backend responder.
+     * Atualiza o texto do overlay de boot pra o usuário saber o que tá acontecendo.
+     * Timeout de 30s — se passar, desiste e carrega o painel mesmo assim.
+     */
+    async function waitForBackend() {
+      const overlay = document.getElementById('bootingOverlay');
+      const statusEl = document.getElementById('bootingStatus');
+      const iconEl = document.getElementById('bootingIcon');
+      const actionsEl = document.getElementById('bootingActions');
+      const maxAttempts = 60; // 60 × 500ms = 30s
+      let attempts = 0;
+
+      while (attempts < maxAttempts) {
+        try {
+          const r = await fetch('/api/health', { method: 'GET' });
+          if (r.ok) {
+            if (statusEl) statusEl.textContent = 'Backend conectado! ✓';
+            await new Promise(rq => setTimeout(rq, 300));
+
+            // === Verifica status do WhatsApp ===
+            // Se WA não tá conectado, mostra botões de reconectar/logout
+            // no overlay em vez de esconder direto
+            try {
+              const waStatus = await fetch('/api/bot/status').then(r => r.json());
+              const waConnected = waStatus.waConnected || waStatus.connected || false;
+
+              if (!waConnected) {
+                // WhatsApp não conectado — mostra botões
+                if (statusEl) statusEl.textContent = 'Backend pronto, mas WhatsApp não conectado.';
+                if (iconEl) iconEl.textContent = '📱';
+                if (iconEl) iconEl.style.animation = 'none';
+                if (actionsEl) actionsEl.style.display = 'flex';
+
+                // Inicia polling do status do WA — quando conectar, esconde overlay
+                const waPoll = setInterval(async () => {
+                  try {
+                    const s = await fetch('/api/bot/status').then(r => r.json());
+                    if (s.waConnected || s.connected) {
+                      clearInterval(waPoll);
+                      if (statusEl) statusEl.textContent = 'WhatsApp conectado! ✓';
+                      if (iconEl) iconEl.textContent = '✅';
+                      await new Promise(rq => setTimeout(rq, 500));
+                      if (overlay) overlay.style.display = 'none';
+                    }
+                  } catch { /* ignora */ }
+                }, 3000);
+
+                // Não esconde o overlay — deixa visível com os botões
+                return;
+              }
+            } catch (e) {
+              // Não conseguiu checar status do WA — segue e esconde overlay
+            }
+
+            // WA conectado ou não conseguiu verificar — esconde overlay
+            if (overlay) overlay.style.display = 'none';
+            return;
+          }
+        } catch (e) {
+          // Backend ainda não respondeu — tudo normal
+        }
+        attempts++;
+        const elapsed = (attempts * 0.5).toFixed(0);
+        if (statusEl) {
+          if (attempts < 4) statusEl.textContent = 'Conectando ao backend…';
+          else if (attempts < 10) statusEl.textContent = `Aguardando backend… (${elapsed}s)`;
+          else statusEl.textContent = `Backend ainda iniciando… (${elapsed}s)`;
+        }
+        await new Promise(rq => setTimeout(rq, 500));
+      }
+
+      // Timeout — desiste e carrega o painel mesmo assim
+      console.warn('[MARCIO] Timeout esperando backend — carregando painel mesmo assim');
+      if (statusEl) statusEl.textContent = 'Timeout — carregando mesmo assim…';
+      await new Promise(rq => setTimeout(rq, 500));
+      if (overlay) overlay.style.display = 'none';
+    }
+
+    /** Reconecta WhatsApp a partir do overlay de boot. */
+    async function bootReconnect() {
+      const statusEl = document.getElementById('bootingStatus');
+      const iconEl = document.getElementById('bootingIcon');
+      try {
+        if (statusEl) statusEl.textContent = 'Reconectando…';
+        if (iconEl) { iconEl.textContent = '⚙️'; iconEl.style.animation = 'spin 2s linear infinite'; }
+        await apiPost('/api/bot/reconnect', {});
+        if (statusEl) statusEl.textContent = 'Reconectando… aguarde.';
+      } catch (e) {
+        if (statusEl) statusEl.textContent = 'Erro ao reconectar: ' + e.message;
+        if (iconEl) { iconEl.textContent = '❌'; iconEl.style.animation = 'none'; }
+      }
+    }
+
+    /** Faz logout do WhatsApp a partir do overlay de boot (pra reler QR). */
+    async function bootLogout() {
+      if (!confirm('Tem certeza que deseja deslogar do WhatsApp? Você precisará escanear o QR novamente.')) return;
+      const statusEl = document.getElementById('bootingStatus');
+      const iconEl = document.getElementById('bootingIcon');
+      try {
+        if (statusEl) statusEl.textContent = 'Deslogando…';
+        await apiPost('/api/bot/logout', {});
+        if (statusEl) statusEl.textContent = 'Deslogado. Escaneie o QR no painel.';
+      } catch (e) {
+        if (statusEl) statusEl.textContent = 'Erro: ' + e.message;
+      }
+    }
+
+    /**
+     * Inicialização real do painel — só roda DEPOIS que o backend tá pronto.
+     */
+    function _initAfterBackendReady() {
         // === Feature Flags — detecta canal (dev/beta/stable) ===
-        // Carrega via /api/feature-flags e aplica mascaramento nos elementos com data-feature.
-        // Em stable: elementos com data-feature="dev-only" somem da DOM.
-        // Em dev/beta: botões de testes aparecem.
         loadFeatureFlags().then(() => {
           console.log('[MARCIO] Feature flags aplicadas');
         });

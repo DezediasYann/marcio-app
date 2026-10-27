@@ -301,6 +301,14 @@ export class MarcioBrain {
    */
   private pendingStickerNames = new Map<string, { stickerFilename: string; suggestedName: string; chatId: string; timestamp: number }>();
 
+  /**
+   * Mídia pendente pra criação de figurinha — quando o bot pergunta se o
+   * usuário quer corte automático de formato.
+   * Map: botMsgId → { mediaData, mimetype, chatId, timestamp }
+   * TTL: 2 min (se não responder, esquece).
+   */
+  pendingStickerFormats = new Map<string, { mediaData: string; mimetype: string; chatId: string; timestamp: number }>();
+
   /** Chats onde a IA foi desativada via /ia off. */
   aiDisabledChats = new Set<string>();
 
@@ -1468,6 +1476,8 @@ export class MarcioBrain {
       '• [ACAO: avisar|texto] — avisa todos chats ativos',
       '• [ACAO: pv|nome|mensagem] — manda no PV de alguém (inclua contexto: quem pediu, de onde)',
       '• [ACAO: grupo|nome|mensagem] — manda num grupo',
+      '• [ACAO: todos|mensagem] — marca @todos no grupo atual (notifica todo mundo)',
+      '  Use só quando faz sentido: avisos importantes, anúncios. NÃO abuse.',
       '• [FIGURINHA: nome|fav] — envia figurinha',
       '• [LASTCOLLAGE: usuario, grid, periodo] — SÓ quando pedir EXPLICITAMENTE collage/last',
       '  Antes: procure usuário nas memórias. Se não tem, PERGUNTE. NUNCA chute.',
@@ -1746,6 +1756,53 @@ export class MarcioBrain {
               this.app.log('SELF', `IA mandou msg no grupo ${match.name} (${cid}): "${msg}"`);
             } else {
               actions.push(`❌ não achei grupo chamado "${targetName}"`);
+            }
+            break;
+          }
+          case 'todos': {
+            // === MARCA @TODOS NO GRUPO ATUAL ===
+            // [ACAO: todos|mensagem] — manda msg marcando todo mundo do grupo
+            // Só funciona em grupo (não em PV).
+            const todosMsg = pipeArgs.join('|').trim();
+            if (!todosMsg) {
+              actions.push('❌ use: todos|mensagem');
+              break;
+            }
+            if (!chatId.endsWith('@g.us')) {
+              actions.push('❌ @todos só funciona em grupos');
+              break;
+            }
+            try {
+              const chat = await this.app.whatsapp.client.getChatById(chatId);
+              if (chat && chat.isGroup) {
+                // Pega todos os participantes do grupo
+                const participants = (chat as any).participants || [];
+                const participantIds = participants.map((p: any) => p.id?._serialized || p.id?.id || p).filter(Boolean);
+                if (participantIds.length === 0) {
+                  // Fallback: manda sem menção se não conseguiu pegar participantes
+                  await this.app.whatsapp.client.sendMessage(chatId, todosMsg);
+                  actions.push('✅ mensagem enviada (sem @todos — não achei participantes)');
+                  this.app.log('SELF', `IA mandou @todos em ${chatId} (sem menção técnica): "${todosMsg}"`);
+                } else {
+                  // Manda com menção técnica (notifica todo mundo)
+                  await this.app.whatsapp.client.sendMessage(chatId, todosMsg, {
+                    mentions: participantIds,
+                  });
+                  actions.push(`✅ @todos marcado (${participantIds.length} pessoas)`);
+                  this.app.log('SELF', `IA marcou @todos em ${chatId} (${participantIds.length} pessoas): "${todosMsg}"`);
+                }
+              } else {
+                actions.push('❌ não é um grupo');
+              }
+            } catch (e) {
+              // Fallback: manda sem menção se der erro
+              try {
+                await this.app.whatsapp.client.sendMessage(chatId, todosMsg);
+                actions.push('⚠️ @todos com erro (enviado sem menção)');
+                this.app.debug('SELF', `erro no @todos: ${(e as Error).message} — enviado sem menção`);
+              } catch (e2) {
+                actions.push(`❌ erro: ${(e2 as Error).message}`);
+              }
             }
             break;
           }
@@ -2295,6 +2352,51 @@ export class MarcioBrain {
         }
       } catch { /* ignora */ }
     }
+
+    // === DETECTA RESPOSTA À PERGUNTA DE FORMATO DE FIGURINHA ===
+    // Quando o bot pergunta "essa imagem é X:Y, quer corte automático?"
+    if (msg.hasQuotedMsg && this.pendingStickerFormats.size > 0) {
+      try {
+        const quoted = await msg.getQuotedMessage();
+        if (quoted.fromMe) {
+          const quotedMsgId = quoted.id?._serialized;
+          this.app.debug('STICKER', `resposta detectada — quotedMsgId=${quotedMsgId}, pendingSize=${this.pendingStickerFormats.size}, keys=[${Array.from(this.pendingStickerFormats.keys()).join(', ')}]`);
+
+          // Tenta match por ID
+          if (quotedMsgId && this.pendingStickerFormats.has(quotedMsgId)) {
+            const pending = this.pendingStickerFormats.get(quotedMsgId)!;
+            this.pendingStickerFormats.delete(quotedMsgId);
+            this.app.debug('STICKER', `resposta de formato detectada (por ID) pra ${pending.chatId}`);
+            await this._handleStickerFormatReply(msg, pending, chatId);
+            return;
+          }
+
+          // Fallback: match por conteúdo da mensagem citada
+          // Se a msg citada começa com "📐", é uma pergunta de formato
+          const quotedBody = (quoted.body || '').trim();
+          if (quotedBody.startsWith('📐')) {
+            // Procura a pendente mais recente no mesmo chat
+            let foundKey: string | null = null;
+            for (const [k, v] of this.pendingStickerFormats) {
+              if (v.chatId === chatId) {
+                foundKey = k;
+                break;
+              }
+            }
+            if (foundKey) {
+              const pending = this.pendingStickerFormats.get(foundKey)!;
+              this.pendingStickerFormats.delete(foundKey);
+              this.app.debug('STICKER', `resposta de formato detectada (por conteúdo 📐) pra ${pending.chatId}`);
+              await this._handleStickerFormatReply(msg, pending, chatId);
+              return;
+            }
+          }
+        }
+      } catch { /* ignora */ }
+    }
+
+    // Limpa pendentes expirados (TTL 2 min)
+    this._cleanupPendingStickerFormats();
 
     // === Detecção de menção ===
     let isDirect = false;
@@ -3024,6 +3126,181 @@ export class MarcioBrain {
     const TTL = 5 * 60 * 1000;  // 5 min
     for (const [k, v] of this.pendingStickerNames) {
       if (now - v.timestamp > TTL) this.pendingStickerNames.delete(k);
+    }
+  }
+
+  /** Limpa pendentes de formato de figurinha expirados (TTL 2 min). */
+  private _cleanupPendingStickerFormats(): void {
+    const now = Date.now();
+    const TTL = 2 * 60 * 1000;  // 2 min
+    for (const [k, v] of this.pendingStickerFormats) {
+      if (now - v.timestamp > TTL) this.pendingStickerFormats.delete(k);
+    }
+  }
+
+  /**
+   * Processa a resposta do usuário à pergunta de formato de figurinha.
+   * - "sim" / "auto" / "corta" → corta automático (center crop pra quadrado)
+   * - "não" / "deixa" / "manual" → envia do jeito que tá
+   * - Qualquer outra coisa → envia do jeito que tá (fallback)
+   */
+  private async _handleStickerFormatReply(
+    userMsg: Message,
+    pending: { mediaData: string; mimetype: string; chatId: string; timestamp: number; isVideo?: boolean; videoPath?: string },
+    chatId: string,
+  ): Promise<void> {
+    const text = (userMsg.body || '').trim().toLowerCase();
+    const wantsCrop = /\b(sim|auto|corta|crop|quadrado|corta sim|pode|certo|isso|s|y|yes|👍)\b/.test(text)
+      || text === 's' || text === 'y';
+
+    try {
+      if (wantsCrop && !pending.isVideo) {
+        // === IMAGEM: corte com jimp ===
+        await this.app.react(userMsg, '⏳');
+        const Jimp = (await import('jimp')).default;
+        const buf = Buffer.from(pending.mediaData, 'base64');
+        const image = await Jimp.read(buf);
+        const w = image.bitmap.width;
+        const h = image.bitmap.height;
+        const side = Math.min(w, h);
+        const x = Math.floor((w - side) / 2);
+        const y = Math.floor((h - side) / 2);
+        image.crop(x, y, side, side);
+        image.resize(512, 512);
+        const outBuf = await image.getBufferAsync(Jimp.MIME_PNG);
+        const outBase64 = outBuf.toString('base64');
+
+        const media = new MessageMedia('image/png', outBase64, 'sticker.png');
+        await this.app.whatsapp.client.sendMessage(chatId, media, {
+          sendMediaAsSticker: true,
+          stickerAuthor: this.app.config.botName,
+          stickerName: 'Figurinha',
+        });
+        await this.app.react(userMsg, '✅');
+        this.app.log('STICKER', `Figurinha criada com corte automático (${w}x${h} → 512x512) em ${chatId}`);
+
+      } else if (wantsCrop && pending.isVideo) {
+        // === VÍDEO: corte com ffmpeg ===
+        await this.app.react(userMsg, '⏳');
+        await this.app.whatsapp.client.sendMessage(chatId, 'cortando vídeo… pode demorar uns segundos ⏳').catch(() => {});
+
+        const { spawnSync } = require('node:child_process');
+        const os = require('node:os');
+        const path = require('node:path');
+        const fs = require('node:fs');
+
+        // Se tem videoPath guardado, usa ele; senão recria do base64
+        const inputPath = pending.videoPath && fs.existsSync(pending.videoPath)
+          ? pending.videoPath
+          : (() => {
+              const p = path.join(os.tmpdir(), `marcio_sticker_in_${Date.now()}.mp4`);
+              fs.writeFileSync(p, Buffer.from(pending.mediaData, 'base64'));
+              return p;
+            })();
+
+        const outputPath = path.join(os.tmpdir(), `marcio_sticker_out_${Date.now()}.mp4`);
+
+        // Pega dimensões do vídeo original
+        const probeResult = spawnSync('ffprobe', [
+          '-v', 'error', '-select_streams', 'v:0',
+          '-show_entries', 'stream=width,height',
+          '-of', 'csv=s=x:p=0', inputPath
+        ], { encoding: 'utf8', timeout: 15000, shell: true });
+
+        if (probeResult.error) throw new Error(`ffprobe falhou: ${probeResult.error.message}`);
+        const [vw, vh] = (probeResult.stdout || '').trim().split('x').map(n => parseInt(n, 10));
+        if (!vw || !vh) throw new Error('não consegui ler dimensões do vídeo');
+
+        const side = Math.min(vw, vh);
+        const cropX = Math.floor((vw - side) / 2);
+        const cropY = Math.floor((vh - side) / 2);
+        const cropFilter = `crop=${side}:${side}:${cropX}:${cropY},scale=512:512`;
+
+        // Roda ffmpeg pra cortar e redimensionar
+        this.app.debug('STICKER', `ffmpeg cortando vídeo: ${vw}x${vh} → 512x512 (crop ${side}x${side})`);
+        const ffmpegResult = spawnSync('ffmpeg', [
+          '-y', '-i', inputPath,
+          '-vf', cropFilter,
+          '-c:v', 'libx264',
+          '-c:a', 'aac',
+          '-preset', 'ultrafast',
+          '-movflags', '+faststart',
+          outputPath
+        ], { encoding: 'utf8', timeout: 60000, shell: true });
+
+        this.app.debug('STICKER', `ffmpeg exit code: ${ffmpegResult.status}, stderr: ${(ffmpegResult.stderr || '').slice(0, 200)}`);
+
+        // Limpa input temporário
+        if (pending.videoPath !== inputPath) {
+          try { fs.unlinkSync(inputPath); } catch { /* ignora */ }
+        } else {
+          try { fs.unlinkSync(pending.videoPath); } catch { /* ignora */ }
+        }
+
+        if (ffmpegResult.error || ffmpegResult.status !== 0) {
+          const errMsg = ffmpegResult.error?.message || ffmpegResult.stderr || 'erro desconhecido';
+          this.app.debug('STICKER', `ffmpeg falhou: ${errMsg}`);
+          // Fallback: envia do jeito que tá
+          const media = new MessageMedia(pending.mimetype, pending.mediaData, 'sticker');
+          await this.app.whatsapp.client.sendMessage(chatId, media, {
+            sendMediaAsSticker: true,
+            stickerAuthor: this.app.config.botName,
+            stickerName: 'Figurinha',
+          });
+          await this.app.react(userMsg, '⚠️');
+          await this.app.notify(chatId, 'não consegui cortar o vídeo — enviei do jeito que tá');
+          return;
+        }
+
+        // Lê o vídeo cortado e envia como figurinha
+        const croppedBuf = fs.readFileSync(outputPath);
+        const croppedBase64 = croppedBuf.toString('base64');
+        try { fs.unlinkSync(outputPath); } catch { /* ignora */ }
+
+        const media = new MessageMedia('video/mp4', croppedBase64, 'sticker.mp4');
+        await this.app.whatsapp.client.sendMessage(chatId, media, {
+          sendMediaAsSticker: true,
+          stickerAuthor: this.app.config.botName,
+          stickerName: 'Figurinha',
+        });
+        await this.app.react(userMsg, '✅');
+        this.app.log('STICKER', `Figurinha de vídeo criada com corte automático (${vw}x${vh} → 512x512) em ${chatId}`);
+
+      } else {
+        // Envia do jeito que tá (não quer corte)
+        const media = new MessageMedia(pending.mimetype, pending.mediaData, 'sticker');
+        await this.app.whatsapp.client.sendMessage(chatId, media, {
+          sendMediaAsSticker: true,
+          stickerAuthor: this.app.config.botName,
+          stickerName: 'Figurinha',
+        });
+        await this.app.react(userMsg, '✅');
+        this.app.log('STICKER', `Figurinha criada sem corte em ${chatId}`);
+
+        // Se era vídeo e tinha tmpFile, limpa
+        if (pending.videoPath) {
+          try { require('node:fs').unlinkSync(pending.videoPath); } catch { /* ignora */ }
+        }
+      }
+    } catch (e) {
+      this.app.debug('STICKER', `erro ao processar formato: ${(e as Error).message}`);
+      // Fallback: envia do jeito que tá
+      try {
+        const media = new MessageMedia(pending.mimetype, pending.mediaData, 'sticker');
+        await this.app.whatsapp.client.sendMessage(chatId, media, {
+          sendMediaAsSticker: true,
+          stickerAuthor: this.app.config.botName,
+          stickerName: 'Figurinha',
+        });
+        await this.app.react(userMsg, '✅');
+      } catch (e2) {
+        await this.app.notify(chatId, '❌ erro ao criar figurinha');
+        this.app.debug('STICKER', `fallback também falhou: ${(e2 as Error).message}`);
+      }
+      // Limpa tmpFile se tinha
+      if (pending.videoPath) {
+        try { require('node:fs').unlinkSync(pending.videoPath); } catch { /* ignora */ }
+      }
     }
   }
 

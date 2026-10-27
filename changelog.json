@@ -1011,6 +1011,117 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.4.2",
+      "date": "2025-10-20",
+      "title": "🧪 Beta 2 — Fix /op em grupos + @todos + fofoca inteligente",
+      "sections": [
+        {
+          "icon": "🔒",
+          "title": "Fix: Comandos admin em grupos",
+          "items": [
+            "Bug: /op, /deop, /ops, /ban, /unban, /banidos, /admin só funcionavam no PV",
+            "Causa: flag pvOnly: true em todos os comandos admin",
+            "Fix: removido pvOnly — agora funcionam em grupos também",
+            "Agora dá pra setar ops, banir, etc diretamente no grupo"
+          ]
+        },
+        {
+          "icon": "📢",
+          "title": "Marcar @todos",
+          "items": [
+            "Novo marcador [ACAO: todos|mensagem] — marca @todos no grupo",
+            "Notifica todo mundo do grupo (igual @todos do WhatsApp)",
+            "Só funciona em grupos (não em PV)",
+            "Instrução: usar só em avisos importantes, não abusar"
+          ]
+        },
+        {
+          "icon": "💬",
+          "title": "Fofoca inteligente (melhoria)",
+          "items": [
+            "Bot busca contexto dinâmico de pessoas/grupos mencionados na conversa",
+            "Trai perfil da pessoa (traits, aiSummary) + últimas msgs em outros grupos",
+            "Trai histórico de grupos mencionados (até 10 msgs)",
+            "Lista negra: proíbe fofocar SOBRE um grupo específico",
+            "Painel de Fofoca: status, grupos ativos, lista negra, gerenciar"
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.0.4",
+      "date": "2025-10-27",
+      "title": "🚀 1.0.4 estável — Fofoca + Figurinhas inteligentes + QoL do painel",
+      "sections": [
+        {
+          "icon": "💬",
+          "title": "Modo Fofoca Inteligente",
+          "items": [
+            "Comando /fofoca (só operador) — ativa modo fofoca no grupo",
+            "Bot busca contexto dinâmico: detecta pessoas/grupos mencionados na conversa",
+            "Trai perfil da pessoa (traits, aiSummary) + últimas msgs em outros grupos",
+            "Trai histórico de grupos mencionados (até 10 msgs)",
+            "Por padrão, bot pode fofocar sobre TUDO e TODOS",
+            "/fofoca proibir <nome> — proíbe fofocar SOBRE um grupo (lista negra)",
+            "/fofoca listar — lista grupos com nome e status",
+            "Painel de Fofoca: status, grupos ativos, lista negra, gerenciar por nome",
+            "Corte de consciência: quando desativado, bot não vê contexto de outros chats"
+          ]
+        },
+        {
+          "icon": "🎭",
+          "title": "Figurinhas Inteligentes",
+          "items": [
+            "Verificação de formato: se imagem não é 1:1, pergunta se quer corte automático",
+            "Corte automático de imagem com jimp (center crop + resize 512x512)",
+            "Verificação de vídeo com ffprobe (lê dimensões)",
+            "Corte automático de vídeo com ffmpeg (center crop + resize 512x512)",
+            "Falls back graciosamente se ffmpeg/ffprobe não disponível",
+            "Detecção de resposta por ID ou por conteúdo (📐) — robusto contra bugs da lib"
+          ]
+        },
+        {
+          "icon": "📢",
+          "title": "Marcar @todos",
+          "items": [
+            "Novo marcador [ACAO: todos|mensagem] — marca @todos no grupo",
+            "Notifica todo mundo do grupo (igual @todos do WhatsApp)",
+            "Só funciona em grupos (não em PV)",
+            "Instrução: usar só em avisos importantes, não abusar"
+          ]
+        },
+        {
+          "icon": "🔒",
+          "title": "Fix: Comandos admin em grupos",
+          "items": [
+            "Bug: /op, /deop, /ops, /ban, /unban, /banidos, /admin só funcionavam no PV",
+            "Causa: flag pvOnly: true em todos os comandos admin",
+            "Fix: removido pvOnly — agora funcionam em grupos também"
+          ]
+        },
+        {
+          "icon": "🧠",
+          "title": "Tom Empático",
+          "items": [
+            "buildSelfAwareness suavizado — bot é AMIGO por padrão, não crítico",
+            "Ironia SÓ em clima leve, nunca com quem tá chateado",
+            "'Ter personalidade' = ter opinião, NÃO ser grosso",
+            "Empatia vem antes de 'ter razão'"
+          ]
+        },
+        {
+          "icon": "🖥️",
+          "title": "QoL do Painel",
+          "items": [
+            "Overlay 'Iniciando Márcio…' — não mostra erros falsos durante o boot",
+            "Botões de Reconectar/Logout WhatsApp direto no overlay de boot",
+            "Polling automático: quando WA conecta, overlay some sozinho",
+            "Supressão de 'WebSocket desconectado' durante o boot (wsEverConnected flag)"
+          ]
+        }
+      ]
     }
   ]
 }

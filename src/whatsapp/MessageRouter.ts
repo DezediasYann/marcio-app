@@ -212,6 +212,46 @@ export class MessageRouter {
       }
     }
 
+    // === DETECTA RESPOSTA À PERGUNTA DE FORMATO DE FIGURINHA (ANTES do maybeAutoRespond) ===
+    // Em grupo, a fila de mensagens pode atrasar o _processMessageInner.
+    // Detectando aqui garante que a resposta seja processada imediatamente,
+    // sem esperar a fila drenar.
+    if (msg.hasQuotedMsg && (this.app.brain as any).pendingStickerFormats?.size > 0) {
+      try {
+        const quoted = await msg.getQuotedMessage();
+        if (quoted.fromMe) {
+          const quotedMsgId = quoted.id?._serialized;
+          const brain = this.app.brain as any;
+          const pendingFormats = brain.pendingStickerFormats as Map<string, any>;
+
+          // Tenta por ID
+          if (quotedMsgId && pendingFormats.has(quotedMsgId)) {
+            const pending = pendingFormats.get(quotedMsgId)!;
+            pendingFormats.delete(quotedMsgId);
+            this.app.debug('ROUTER', `resposta de formato detectada (por ID) pra ${chatId}`);
+            await brain._handleStickerFormatReply(msg, pending, chatId);
+            return; // já resolveu — não processa mais
+          }
+
+          // Fallback por conteúdo (📐)
+          const quotedBody = (quoted.body || '').trim();
+          if (quotedBody.startsWith('📐')) {
+            let foundKey: string | null = null;
+            for (const [k, v] of pendingFormats) {
+              if (v.chatId === chatId) { foundKey = k; break; }
+            }
+            if (foundKey) {
+              const pending = pendingFormats.get(foundKey)!;
+              pendingFormats.delete(foundKey);
+              this.app.debug('ROUTER', `resposta de formato detectada (por conteúdo 📐) pra ${chatId}`);
+              await brain._handleStickerFormatReply(msg, pending, chatId);
+              return;
+            }
+          }
+        }
+      } catch { /* ignora */ }
+    }
+
     // 5. Comando? (! ou /) — só faz sentido pra msgs com body
     const isCommand = msg.body ? (msg.body.startsWith('!') || msg.body.startsWith('/')) : false;
     if (!isCommand) {

@@ -134,7 +134,6 @@ export class AdminCommands implements CommandModule {
         aliases: ['!admin', '//'],
         handler: (msg, chatId) => this.handleAdmin(msg, chatId),
         opOnly: true,
-        pvOnly: true,
         help: 'painel admin (só ops, só no PV). Use /admin ajuda pra ver subcomandos.',
       },
       {
@@ -142,7 +141,6 @@ export class AdminCommands implements CommandModule {
         aliases: ['!op'],
         handler: (msg, chatId) => this.handleOp(msg, chatId),
         opOnly: true,
-        pvOnly: true,
         help: 'concede op a um usuário (responda à msg ou /op <número>). Só no PV do bot.',
       },
       {
@@ -150,7 +148,6 @@ export class AdminCommands implements CommandModule {
         aliases: ['!deop'],
         handler: (msg, chatId) => this.handleDeop(msg, chatId),
         opOnly: true,
-        pvOnly: true,
         help: 'revoga op de um usuário. Só no PV do bot.',
       },
       {
@@ -158,7 +155,6 @@ export class AdminCommands implements CommandModule {
         aliases: ['!ops'],
         handler: (msg, chatId) => this.handleListOps(msg, chatId),
         opOnly: true,
-        pvOnly: true,
         help: 'lista os operadores atuais. Só no PV do bot.',
       },
       {
@@ -166,7 +162,6 @@ export class AdminCommands implements CommandModule {
         aliases: ['!ban'],
         handler: (msg, chatId) => this.handleBan(msg, chatId),
         opOnly: true,
-        pvOnly: true,
         help: 'bane um usuário (responda à msg ou /ban <número>). Só no PV do bot.',
       },
       {
@@ -174,7 +169,6 @@ export class AdminCommands implements CommandModule {
         aliases: ['/desbanir', '!unban', '!desbanir'],
         handler: (msg, chatId) => this.handleUnban(msg, chatId),
         opOnly: true,
-        pvOnly: true,
         help: 'desbane um usuário. Só no PV do bot.',
       },
       {
@@ -182,7 +176,6 @@ export class AdminCommands implements CommandModule {
         aliases: ['!banidos'],
         handler: (msg, chatId) => this.handleListBanned(msg, chatId),
         opOnly: true,
-        pvOnly: true,
         help: 'lista os usuários banidos. Só no PV do bot.',
       },
     ];

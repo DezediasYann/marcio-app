@@ -23,6 +23,7 @@ import { MessageMedia } from 'whatsapp-web.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import Jimp from 'jimp';
 
 // ============================================================================
 // CONSTS
@@ -148,6 +149,117 @@ export class StickerCommands implements CommandModule {
         return;
       }
 
+      // === VERIFICAÇÃO DE FORMATO ===
+      // WhatsApp usa 512x512px (1:1) pra figurinhas. Se a mídia não é quadrada,
+      // perde espaço e fica com bordas pretas/esticada.
+      const isVideo = media.mimetype?.startsWith('video/');
+      const isImage = media.mimetype?.startsWith('image/');
+      const mediaType = isVideo ? 'vídeo' : 'imagem';
+
+      if (isImage) {
+        // === IMAGEM: jimp lê dimensões e corta ===
+        try {
+          const buf = Buffer.from(media.data, 'base64');
+          const image = await Jimp.read(buf);
+          const w = image.bitmap.width;
+          const h = image.bitmap.height;
+          const ratio = w / h;
+          const tolerance = 0.05;
+
+          if (Math.abs(ratio - 1) > tolerance) {
+            // Texto curto + reage 👍
+            const question = `esse ${mediaType} não é quadrado, deseja consertar? // Reaja com 👍 ou marque com 'sim' para isso`;
+            const sentMsg = await this.app.whatsapp.client.sendMessage(chatId, question);
+            const botMsgId = (sentMsg as any)?.id?._serialized;
+            this.app.debug('STICKER', `pergunta enviada (botMsgId=${botMsgId})`);
+
+            if (botMsgId) {
+              const pendingData = {
+                mediaData: media.data,
+                mimetype: media.mimetype,
+                chatId,
+                timestamp: Date.now(),
+                isVideo: false,
+              };
+              (this.app.brain as any).pendingStickerFormats?.set(botMsgId, pendingData);
+
+              // Timeout de 1 min — se não responder, corta automático
+              setTimeout(async () => {
+                if ((this.app.brain as any).pendingStickerFormats?.has(botMsgId)) {
+                  (this.app.brain as any).pendingStickerFormats.delete(botMsgId);
+                  this.app.debug('STICKER', `timeout — cortando automático (1 min)`);
+                  const fakeMsg = { body: 'sim', id: msg.id, fromMe: false } as any;
+                  await (this.app.brain as any)._handleStickerFormatReply(fakeMsg, pendingData, chatId);
+                }
+              }, 60000);
+            }
+            await this.app.react(msg, EMOJI.SUCCESS);
+            return;
+          }
+        } catch (e) {
+          this.app.debug('STICKER', `jimp falhou: ${(e as Error).message}`);
+        }
+      } else if (isVideo) {
+        // === VÍDEO: ffprobe lê dimensões ===
+        try {
+          const { spawnSync } = require('node:child_process');
+          const os = require('node:os');
+          const tmpFile = path.join(os.tmpdir(), `marcio_sticker_${Date.now()}.mp4`);
+          fs.writeFileSync(tmpFile, Buffer.from(media.data, 'base64'));
+
+          const result = spawnSync('ffprobe', [
+            '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'csv=s=x:p=0', tmpFile
+          ], { encoding: 'utf8', timeout: 15000, shell: true });
+
+          if (result.error) throw result.error;
+          const probeOut = (result.stdout || '').trim();
+          const [vw, vh] = probeOut.split('x').map(n => parseInt(n, 10));
+          this.app.debug('STICKER', `ffprobe: ${vw}x${vh}`);
+
+          if (vw && vh) {
+            const vratio = vw / vh;
+            if (Math.abs(vratio - 1) > 0.05) {
+              // Texto curto
+              const question = `esse ${mediaType} não é quadrado, deseja consertar? // Reaja com 👍 ou marque com 'sim' para isso`;
+              const sentMsg = await this.app.whatsapp.client.sendMessage(chatId, question);
+              const botMsgId = (sentMsg as any)?.id?._serialized;
+              this.app.debug('STICKER', `pergunta enviada (botMsgId=${botMsgId})`);
+
+              if (botMsgId) {
+                const pendingData = {
+                  mediaData: media.data, mimetype: media.mimetype, chatId,
+                  timestamp: Date.now(), isVideo: true, videoPath: tmpFile,
+                };
+                (this.app.brain as any).pendingStickerFormats?.set(botMsgId, pendingData);
+
+                // Timeout 1 min
+                setTimeout(async () => {
+                  if ((this.app.brain as any).pendingStickerFormats?.has(botMsgId)) {
+                    (this.app.brain as any).pendingStickerFormats.delete(botMsgId);
+                    this.app.debug('STICKER', `timeout — cortando automático (1 min)`);
+                    const fakeMsg = { body: 'sim', id: msg.id, fromMe: false } as any;
+                    await (this.app.brain as any)._handleStickerFormatReply(fakeMsg, pendingData, chatId);
+                  }
+                }, 60000);
+              } else {
+                try { fs.unlinkSync(tmpFile); } catch {}
+              }
+              await this.app.react(msg, EMOJI.SUCCESS);
+              return;
+            } else {
+              try { fs.unlinkSync(tmpFile); } catch {}
+            }
+          } else {
+            try { fs.unlinkSync(tmpFile); } catch {}
+          }
+        } catch (e) {
+          this.app.debug('STICKER', `ffprobe falhou: ${(e as Error).message}`);
+        }
+      }
+
+      // Envia a figurinha (formato OK ou vídeo)
       await this.app.whatsapp.client.sendMessage(chatId, media, {
         sendMediaAsSticker: true,
         stickerAuthor: this.app.config.botName,

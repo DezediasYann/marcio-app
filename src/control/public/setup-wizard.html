@@ -537,13 +537,31 @@ function updateBotPreview() {
 }
 
 // === COMMANDS ===
+// CORREÇÃO v1.0.5: o servidor do bot pode ainda tá bootando quando o usuário
+// chega neste passo (o wizard abre instantaneamente, o bot demora ~30s).
+// Antes: erro seco na tela. Agora: espera até 60s com feedback ("Aguardando
+// o bot iniciar…"). O guard de geração evita loops concorrentes se o
+// usuário navegar pra fora e voltar pro passo.
+let _cmdLoadGen = 0;
 async function loadCommands() {
-  try {
-    const r = await fetch(API_BASE + '/api/commands').then(r => r.json());
-    commandsData = r.commands || [];
-    renderCommands();
-  } catch (e) {
-    $('#commandsList').innerHTML = `<div style="text-align:center;color:#ff453a;font-size:13px;">Erro ao carregar comandos: ${e.message}</div>`;
+  const gen = ++_cmdLoadGen;
+  const list = $('#commandsList');
+  for (let attempt = 1; attempt <= 30; attempt++) {
+    try {
+      const r = await fetch(API_BASE + '/api/commands').then(r => r.json());
+      if (gen !== _cmdLoadGen) return; // uma chamada mais nova assumiu
+      commandsData = r.commands || [];
+      renderCommands();
+      return;
+    } catch (e) {
+      if (gen !== _cmdLoadGen) return;
+      if (attempt >= 30) {
+        list.innerHTML = `<div style="text-align:center;color:#ff453a;font-size:13px;">Erro ao carregar comandos: ${e.message}</div>`;
+        return;
+      }
+      list.innerHTML = '<div style="text-align:center;color:rgba(245,245,247,0.5);font-size:13px;">Aguardando o bot iniciar…</div>';
+      await new Promise(r2 => setTimeout(r2, 2000));
+    }
   }
 }
 
@@ -687,6 +705,24 @@ function showQrStatus(msg, kind) {
 }
 
 // === FINISH ===
+// CORREÇÃO v1.0.5: espera o servidor HTTP do bot responder antes de salvar.
+// O wizard abre instantaneamente (asset bundled do Tauri), mas o boot do bot
+// (Node + whatsapp-web.js + serviços) demora ~30s. Antes, o POST de
+// setup/complete só tinha ~10s de retry — quem pulava o passo do WhatsApp
+// antes do servidor subir perdia a configuração (caía num fallback de
+// localStorage que nada lia de volta).
+async function waitForBotServer(timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await fetch(API_BASE + '/api/health', { cache: 'no-store' });
+      if (r.ok) return true;
+    } catch {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return false;
+}
+
 async function finishSetup() {
   const botName = $('#botName').value.trim();
   const systemPrompt = $('#systemPrompt').value;
@@ -721,6 +757,21 @@ async function finishSetup() {
     },
   };
 
+  // === CORREÇÃO v1.0.5: espera o servidor do bot ficar pronto ===
+  // (ver comentário acima do waitForBotServer). Enquanto espera, o botão
+  // mostra o estado pra ficar óbvio que o app tá trabalhando.
+  const btnNext = $('#btnNext');
+  const btnLabel = btnNext ? btnNext.textContent : '';
+  if (btnNext) { btnNext.disabled = true; btnNext.textContent = 'Aguardando o bot…'; }
+  const serverReady = await waitForBotServer(90000);
+  if (btnNext) { btnNext.disabled = false; btnNext.textContent = btnLabel; }
+
+  if (!serverReady) {
+    toast('O bot não respondeu em 90s. Verifique se o app tá rodando e tente de novo.', 'error', 6000);
+    return; // fica no passo final — dá pra clicar "Abrir painel" de novo
+  }
+
+  // POST com retry (agora é margem de segurança — o servidor já tá de pé)
   let success = false;
   for (let attempt = 1; attempt <= 10; attempt++) {
     try {
@@ -762,11 +813,10 @@ async function finishSetup() {
       }
     }, 800);
   } else {
-    toast('Não consegui salvar — salvando localmente. Reinicie o app.', 'error', 6000);
-    // Fallback: salva direto no localStorage (pelo menos não perde tudo)
-    try {
-      localStorage.setItem('marcio-pending-setup', JSON.stringify(body));
-    } catch {}
+    // CORREÇÃO v1.0.5: acabou o fallback de localStorage (era gravado e
+    // nunca lido de volta — ilusão de salvamento). Agora: erro claro e o
+    // usuário continua no passo final, podendo tentar de novo.
+    toast('Não consegui salvar a configuração. Tente novamente em instantes.', 'error', 6000);
   }
 }
 

@@ -128,12 +128,31 @@ export class Retroactive {
 
   /**
    * Carrega decision-log.json do disco pro Map. Chamado no boot.
+   *
+   * CORREÇÃO v1.0.5: msgs 'pending' de sessões anteriores viram 'skip'.
+   * Antes, o bot reiniciava e o check() (10min depois do boot) respondia
+   * msgs pendentes de ATÉ 60min antes do desligamento — com o contexto
+   * já evoluiu e o hint isDirect=true (mentira). Era a causa do bot
+   * "responder mensagens antigas de forma sem sentido" logo após iniciar.
+   * O momento de uma msg que o bot perdeu só existe dentro da própria sessão.
    */
   load(): void {
     try {
       const data = JSON.parse(fs.readFileSync(this.app.dataPath('decision-log.json'), 'utf8'));
+      let stalePendings = 0;
       for (const [chatId, entries] of Object.entries(data)) {
-        this.decisionLog.set(chatId, entries as DecisionEntry[]);
+        const list = entries as DecisionEntry[];
+        for (const e of list) {
+          if (e.decision === 'pending') {
+            e.decision = 'skip';
+            stalePendings++;
+          }
+        }
+        this.decisionLog.set(chatId, list);
+      }
+      if (stalePendings > 0) {
+        this.dirty = true;
+        this.app.log('RETRO', `${stalePendings} msg(s) pending da sessão anterior marcadas como skip — bot não responde msg antiga depois de reiniciar`);
       }
       this.app.debug('DECISION', `log carregado: ${this.decisionLog.size} chat(s) com decisões`);
     } catch {
@@ -910,8 +929,21 @@ export class Retroactive {
         };
 
         try {
+          // CORREÇÃO v1.0.5 — focus hint: diz EXATAMENTE qual msg foi escolhida.
+          // Antes, generateResponse(chatId, true) era chamado sem a IA saber qual
+          // msg ela "escolheu" — a IA olhava o contexto e respondia qualquer coisa
+          // (às vezes nada a ver com a msg escolhida, às vezes rindo do nada).
+          // Agora a instrução aponta pra msg certa.
+          const chosenMinsAgo = Math.max(1, Math.round((now - chosen.timestamp) / 60000));
+          const focusHint = [
+            `CONTEXTO DA RESPOSTA: você decidiu voltar numa mensagem de ${chosen.senderName || 'alguém'} enviada há ${chosenMinsAgo} min nesta conversa:`,
+            `"${(chosen.text || '').slice(0, 200)}"`,
+            `Responda ESSA mensagem especificamente, de forma natural (pode referenciar o que ela falou).`,
+            `Se ela já perdeu completamente o sentido (a conversa já mudou muito de assunto), responda só [SILENCIO].`,
+          ].join('\n');
+
           // isDirect=true faz a IA responder naturalmente ao contexto atual
-          const reply = await this.app.brain.generateResponse(chatId, true);
+          const reply = await this.app.brain.generateResponse(chatId, true, focusHint);
 
           // [SILENCIO] ou vazio: desiste
           if (reply && /^\s*\[SILENCIO\]\s*$/i.test(reply.trim())) {

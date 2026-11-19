@@ -1122,6 +1122,84 @@
           ]
         }
       ]
+    },
+    {
+      "version": "1.0.5",
+      "date": "2025-11-18",
+      "title": "🔒 1.0.5 — Endurecimento de segurança do painel",
+      "sections": [
+        {
+          "icon": "🔒",
+          "title": "Painel só na máquina local",
+          "items": [
+            "Servidor do painel agora escuta apenas em 127.0.0.1 — antes aceitava conexão de qualquer aparelho na rede (WiFi de casa, por exemplo)",
+            "Comando de emergência pra quem precisa acessar de outro aparelho: variável de ambiente MARCIO_PANEL_HOST=0.0.0.0 (com aviso no log)",
+            "Validação do header Host — bloqueia ataque de DNS rebinding contra o localhost"
+          ]
+        },
+        {
+          "icon": "🛡️",
+          "title": "CORS e CSRF fechados",
+          "items": [
+            "Fim do Access-Control-Allow-Origin: * — só o painel (localhost:3001) e as janelas do Tauri podem chamar a API",
+            "Métodos de escrita (POST/DELETE/PUT) rejeitam origens estrangeiras com 403 — site malicioso aberto no navegador não consegue mais deslogar o WhatsApp, apagar memórias ou injetar comandos",
+            "Handshake do WebSocket valida a Origin — conexões de páginas maliciosas são rejeitadas com 403"
+          ]
+        },
+        {
+          "icon": "🔑",
+          "title": "Segredos não vazam mais",
+          "items": [
+            "GET /api/ai-config não retorna mais a API key do Gemini em texto plano — só a máscara (••••abcd)",
+            "API key do Last.fm também mascarada no painel",
+            "Salvar o formulário sem mexer na chave preserva a chave salva (detecção automática de máscara)"
+          ]
+        },
+        {
+          "icon": "🚀",
+          "title": "Boot sem sustos",
+          "items": [
+            "A splash \"Preparando ambiente\" agora cobre o boot INTEIRO do bot — antes a janela principal abria antes do servidor subir",
+            "Fim dos ~5 erros \"GET /api/stats → network: Failed to fetch\" no live log logo depois de abrir o app: o painel espera o bot ficar pronto antes de carregar os dados",
+            "Se o painel abrir antes do servidor responder, aparece um overlay \"Conectando ao bot…\" (com aviso amigável se demorar mais que o normal) em vez de erros",
+            "Watchdog de conexão: se o bot cair ou for reiniciado (menu do tray), o painel avisa UMA vez e recarrega tudo sozinho quando ele voltar",
+            "Setup Wizard: não perde mais a configuração se você terminar o assistente antes do bot subir — ele espera (até 90s) com feedback no botão",
+            "A lista de comandos do wizard espera o bot responder em vez de mostrar erro seco"
+          ]
+        },
+        {
+          "icon": "🐛",
+          "title": "Fix: versão no Sobre",
+          "items": [
+            "Corrigido: seção Sobre mostrava \"v— · Painel de controle\" — o painel chamava o comando Rust get_app_version, mas ele nunca tinha sido implementado (o invoke falhava com command not found)",
+            "Comando get_app_version agora existe de verdade no Rust — lê a versão do tauri.conf.json (mesma fonte que o updater usa)",
+            "O servidor do painel injeta a versão direto no HTML ao servir a página — mostra a versão certa até no navegador, sem depender de fetch nem do Tauri",
+            "Fallback mais robusto: se o Tauri e o /api/health falharem, tenta de novo após 3s em vez de deixar o \"v—\" pra sempre"
+          ]
+        },
+        {
+          "icon": "🎵",
+          "title": "Fix: Last.fm não funcionava no app atualizado",
+          "items": [
+            "Corrigido: colagem do Last.fm (!lastfm) mandava erro de 'jimp não instalada' no app instalado — a biblioteca jimp NUNCA chegava em quem tinha uma versão antiga do app (o node_modules não era atualizado junto com o app)",
+            "Agora o app re-extrai o node_modules do bundle quando atualiza (carimbo de versão) — dependências novas chegam em quem já tinha o app instalado, sem reinstalar nada",
+            "Depois da atualização das dependências, o patch do whatsapp-web.js é reaplicado automaticamente",
+            "Mensagem de erro da biblioteca de imagem reescrita — não manda mais 'rode npm install jimp' (impossível no app, que roda sem Node.js)"
+          ]
+        },
+        {
+          "icon": "🧠",
+          "title": "Fix: IA \"burra\" — contexto cego + respostas antigas",
+          "items": [
+            "Corrigido: a IA não sabia QUEM falava NEM QUANDO — no Gemini (provider padrão) os nomes eram descartados e as mensagens não tinham marcação de tempo. Ela via textos anônimos: respondia pergunta direcionada a outra pessoa, desenterrava pergunta já respondida e ria de piada que já passou",
+            "Agora cada mensagem do contexto vai como [Nome, há Xmin]: texto — a IA sabe quem fala com quem e se a conversa ainda tá viva (msgs com 3min+ mostram a idade; antigas mostram há Xh/d)",
+            "Instrução de formato injetada sempre (mesmo com system-prompt.txt customizado): não responda no lugar de outra pessoa, não desenterre msg antiga, prefira [SILENCIO] se a conversa esfriou",
+            "Corrigido: bot respondia mensagens antigas sem sentido logo após iniciar — msgs \"pending\" do sistema retroativo sobreviviam o restart e eram respondidas até 60min depois. Agora pendências da sessão anterior são descartadas no boot",
+            "Corrigido: na resposta retroativa, a IA não sabia qual mensagem tinha \"escolhido\" responder — respondia qualquer coisa do contexto. Agora recebe a msg exata (com autor e idade) como foco da resposta",
+            "Corrigido: bot entrava por sorte em conversa entre terceiros — mensagem que cita outra pessoa (não o bot) não entra mais no sorteio de resposta automática"
+          ]
+        }
+      ]
     }
   ]
 }

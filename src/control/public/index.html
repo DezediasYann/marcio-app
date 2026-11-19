@@ -2539,6 +2539,71 @@
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
+
+    /* ================================================================
+       BOOT OVERLAY — "Conectando ao bot…"
+       CORREÇÃO v1.0.5: em produção (Tauri) a janela do painel abre
+       instantaneamente (HTML bundled), mas o servidor HTTP do bot
+       demora ~30s pra subir. Antes o painel spammar
+       "GET /api/stats → network: Failed to fetch" no live log; agora
+       mostra este overlay e carrega tudo quando o bot responder.
+       ================================================================ */
+    .boot-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 12, 0.97);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .boot-overlay.show {
+      display: flex;
+      animation: bootFadeIn 0.25s ease;
+    }
+    @keyframes bootFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .boot-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 32px;
+      text-align: center;
+      animation: bootBoxIn 0.3s ease;
+    }
+    @keyframes bootBoxIn {
+      from { transform: translateY(8px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .boot-logo {
+      font-size: 46px;
+      line-height: 1;
+      filter: drop-shadow(0 6px 24px rgba(10, 132, 255, 0.35));
+    }
+    .boot-spinner {
+      width: 30px;
+      height: 30px;
+      border: 3px solid rgba(255, 255, 255, 0.12);
+      border-top-color: #0a84ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .boot-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .boot-sub {
+      font-size: 12.5px;
+      color: rgba(245, 245, 247, 0.5);
+      line-height: 1.55;
+      max-width: 340px;
+    }
   </style>
   <script src="/chart.min.js?v=1"></script>
 </head>
@@ -3081,6 +3146,7 @@
                 <div class="form-row">
                   <label>API Key</label>
                   <input type="password" id="aiApiKey" placeholder="••••••••••••">
+                  <span class="muted small" id="aiApiKeyHint"></span>
                 </div>
                 <div class="form-row">
                   <label>Max tokens</label>
@@ -3126,6 +3192,7 @@
               <div class="form-row">
                 <label>Last.fm API Key</label>
                 <input type="password" id="lastfmApiKey" placeholder="pegue em last.fm/api">
+                <span class="muted small" id="lastfmApiKeyHint"></span>
               </div>
               <div class="row-flex mt-2">
                 <button class="ghost sm" onclick="saveLastfmConfig()">💾 Salvar Last.fm</button>
@@ -4287,14 +4354,31 @@
     // ================================================================
     // DASHBOARD + STATS
     // ================================================================
+    var _statsInFlight = false;
     async function loadStats() {
+      // CORREÇÃO v1.0.5: durante o boot gate (servidor ainda não respondeu),
+      // nem tenta — o gate chama de volta quando o bot ficar de pé.
+      if (_marcio_boot.phase === 'waiting') return;
+      // Dedupe: se já tem uma carga em andamento, pula. (Antes o boot
+      // disparava loadStats() 2x no mesmo segundo: init() direto +
+      // showSection('dashboard') → gerava os dois STATS-ERR iniciais.)
+      if (_statsInFlight) return;
+      _statsInFlight = true;
       try {
         const s = await apiGet('/api/stats');
         _marcio_state.stats = s;
         renderStats(s);
         renderDashboard();
       } catch (e) {
-        appendLogLine('STATS-ERR', e.message, { cls: 'error' });
+        // CORREÇÃO v1.0.5: erro de REDE (servidor fora do ar / reiniciando)
+        // não vai pro log — o watchdog mostra o estado e recarrega tudo
+        // quando o bot voltar. Só loga erros reais de servidor (ex.: 500).
+        const isNetworkError = String(e.message).includes('network:');
+        if (!isNetworkError) {
+          appendLogLine('STATS-ERR', e.message, { cls: 'error' });
+        }
+      } finally {
+        _statsInFlight = false;
       }
     }
     function renderStats(s) {
@@ -4454,7 +4538,11 @@
     }
 
     // === Versão do app (mostra no Sobre) ===
-    async function loadAppVersion() {
+    // CORREÇÃO v1.0.5: antes mostrava "v—" porque o comando Rust
+    // get_app_version não existia (invoke falhava) e o fallback do
+    // /api/health não tinha retry. Agora: Tauri → API → retry em 3s.
+    // (O servidor também injeta a versão direto no HTML ao servir a página.)
+    async function loadAppVersion(retry = true) {
       const el = $('#aboutVersion');
       if (!el) return;
       // Tenta via Tauri primeiro (mais confiável — pega do package_info)
@@ -4476,9 +4564,14 @@
         if (h.version) {
           el.textContent = `v${h.version} · Painel de controle`;
           console.log('[MARCIO] versão do app (API):', h.version);
+          return;
         }
       } catch {
-        console.warn('[MARCIO] não conseguiu obter versão do app');
+        console.warn('[MARCIO] não conseguiu obter versão via /api/health');
+      }
+      // Se ainda tá com o placeholder e não foi retry ainda, tenta de novo em 3s
+      if (retry && el.textContent && el.textContent.startsWith('v—')) {
+        setTimeout(() => loadAppVersion(false), 3000);
       }
     }
 
@@ -5702,6 +5795,11 @@
         $('#aiModel').value = r.model || '';
         $('#aiApiUrl').value = r.apiUrl || r.apiURL || '';
         $('#aiApiKey').value = r.apiKey || '';
+        // v1.0.5: key vem mascarada (••••abcd) — avisa que já tem chave salva
+        const keyHint = $('#aiApiKeyHint');
+        if (keyHint) keyHint.textContent = r.hasApiKey
+          ? 'chave salva ✓ (exibida mascarada) — deixe como está pra manter; digite uma nova pra trocar'
+          : 'nenhuma chave salva ainda';
         $('#aiMaxTokens').value = r.maxTokens || r.max_tokens || '';
         const temp = r.temperature != null ? r.temperature : 1;
         $('#aiTemperature').value = temp;
@@ -6342,6 +6440,9 @@
       try {
         const r = await apiGet('/api/lastfm-config');
         $('#lastfmApiKey').value = r.apiKey || '';
+        // v1.0.5: key mascarada — avisa que já tem chave salva
+        const lastfmHint = $('#lastfmApiKeyHint');
+        if (lastfmHint) lastfmHint.textContent = r.apiKey ? 'chave salva ✓ (exibida mascarada) — deixe como está pra manter' : '';
       } catch (e) {
         console.error('[LASTFM] erro ao carregar config:', e);
       }
@@ -7598,16 +7699,166 @@
     });
 
     // ================================================================
+    // BOOT GATE + CONNECTION WATCHDOG  (CORREÇÃO v1.0.5)
+    // ================================================================
+    // POR QUÊ: em produção (Tauri), a janela do painel abre instantaneamente
+    // (HTML bundled no app), mas o servidor HTTP do bot (porta 3001) demora
+    // ~30s pra subir (require do whatsapp-web.js + inicialização dos
+    // serviços). Antes desta correção, o painel spammar no live log:
+    //   STATS-ERR  GET /api/stats → network: Failed to fetch   (a cada 10s)
+    // até o servidor responder (~5 erros seguidos). Agora:
+    //   1. BOOT GATE — espera /api/health responder ANTES de carregar dados.
+    //      Enquanto espera, mostra o overlay "Conectando ao bot…".
+    //   2. WATCHDOG — monitora /api/health a cada 2s pra sempre. Se o bot
+    //      cair/reiniciar (tray → "Reiniciar bot"), loga UMA linha amigável
+    //      (sem spam) e recarrega os dados quando ele voltar.
+    var _marcio_boot = {
+      phase: 'waiting',        // 'waiting' | 'online' | 'down'
+      overlay: null,           // elemento do overlay (criado sob demanda)
+      overlaySub: null,        // subtítulo do overlay (pra atualizar se demorar)
+      initialLoadsDone: false, // cargas iniciais já rodaram?
+      downLogged: false,       // evita log repetido de "conexão perdida"
+    };
+
+    function bootOverlayEl() {
+      if (_marcio_boot.overlay) return _marcio_boot.overlay;
+      const el = document.createElement('div');
+      el.className = 'boot-overlay';
+      el.innerHTML = `
+        <div class="boot-box">
+          <div class="boot-logo">🤖</div>
+          <div class="boot-spinner"></div>
+          <div class="boot-title">Conectando ao bot…</div>
+          <div class="boot-sub">O painel abre sozinho quando o bot terminar de iniciar.<br>Se o app acabou de ser aberto, isso pode levar até um minuto.</div>
+        </div>`;
+      document.body.appendChild(el);
+      _marcio_boot.overlay = el;
+      _marcio_boot.overlaySub = el.querySelector('.boot-sub');
+      return el;
+    }
+
+    async function bootCheckHealth() {
+      try {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 4000);
+        const r = await fetch(API_BASE + '/api/health', { signal: ctrl.signal, cache: 'no-store' });
+        clearTimeout(to);
+        return r.ok;
+      } catch { return false; }
+    }
+
+    async function startBootGate() {
+      // Primeira checagem: se o servidor já tá de pé (browser/dev, ou o Rust
+      // esperou a porta abrir antes de mostrar a janela), segue direto —
+      // sem overlay, zero mudança visual.
+      if (await bootCheckHealth()) {
+        bootMarkOnline();
+        bootStartWatchdog();
+        return;
+      }
+      // Servidor fora do ar — mostra o overlay e polla até responder.
+      bootOverlayEl().classList.add('show');
+      setStatus('connecting', 'aguardando bot…');
+      appendLogLine('SYSTEM', 'Aguardando o bot iniciar…', { cls: 'system' });
+      const startedAt = Date.now();
+      const poll = async () => {
+        if (await bootCheckHealth()) {
+          bootMarkOnline();
+          bootStartWatchdog();
+          return;
+        }
+        // Depois de 90s, avisa que tá demorando mais que o normal
+        // (boot normal leva ~30s; passou disso, provavelmente algo travou)
+        if (Date.now() - startedAt > 90000 && _marcio_boot.overlaySub) {
+          _marcio_boot.overlaySub.innerHTML =
+            'O bot está demorando mais que o normal…<br>Verifique a conexão ou os logs em <code>logs/bot-stdout.log</code>.';
+        }
+        setTimeout(poll, 1000);
+      };
+      poll();
+    }
+
+    function bootMarkOnline() {
+      const firstTime = !_marcio_boot.initialLoadsDone;
+      _marcio_boot.phase = 'online';
+      _marcio_boot.downLogged = false;
+      if (_marcio_boot.overlay) _marcio_boot.overlay.classList.remove('show');
+      // Pill de status: online só quando o WS também tá conectado
+      if (_marcio_state.wsConnected) setStatus('online', 'online');
+      else setStatus('connecting', 'conectando…');
+      if (firstTime) {
+        appendLogLine('SYSTEM', 'Bot conectado — carregando painel…', { cls: 'system' });
+        runInitialLoads();
+      } else {
+        appendLogLine('SYSTEM', 'Conexão restabelecida com o bot.', { cls: 'system' });
+        refreshAfterReconnect();
+      }
+    }
+
+    function bootMarkDown() {
+      _marcio_boot.phase = 'down';
+      setStatus('offline', 'bot offline — reconectando…');
+      if (!_marcio_boot.downLogged) {
+        appendLogLine('SYSTEM', 'Conexão perdida com o bot. Tentando reconectar…', { cls: 'error' });
+        _marcio_boot.downLogged = true;
+      }
+    }
+
+    function bootStartWatchdog() {
+      // Monitora pra sempre — cobre reinícios do bot (tray "Reiniciar bot",
+      // restart pelo painel, crash + respawn etc.)
+      setInterval(async () => {
+        const up = await bootCheckHealth();
+        if (up && _marcio_boot.phase === 'down') bootMarkOnline();
+        else if (!up && _marcio_boot.phase === 'online') bootMarkDown();
+      }, 2000);
+    }
+
+    function runInitialLoads() {
+      _marcio_boot.initialLoadsDone = true;
+      // === Feature Flags — detecta canal (dev/beta/stable) ===
+      loadFeatureFlags().then(() => {
+        console.log('[MARCIO] Feature flags aplicadas');
+      });
+      // Cargas iniciais (agora garantidamente com o servidor de pé)
+      loadStats();
+      // Carrega nome + foto do bot pro brand da sidebar (no boot)
+      loadBotConfig();
+      loadBotAvatar();
+      // Carrega versão do app pra mostrar no Sobre
+      loadAppVersion();
+      // Load logs as fallback (in case WS takes a moment to connect)
+      loadLogsFallback();
+      // Connect WebSocket
+      connectWs();
+      // Start polling stats every 10s (backup do WS)
+      if (!_marcio_state.statsInterval) {
+        _marcio_state.statsInterval = setInterval(loadStats, 10000);
+      }
+      // Start bot status polling every 30s (when on bot section)
+      if (!_marcio_state.botStatusInterval) {
+        _marcio_state.botStatusInterval = setInterval(() => {
+          if (_marcio_state.currentSection === 'bot') loadBotStatus();
+        }, 30000);
+      }
+      // Check changelog (mostra "O que há de novo?" se tem versão não vista)
+      setTimeout(checkChangelog, 1000);
+    }
+
+    function refreshAfterReconnect() {
+      // Bot voltou (provável restart) — recarrega dados que podem estar stale
+      loadStats();
+      loadBotConfig();
+      loadLogsFallback();
+      loadSectionData(_marcio_state.currentSection);
+    }
+
+    // ================================================================
     // INIT
     // ================================================================
     function init() {
       console.log('[MARCIO] init() start');
       try {
-        // === Feature Flags — detecta canal (dev/beta/stable) ===
-        loadFeatureFlags().then(() => {
-          console.log('[MARCIO] Feature flags aplicadas');
-        });
-
         // Registra Konami code listener (só funciona se canal != stable)
         registerKonamiCode();
 
@@ -7624,33 +7875,22 @@
           console.log('[MARCIO] Listener close-requested registrado');
         }
 
-        // Initial loads
-        loadStats();
-        // Carrega nome + foto do bot pro brand da sidebar (no boot)
-        loadBotConfig();
-        loadBotAvatar();
-        // Carrega versão do app pra mostrar no Sobre
-        loadAppVersion();
-        // Start polling stats every 10s (backup)
-        _marcio_state.statsInterval = setInterval(loadStats, 10000);
-        // Start bot status polling every 30s (when on bot section)
-        _marcio_state.botStatusInterval = setInterval(() => {
-          if (_marcio_state.currentSection === 'bot') loadBotStatus();
-        }, 30000);
-        // Connect WebSocket
-        connectWs();
-        // Load logs as fallback (in case WS takes a moment to connect)
-        loadLogsFallback();
         // Keyboard shortcuts
         document.addEventListener('keydown', handleKeyboard);
         // Audio mode selector listeners (Sempre / Equilibrado / Background)
         initAudioModeListeners();
-        // Show dashboard
-        showSection('dashboard');
-        console.log('[MARCIO] init() complete');
 
-        // Check changelog (mostra "O que há de novo?" se tem versão não vista)
-        setTimeout(checkChangelog, 1000);
+        // Mostra o dashboard (shell) — os dados carregam quando o bot responder
+        showSection('dashboard');
+
+        // === BOOT GATE (CORREÇÃO v1.0.5) ===
+        // Em produção, esta janela abre antes do servidor HTTP do bot subir.
+        // Espera /api/health responder antes de carregar dados — sem spam de
+        // "Failed to fetch" no live log. O watchdog embutido também cobre
+        // quedas/reinícios posteriores do bot.
+        startBootGate();
+
+        console.log('[MARCIO] init() complete');
       } catch (e) {
         console.error('[MARCIO] init() FATAL:', e);
         __showErrorBanner('init() fatal: ' + e.message, e.stack);

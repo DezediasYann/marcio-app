@@ -277,6 +277,7 @@ marcio-app/
 - **A sessão do WhatsApp** (`.wwebjs_auth/`) **nunca** vai pro Git (está no `.gitignore`)
 - **Os dados do bot** (`data/`) ficam só no PC do usuário (build ZERADO no CI)
 - **API key do Gemini** fica só localmente em `data/ai-config.json`
+- **Painel de controle** (v1.0.5): escuta apenas em `127.0.0.1` (inacessível pela rede), valida o header Host (anti DNS-rebinding), rejeita requisições de escrita de origens estrangeiras (anti CSRF) e valida a Origin do WebSocket. As API keys nunca aparecem em texto plano no painel (só a máscara `••••abcd`). Pra acessar o painel de outro aparelho da rede: `MARCIO_PANEL_HOST=0.0.0.0` (por sua conta e risco).
 
 ---
 

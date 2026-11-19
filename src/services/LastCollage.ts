@@ -160,7 +160,15 @@ export class LastCollage {
     try {
       Jimp = (await import('jimp')).default;
     } catch {
-      throw new Error('Biblioteca de imagem (jimp) não instalada. Rode: npm install jimp');
+      // CORREÇÃO v1.0.5: a mensagem antiga mandava "npm install jimp" —
+      // impossível no app empacotado (roda sem Node.js instalado). A causa
+      // real era o node_modules desatualizado no AppData de quem atualizou
+      // o app (ver setup_production_env no lib.rs — agora re-extrai).
+      throw new Error(
+        'biblioteca de imagem (jimp) não encontrada no app. ' +
+        'Reinicie o app pra reinstalar as dependências (na 1ª vez após atualizar pode demorar um pouco). ' +
+        'Se persistir, desinstale e instale o app de novo.'
+      );
     }
 
     const totalSize = gridSize * COVER_SIZE;

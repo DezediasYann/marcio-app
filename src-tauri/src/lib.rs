@@ -36,6 +36,39 @@ fn is_port_open(host: &str, port: u16) -> bool {
     std::net::TcpStream::connect((host, port)).is_ok()
 }
 
+/// Espera o servidor HTTP do bot (porta 3001) aceitar conexões.
+///
+/// CORREÇÃO v1.0.5 (UX de boot): antes, o evento `env-ready` era emitido logo
+/// após o spawn do `node dist/bot.js` — a janela main abria com o servidor
+/// ainda fora do ar e o painel ficava ~35s spammando
+/// "GET /api/stats → network: Failed to fetch" até o boot do bot terminar.
+/// Agora a splash "preparando" cobre o boot inteiro: só trocamos de janela
+/// quando o servidor responde (ou esgota o timeout — nesse caso o painel
+/// mostra o overlay "Conectando ao bot…" e segue tentando por conta própria).
+fn wait_for_bot_server(host: &str, port: u16, timeout_secs: u64) -> bool {
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(timeout_secs);
+    loop {
+        if is_port_open(host, port) {
+            println!(
+                "[TAURI] ✅ Servidor do bot respondeu em {}:{} após {:.1}s",
+                host,
+                port,
+                start.elapsed().as_secs_f32()
+            );
+            return true;
+        }
+        if start.elapsed() >= timeout {
+            eprintln!(
+                "[TAURI] ⚠️ Timeout ({}s) esperando o bot em {}:{} — abrindo janela mesmo assim (painel vai aguardar em overlay)",
+                timeout_secs, host, port
+            );
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+}
+
 /// Cópia recursiva que SEMPRE sobrescreve (usado pra dist/).
 fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) {
     if !src.exists() { return; }
@@ -136,12 +169,13 @@ fn ensure_default_data_files(app_data_dir: &PathBuf) {
 
 /// Configura o ambiente de produção em AppData:
 /// 1. Extrai dist-bundle.zip (código compilado) — sempre sobrescreve
-/// 2. Extrai node_modules.zip (dependências) — só se não existe (pula se já tem)
+/// 2. Extrai node_modules.zip (dependências) — na 1ª instalação OU quando o
+///    bundle muda (carimbo versão+tamanho; re-extrai e reaplica patch)
 /// 3. Copia package.json + patch-whatsapp-web.js + changelog.json
 /// 4. Cria arquivos default de config se não existirem
 /// 5. Aplica patch do whatsapp-web.js (idempotente)
 /// NÃO faz npm install — node_modules já vem no zip (funciona sem Node.js no PC).
-fn setup_production_env(resource_dir: &PathBuf, app_data_dir: &PathBuf) {
+fn setup_production_env(resource_dir: &PathBuf, app_data_dir: &PathBuf, app_version: &str) {
     println!("[TAURI] Configurando ambiente de produção em: {}", app_data_dir.display());
     let _ = std::fs::create_dir_all(app_data_dir);
 
@@ -163,20 +197,49 @@ fn setup_production_env(resource_dir: &PathBuf, app_data_dir: &PathBuf) {
         println!("[TAURI] ✅ dist/ copiado (fallback)");
     }
 
-    // 2. Extrai node_modules.zip — SÓ se não existe (não sobrescreve pra não quebrar patches)
+    // 2. Extrai node_modules.zip — na 1ª instalação OU quando o bundle muda.
+    //
+    // CORREÇÃO v1.0.5: antes extraía SÓ se a pasta não existisse — quem
+    // atualizava o app ficava com o node_modules da PRIMEIRA versão instalada
+    // pra sempre. Dependências novas (ex: jimp do Last.fm/figurinhas) nunca
+    // chegavam no app instalado, e o bot mandava "npm install jimp" pro
+    // usuário (impossível — o app roda sem Node.js instalado).
+    // Agora um carimbo "versão do app:tamanho do zip" detecta bundle novo:
+    // re-extrai por cima e apaga o marker do patch (o passo 6 reaplica o
+    // patch do whatsapp-web.js em cima do node_modules novo).
     let nm_zip = resource_dir.join("node_modules.zip");
     let dst_nm = app_data_dir.join("node_modules");
-    if !dst_nm.exists() {
+    let stamp_path = app_data_dir.join(".node_modules.stamp");
+    let expected_stamp = match nm_zip.metadata() {
+        Ok(meta) => format!("{}:{}", app_version, meta.len()),
+        Err(_) => "none".to_string(),
+    };
+    let current_stamp = std::fs::read_to_string(&stamp_path)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    if !dst_nm.exists() || current_stamp != expected_stamp {
         if nm_zip.exists() {
+            if dst_nm.exists() {
+                println!(
+                    "[TAURI] node_modules/ desatualizado (carimbo '{}', esperado '{}') — re-extraindo...",
+                    current_stamp, expected_stamp
+                );
+                let _ = std::fs::remove_dir_all(&dst_nm);
+            }
             let _ = std::fs::create_dir_all(&dst_nm);
             println!("[TAURI] Extraindo node_modules.zip (pode demorar)...");
             extract_zip(&nm_zip, &dst_nm);
-            println!("[TAURI] ✅ node_modules/ extraído");
+            println!("[TAURI] ✅ node_modules/ extraído (carimbo: {})", expected_stamp);
+            let _ = std::fs::write(&stamp_path, &expected_stamp);
+            // Dependências mudaram → patch do whatsapp-web.js roda de novo (passo 6)
+            let _ = std::fs::remove_file(app_data_dir.join(".patch-applied"));
         } else {
             eprintln!("[TAURI] ⚠️ node_modules.zip não encontrado — bot pode não funcionar");
         }
     } else {
-        println!("[TAURI] node_modules/ já existe — pulando extração");
+        println!("[TAURI] node_modules/ já atualizado (carimbo ok) — pulando extração");
     }
 
     // 3. Copia node-portable (Node.js embutido) — sempre sobrescreve
@@ -412,7 +475,7 @@ fn spawn_bot_process(app_handle: &tauri::AppHandle) -> Option<Child> {
 
     // Configura o ambiente (extrai resources, NÃO faz npm install)
     let resource_dir = app_handle.path().resource_dir().ok()?;
-    setup_production_env(&resource_dir, &app_data_dir);
+    setup_production_env(&resource_dir, &app_data_dir, &app_handle.package_info().version.to_string());
 
     // Resolve o executável do Node.js (node-portable embutido ou "node" do PATH)
     let node_exe = get_node_executable(&app_data_dir);
@@ -488,6 +551,17 @@ fn notify(app: tauri::AppHandle, title: String, body: String) {
     send_notification(&app, &title, &body);
 }
 
+/// Retorna a versão do app (do tauri.conf.json — mesma fonte que o updater usa).
+/// CORREÇÃO v1.0.5: o painel chamava este comando no "Sobre", mas ele nunca
+/// foi implementado/registrado — o invoke falhava com "command not found" e a
+/// versão ficava em "v— · Painel de controle".
+#[tauri::command]
+fn get_app_version(app: tauri::AppHandle) -> String {
+    let version = app.package_info().version.to_string();
+    println!("[TAURI] get_app_version → {}", version);
+    version
+}
+
 #[tauri::command]
 fn is_autostart_enabled(app: tauri::AppHandle) -> bool {
     if let Some(autostart) = app.try_state::<tauri_plugin_autostart::AutoLaunchManager>() {
@@ -515,13 +589,24 @@ fn toggle_autostart(app: tauri::AppHandle, enabled: bool) -> bool {
 #[tauri::command]
 fn open_main_window(app: tauri::AppHandle) {
     println!("[TAURI] Setup completo — abrindo janela main");
-    if let Some(main_window) = app.get_webview_window("main") {
-        let _ = main_window.show();
-        let _ = main_window.set_focus();
-    }
-    if let Some(setup_window) = app.get_webview_window("setup") {
-        let _ = setup_window.close();
-    }
+    // CORREÇÃO v1.0.5: roda numa thread separada pra não travar o comando.
+    // Normalmente o servidor já tá de pé (o wizard espera o /api/health
+    // responder antes de chamar aqui), mas se o usuário pulou o passo do
+    // WhatsApp e o boot ainda tá rolando, esperamos o servidor subir antes
+    // de mostrar o painel — evita o painel abrir spammando erros de fetch.
+    let app_handle = app.clone();
+    std::thread::spawn(move || {
+        if !is_port_open("127.0.0.1", 3001) {
+            wait_for_bot_server("127.0.0.1", 3001, 90);
+        }
+        if let Some(main_window) = app_handle.get_webview_window("main") {
+            let _ = main_window.show();
+            let _ = main_window.set_focus();
+        }
+        if let Some(setup_window) = app_handle.get_webview_window("setup") {
+            let _ = setup_window.close();
+        }
+    });
 }
 
 /// Força reabrir o setup wizard (pra testar em dev).
@@ -749,14 +834,34 @@ pub fn run() {
                     let resource_dir = app_handle_bg.path().resource_dir().ok();
                     let app_data_dir = app_handle_bg.path().app_data_dir().ok();
                     if let (Some(rd), Some(ad)) = (resource_dir, app_data_dir) {
-                        setup_production_env(&rd, &ad);
+                        setup_production_env(&rd, &ad, &app_handle_bg.package_info().version.to_string());
                     }
                 }
 
                 // Spawn bot (em dev, bot já tá rodando; em produção, spawn agora)
                 let bot_child = spawn_bot_process(&app_handle_bg);
+                // CORREÇÃO v1.0.5 (erro E0382 do rustc): `bot_child` é movido pro
+                // state logo abaixo e `Option<Child>` não implementa Copy —
+                // captura ANTES se o bot foi spawnado aqui, pra decidir se espera
+                // o servidor subir sem pegar borrow de valor movido.
+                let spawned_here = bot_child.is_some();
                 let state: tauri::State<BotProcess> = app_handle_bg.state();
                 *state.0.lock().unwrap() = bot_child;
+
+                // === CORREÇÃO v1.0.5: espera o servidor HTTP do bot subir ===
+                // Antes, o `env-ready` era emitido logo após o spawn — a janela
+                // main abria antes do servidor (porta 3001) aceitar conexões, e
+                // o painel spammar erros de fetch até o boot terminar (~35s:
+                // require do whatsapp-web.js + inicialização dos serviços).
+                // Agora a splash "preparando" cobre o boot inteiro.
+                // (Em dev o bot já tá de pé — bot_child é None e não espera.)
+                if spawned_here {
+                    let _ = app_handle_bg.emit(
+                        "boot-status",
+                        "Iniciando o bot…<br>Carregando memórias e configurações — pode levar até um minuto.",
+                    );
+                    wait_for_bot_server("127.0.0.1", 3001, 120);
+                }
 
                 // Notifica main thread que o ambiente tá pronto
                 let _ = app_handle_bg.emit("env-ready", ());
@@ -782,6 +887,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             notify,
+            get_app_version,
             is_autostart_enabled,
             toggle_autostart,
             open_main_window,

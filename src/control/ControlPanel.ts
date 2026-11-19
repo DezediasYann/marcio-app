@@ -138,6 +138,10 @@ export class ControlPanel {
   private publicDir: string;
   private logFilePath: string;
   private listenPort: number = 3001;
+  /** v1.0.5: host onde o servidor escuta — 127.0.0.1 por padrão (não expõe na rede). */
+  private bindHost: string = '127.0.0.1';
+  /** v1.0.5: origens permitidas (CORS/WS) — painel no navegador + webviews do Tauri. */
+  private allowedOrigins: Set<string> = new Set();
 
   /**
    * Flags de captura — quando um comando é injetado pelo painel, setamos
@@ -158,18 +162,99 @@ export class ControlPanel {
   }
 
   // ===========================================================================
+  // SEGURANÇA HTTP (v1.0.5) — bind loopback, CORS restrito, anti-CSRF/DSN
+  // ===========================================================================
+
+  /**
+   * Origens que podem falar com a API: o próprio painel aberto no navegador
+   * (localhost/127.0.0.1) e as webviews do Tauri em produção
+   * (tauri://localhost no macOS/Linux, http(s)://tauri.localhost no Windows).
+   */
+  private buildAllowedOrigins(): Set<string> {
+    const p = this.listenPort;
+    return new Set([
+      'tauri://localhost',
+      'http://tauri.localhost',
+      'https://tauri.localhost',
+      `http://localhost:${p}`,
+      `http://127.0.0.1:${p}`,
+    ]);
+  }
+
+  /**
+   * Hosts válidos no header Host (proteção anti DNS-rebinding: um domínio
+   * externo "rebindado" pro 127.0.0.1 chega com Host=evil.com → rejeitado).
+   */
+  private isHostAllowed(host: string): boolean {
+    const h = host.trim().toLowerCase();
+    return h === `localhost:${this.listenPort}` || h === `127.0.0.1:${this.listenPort}`;
+  }
+
+  /**
+   * Origem permitida?
+   *  - sem Origin (curl, scripts locais, navegação same-origin) → permite
+   *  - Origin da whitelist (painel/Tauri) → permite
+   *  - qualquer outra (site malicioso aberto no navegador do dono) → REJEITA
+   *  - Origin: null (iframe sandbox / file://) → REJEITA
+   */
+  private isOriginAllowed(origin: string | undefined): boolean {
+    if (!origin) return true;
+    const o = origin.trim().toLowerCase();
+    if (o === 'null') return false;
+    return this.allowedOrigins.has(o);
+  }
+
+  /** Mascara um segredo pra exibição: '••••' + últimos 4 chars. */
+  private static maskSecret(secret: string): string {
+    if (!secret) return '';
+    return '••••' + (secret.length > 4 ? secret.slice(-4) : '');
+  }
+
+  /** true se o valor parece a máscara (veio do GET e o usuário não alterou). */
+  private static isMaskedSecret(value: unknown): boolean {
+    return typeof value === 'string' && value.startsWith('••••');
+  }
+
+  /**
+   * Cria o WebSocketServer com validação de Origin no handshake (v1.0.5).
+   * Browsers SEMPRE mandam Origin em conexão WS — sem Origin é cliente
+   * não-browser local (permitido). Origem estrangeira → handshake 403.
+   */
+  private createWsServer(): WebSocketServer {
+    return new WebSocketServer({
+      server: this.httpServer!,
+      verifyClient: (info: { origin?: string }, callback: (ok: boolean, code?: number, message?: string) => void) => {
+        if (this.isOriginAllowed(info.origin)) {
+          callback(true);
+        } else {
+          this.app.log('PANEL', `🚫 WebSocket rejeitado — origem não permitida: ${info.origin || '(?)'}`);
+          callback(false, 403, 'Forbidden');
+        }
+      },
+    });
+  }
+
+  // ===========================================================================
   // LISTEN — sobe HTTP + WS na mesma porta
   // ===========================================================================
 
   /**
    * Inicia o servidor HTTP + WebSocket na porta informada.
+   *
+   * v1.0.5: por padrão escuta SÓ em loopback (127.0.0.1) — o painel controla
+   * o bot inteiro (comandos com privilégio de dono, API keys, logout do
+   * WhatsApp) e não deve ser alcançável por outros aparelhos da rede.
+   * Override pra casos especiais: MARCIO_PANEL_HOST=0.0.0.0.
    */
   listen(port: number): void {
     this.listenPort = port;
+    this.bindHost = (process.env.MARCIO_PANEL_HOST || '').trim() || '127.0.0.1';
+    this.allowedOrigins = this.buildAllowedOrigins();
+
     this.httpServer = createServer((req, res) => this.handleHttp(req, res));
 
     // WebSocket Server anexado ao mesmo HTTP server (upgrade automático).
-    this.wss = new WebSocketServer({ server: this.httpServer });
+    this.wss = this.createWsServer();
 
     // Configura handlers do WS (extraído pra poder re-criar em caso de EADDRINUSE)
     this.setupWsHandlers();
@@ -191,13 +276,13 @@ export class ControlPanel {
               try {
                 // Cria NOVO server (não reusa o que já falhou — ele fica marcado)
                 this.httpServer = createServer((req, res) => this.handleHttp(req, res));
-                this.wss = new WebSocketServer({ server: this.httpServer });
+                this.wss = this.createWsServer();
                 this.setupWsHandlers();
                 this.httpServer.on('error', (e2) => {
                   this.app.log('PANEL', `erro no servidor HTTP (retry): ${e2.message}`);
                 });
-                this.httpServer.listen(port, () => {
-                  this.app.log('PANEL', `✅ Painel de controle ouvindo em http://localhost:${port} (após matar órfão)`);
+                this.httpServer.listen(port, this.bindHost, () => {
+                  this.app.log('PANEL', `✅ Painel de controle ouvindo em http://${this.bindHost === '0.0.0.0' ? 'localhost' : this.bindHost}:${port} (após matar órfão)`);
                 });
               } catch (e2) {
                 this.app.errors.report('PANEL', `EADDRINUSE persistente em porta ${port}`, e2 as Error, {
@@ -220,8 +305,12 @@ export class ControlPanel {
       }
     });
 
-    this.httpServer.listen(port, () => {
-      this.app.log('PANEL', `Painel de controle ouvindo em http://localhost:${port}`);
+    this.httpServer.listen(port, this.bindHost, () => {
+      const shown = this.bindHost === '0.0.0.0' ? 'localhost' : this.bindHost;
+      this.app.log('PANEL', `Painel de controle ouvindo em http://${shown}:${port} (só máquina local)`);
+      if (this.bindHost === '0.0.0.0') {
+        this.app.log('PANEL', '⚠️ MARCIO_PANEL_HOST=0.0.0.0 — painel acessível por QUALQUER aparelho na rede. Use só se confiar totalmente na rede.');
+      }
     });
   }
 
@@ -376,14 +465,48 @@ export class ControlPanel {
       const pathname = url.pathname;
       const method = (req.method || 'GET').toUpperCase();
 
-      // CORS liberal — painel roda local, mas deixa aberto pra dev tools
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      // ======================================================================
+      // SEGURANÇA HTTP (v1.0.5) — roda ANTES de qualquer rota
+      // ======================================================================
+      // 1. Host válido (anti DNS-rebinding): só localhost/127.0.0.1 nesta porta.
+      const hostHeader = String(req.headers.host || '');
+      if (!this.isHostAllowed(hostHeader)) {
+        this.app.log('PANEL', `🚫 Host não permitido: ${hostHeader || '(vazio)'} — ${method} ${pathname}`);
+        return this.json(res, { ok: false, error: 'host não permitido' }, 403);
+      }
+
+      // 2. CORS restrito: só o painel (localhost) e as webviews do Tauri.
+      //    Origem estrangeira NÃO recebe cabeçalho CORS → o navegador do
+      //    atacante não consegue LER as respostas (ex.: config da IA).
+      const origin = req.headers.origin ? String(req.headers.origin) : undefined;
+      const originOk = this.isOriginAllowed(origin);
+      if (origin && originOk) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      }
+
+      // Preflight: aprova só origem conhecida (ou cliente sem Origin).
       if (method === 'OPTIONS') {
+        if (origin && !originOk) {
+          res.writeHead(403);
+          res.end('origin not allowed');
+          return;
+        }
         res.writeHead(204);
         res.end();
         return;
+      }
+
+      // 3. Escrita (POST/PUT/DELETE/PATCH) de origem estrangeira → 403.
+      //    Navegadores SEMPRE enviam Origin em cross-site POST (fetch/form) —
+      //    sem essa checagem, um site malicioso aberto no PC do dono poderia
+      //    deslogar o WhatsApp, apagar memórias, injetar comandos etc.
+      const isWriteMethod = method !== 'GET' && method !== 'HEAD';
+      if (isWriteMethod && origin && !originOk) {
+        this.app.log('PANEL', `🚫 ${method} de origem não permitida: ${origin} — ${pathname}`);
+        return this.json(res, { ok: false, error: 'origem não permitida' }, 403);
       }
 
       // --- Roteamento ---
@@ -462,7 +585,10 @@ export class ControlPanel {
               const filePath = this.app.dataPath('ai-config.json');
               let existing: any = {};
               try { existing = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch {}
-              const next = { ...existing, ...body.aiConfig };
+              const incoming: any = { ...body.aiConfig };
+              // v1.0.5: máscara no lugar da key real → preserva a salva
+              if (ControlPanel.isMaskedSecret(incoming.apiKey)) delete incoming.apiKey;
+              const next = { ...existing, ...incoming };
               fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf8');
               this.app.brain.aiConfigCacheTime = 0;
               if (this.app.audioTranscriber) this.app.audioTranscriber.invalidateConfigCache();
@@ -836,12 +962,14 @@ export class ControlPanel {
       }
 
       // GET /api/lastfm-config — retorna config do Last.fm
+      // v1.0.5: key mascarada (••••abcd), nunca em texto plano.
       if (method === 'GET' && pathname === '/api/lastfm-config') {
         try {
           const filePath = this.app.dataPath('lastfm-config.json');
           const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '{}';
           const parsed = JSON.parse(content);
-          return this.json(res, { apiKey: parsed.apiKey || '' });
+          const key = typeof parsed.apiKey === 'string' ? parsed.apiKey : '';
+          return this.json(res, { apiKey: key ? ControlPanel.maskSecret(key) : '' });
         } catch {
           return this.json(res, { apiKey: '' });
         }
@@ -851,7 +979,15 @@ export class ControlPanel {
       if (method === 'POST' && pathname === '/api/lastfm-config') {
         const body = await this.readJsonBody(req).catch(() => ({}));
         try {
-          const config = { apiKey: String(body?.apiKey || '') };
+          // v1.0.5: máscara de volta (campo não alterado) → preserva a salva
+          let incomingKey = String(body?.apiKey || '');
+          if (ControlPanel.isMaskedSecret(incomingKey)) {
+            try {
+              const raw = fs.readFileSync(this.app.dataPath('lastfm-config.json'), 'utf8');
+              incomingKey = String(JSON.parse(raw).apiKey || '');
+            } catch { incomingKey = ''; }
+          }
+          const config = { apiKey: incomingKey };
           fs.writeFileSync(this.app.dataPath('lastfm-config.json'), JSON.stringify(config, null, 2), 'utf8');
           this.app.log('LASTFM', `API key salva (${config.apiKey ? 'configurada' : 'vazia'})`);
           if (this.app.lastCollage) this.app.lastCollage.invalidateConfigCache();
@@ -1818,8 +1954,14 @@ export class ControlPanel {
       // ======================================================================
 
       // GET /api/ai-config  — runtime config (não o estático)
+      // v1.0.5: API key NUNCA sai em texto plano — só a máscara (••••abcd).
       if (method === 'GET' && pathname === '/api/ai-config') {
-        return this.json(res, this.app.brain.getAIConfig());
+        const cfg: any = { ...(this.app.brain.getAIConfig() as any) };
+        if (cfg) {
+          cfg.hasApiKey = typeof cfg.apiKey === 'string' && cfg.apiKey.length > 0;
+          cfg.apiKey = cfg.hasApiKey ? ControlPanel.maskSecret(cfg.apiKey) : '';
+        }
+        return this.json(res, cfg);
       }
 
       // POST /api/ai-config  { model, fallbackModels, apiUrl, apiKey, maxTokens, temperature, audioTranscription }
@@ -1837,7 +1979,11 @@ export class ControlPanel {
           if (typeof body?.model === 'string') next.model = body.model;
           if (Array.isArray(body?.fallbackModels)) next.fallbackModels = body.fallbackModels;
           if (typeof body?.apiUrl === 'string') next.apiUrl = body.apiUrl;
-          if (typeof body?.apiKey === 'string') next.apiKey = body.apiKey;
+          if (typeof body?.apiKey === 'string') {
+            // v1.0.5: se veio a máscara (campo não alterado no painel),
+            // preserva a key salva em vez de sobrescrever com '••••'.
+            if (!ControlPanel.isMaskedSecret(body.apiKey)) next.apiKey = body.apiKey;
+          }
           if (body?.maxTokens != null && !isNaN(Number(body.maxTokens))) {
             next.maxTokens = Number(body.maxTokens);
           }
@@ -2242,7 +2388,16 @@ export class ControlPanel {
   private serveIndex(res: ServerResponse): void {
     const filePath = path.join(this.publicDir, 'index.html');
     try {
-      const html = fs.readFileSync(filePath, 'utf8');
+      let html = fs.readFileSync(filePath, 'utf8');
+      // CORREÇÃO v1.0.5: injeta a versão real no placeholder do "Sobre" na
+      // hora de servir o HTML — à prova de falhas (mostra a versão certa
+      // mesmo se o invoke do Tauri e o fetch do /api/health falharem no
+      // cliente). O loadAppVersion() do frontend ainda refina depois.
+      const version = this.getCurrentVersion();
+      html = html.replace(
+        /(id="aboutVersion">\s*)v—/,
+        `$1v${version}`
+      );
       // Cache-Control agressivo: no-store + no-cache + must-revalidate.
       // Sem isso, o Edge/Tauri WebView2 cacheia o HTML e o usuário roda
       // versão velha mesmo depois de atualizar o arquivo no disco.

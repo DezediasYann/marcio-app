@@ -1,0 +1,77 @@
+═══════════════════════════════════════════════════════════════════
+  Márcio App — v1.0.5 — Pacote de mudanças
+═══════════════════════════════════════════════════════════════════
+
+Este pacote contém TODOS os arquivos alterados na versão 1.0.5
+(correções da versão no "Sobre" + comportamento do bot no inicio).
+
+───────────────────────────────────────────────────────────────────
+COMO APLICAR
+───────────────────────────────────────────────────────────────────
+
+Opção A — Copiar por cima (mais simples):
+  Extraia o conteúdo desta pasta DENTRO da raiz do app
+  (a pasta que contém package.json, src/, src-tauri/...),
+  aceitando substituir os arquivos existentes.
+
+Opção B — Via git (se o projeto for um repositório git):
+  Aplique o arquivo mudancas-v1.0.5.patch a partir da raiz do repo:
+      git apply mudancas-v1.0.5.patch
+  (o patch já contém os caminhos completos marcio-app/marcio-app/...)
+
+IMPORTANTE — Rebuild:
+  • O arquivo src-tauri/src/lib.rs exige RECOMPILAR o Rust
+    (npm run tauri:build) — sem isso, o comando get_app_version
+    novo não vai existir e a versão no "Sobre" volta a falhar
+    no app instalado (o fallback via /api/health continua valendo).
+  • Os arquivos src/** são TypeScript — basta reiniciar o bot
+    (ou rodar npm run build para gerar o bundle do painel).
+
+───────────────────────────────────────────────────────────────────
+O QUE MUDOU NESTE PACOTE
+───────────────────────────────────────────────────────────────────
+
+1) src-tauri/src/lib.rs
+   Fix: versão no "Sobre" mostrava "v—".
+   Novo comando get_app_version (lê a versão real do pacote Tauri)
+   + registro no invoke_handler.
+
+2) src/control/ControlPanel.ts
+   Fix: o servidor injeta a versão direto no HTML do painel ao
+   servir a página (defesa extra, independe de Tauri/fetch).
+
+3) src/control/public/index.html
+   Fix: loadAppVersion agora tenta Tauri → /api/health →
+   retry após 3s (com flag anti-loop).
+
+4) src/brain/Retroactive.ts
+   Fix: bot respondia mensagens ANTIGAS sem sentido ao iniciar.
+   • Mensagens "pending" de sessões anteriores viram "skip" no
+     boot (o momento certo de responder só existe na própria sessão).
+   • Focus hint: a IA agora sabe EXATAMENTE qual mensagem ela
+     escolheu responder (antes respondia "qualquer coisa" do
+     contexto — daí os risos/figurinhas fora de hora).
+
+5) src/brain/MarcioBrain.ts
+   Fix: contexto confuso fazia a IA "viajar".
+   • Contexto agora mostra idade relativa das mensagens
+     ([Nome, há 5 min]) e formatação por remetente.
+   • generateResponse aceita focusHint (usado pelo Retroactive).
+   • Mensagem que CITA outra pessoa (não o bot) deixa de ser
+     tratada como menção direta.
+
+6) changelog.json
+   Entradas da 1.0.5 no changelog do painel.
+
+───────────────────────────────────────────────────────────────────
+LISTA COMPLETA DE ARQUIVOS
+───────────────────────────────────────────────────────────────────
+
+  changelog.json
+  src/brain/MarcioBrain.ts
+  src/brain/Retroactive.ts
+  src/control/ControlPanel.ts
+  src/control/public/index.html
+  src-tauri/src/lib.rs
+  mudancas-v1.0.5.patch   (referência — diff completo)
+  LEIA-ME.txt             (este arquivo)

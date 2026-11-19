@@ -54,10 +54,13 @@ const DEFAULT_SYSTEM_PROMPT = [
   '',
   'CONSCIÊNCIA DO CONTEXTO (essencial — leia com atenção):',
   '- O histórico que você vê contém mensagens antigas. Nem tudo é dirigido a você.',
+  '- Cada mensagem mostra quem falou e quando: [Nome, há Xmin]: texto. Mensagens sem marcador de tempo são de AGORA.',
   '- ANTES de responder, entenda o que está acontecendo na conversa: quem falou com quem, sobre o que, e se faz sentido você intervir.',
   '- Se a última mensagem NÃO foi dirigida a você (alguém conversando com outro), não responda sem motivo.',
+  '- Se alguém tá respondendo OUTRA pessoa (msg citando terceiro), não interfira na conversa deles.',
   '- Se a última mensagem foi dirigida a você (chamou seu nome ou respondeu a você), responda de forma coerente com o que foi perguntado.',
   '- NUNCA responda uma pergunta que já foi respondida antes no contexto. Se alguém perguntou "qual seu nome?" e você já respondeu, não responda de novo.',
+  '- Pergunta com muito tempo (há 20min+) perdeu o momento — a conversa já passou. Não desenterra msg antiga.',
   '- NUNCA mude de assunto do nada. Continue o fluxo da conversa.',
   '',
   'NÃO ALUCINE (regra crítica):',
@@ -98,7 +101,7 @@ const DEFAULT_SYSTEM_PROMPT = [
   '- Exemplo do que fazer: "bom dia" / "vi sim" / "é mesmo" — sem risada, é só uma resposta normal.',
   '',
   'REGRAS ABSOLUTAS:',
-  '- Você VÊ o nome de quem falou no contexto (formato [Nome]: mensagem). Use isso pra entender quem é quem no grupo.',
+  '- O contexto mostra quem falou e quando: [Nome, há X]: mensagem. Use nome e tempo pra entender quem é quem e se a conversa ainda tá viva.',
   '- NUNCA cite o nome de quem falou na resposta, a menos que faça sentido natural (ex.: alguém perguntou "e o fulano?" — aí pode referenciar). Em geral, responde direto, o WhatsApp já mostra que é resposta.',
   '- NUNCA comece uma resposta com a palavra "assistant" — isso é erro de formatação. Você é um bot, não "assistant".',
   '- NUNCA use o formato "[Nome]:" na sua resposta. Esse formato é só do contexto (pra você saber quem falou). Sua resposta é só o texto, sem prefixo.',
@@ -224,6 +227,23 @@ const AI_DEFAULTS = {
   temperature: 0.75,
   stickerVault: true,
 };
+
+// ============================================================================
+// CONTEXT FORMAT INSTRUCTION — CORREÇÃO v1.0.5
+// ============================================================================
+// Injetada SEMPRE em generateResponse (antes do contexto), mesmo quando o
+// usuário tem system-prompt.txt customizado. Explica o formato real das msgs
+// do contexto ([Nome, há X]: texto) — sem isso a IA não sabe distinguir quem
+// fala com quem nem msg nova de msg antiga.
+const CONTEXT_FORMAT_INSTRUCTION = [
+  'FORMATO DO CONTEXTO (leia com atenção):',
+  '- Cada mensagem de gente aparece como: [Nome, há X]: texto. Ex.: [João, há 2min]: e aí galera.',
+  '- Mensagens SEM marcador de tempo (ex.: [Maria]: texto) são recentes — a conversa tá acontecendo AGORA.',
+  '- Mensagens do bot aparecem como mensagens do assistant/model (são suas, não repita o formato [Nome]:).',
+  '- USE o nome pra entender quem fala com quem. Se o João tá perguntando pra Maria, NÃO responda no lugar dela.',
+  '- USE o tempo pra saber se a conversa ainda tá viva. Pergunta de "há 25min" já foi respondida ou perdeu a hora — NÃO a responda de novo.',
+  '- Sua resposta deve se conectar com as mensagens MAIS RECENTES. Se a última msg tem muito tempo e ninguém te chamou, prefira [SILENCIO].',
+].join('\n');
 
 // ============================================================================
 // TIPOS
@@ -999,6 +1019,36 @@ export class MarcioBrain {
   // ===========================================================================
 
   /**
+   * CORREÇÃO v1.0.5 — idade relativa de uma msg pro prefixo do contexto.
+   * Retorna '' se a msg é recente (< 3 min) pra não poluir a conversa viva,
+   * ou ', há Xmin' / ', há Xh' / ', há Xd' pra msgs mais velhas.
+   */
+  private formatContextAge(timestamp?: number): string {
+    if (!timestamp) return '';
+    const ageMs = Date.now() - timestamp;
+    if (ageMs < 3 * 60 * 1000) return '';  // conversa acontecendo agora — sem marcador
+    const min = Math.floor(ageMs / 60000);
+    if (min < 60) return `, há ${min}min`;
+    const hours = Math.floor(min / 60);
+    if (hours < 24) return `, há ${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `, há ${days}d`;
+  }
+
+  /**
+   * CORREÇÃO v1.0.5 — formata uma msg do contexto pro prompt.
+   * Msgs de gente: "[Nome, há X]: texto" (a IA finalmente sabe quem fala
+   * e quando). Msgs do próprio bot: texto puro (role assistant/model já
+   * identifica que é o bot falando).
+   */
+  private formatContextContent(m: { role: 'user' | 'assistant'; content: string; sender?: string; timestamp?: number }): string {
+    if (m.role === 'assistant') return m.content;
+    const sender = (m.sender || 'Alguém').trim() || 'Alguém';
+    const age = this.formatContextAge(m.timestamp);
+    return `[${sender}${age}]: ${m.content}`;
+  }
+
+  /**
    * Gera uma resposta da IA pro chat.
    *
    * ORDEM DO PROMPT (preservada byte-a-byte do index.js velho):
@@ -1013,7 +1063,7 @@ export class MarcioBrain {
    *
    * @returns Texto limpo (marcadores [MEMORIA:] removidos, [SILENCIO]/[FIGURINHA]/[BREAK] preservados).
    */
-  async generateResponse(chatId: string, isDirect: boolean): Promise<string> {
+  async generateResponse(chatId: string, isDirect: boolean, focusHint?: string): Promise<string> {
     // Reset do contador diário se a data mudou
     const today = new Date().toDateString();
     if (today !== this.aiRequestCountDate) {
@@ -1035,9 +1085,19 @@ export class MarcioBrain {
       messages.push({ role: 'system', content: directivesText });
     }
 
-    // Contexto da conversa
+    // CORREÇÃO v1.0.5 — FORMATO DO CONTEXTO:
+    // Antes, as msgs do contexto iam SEM nome e SEM idade (no Gemini o campo
+    // `name` nem era enviado — a API não suporta). A IA via textos anônimos e
+    // sem noção de tempo: não sabia quem falava com quem, se uma pergunta já
+    // tinha sido respondida, ou se a "última" msg era de 30s ou 3h atrás.
+    // Isso era a causa raiz de responder perguntas nada a ver / antigas.
+    // Agora cada msg de gente vai como "[Nome, há X]: texto", e esta instrução
+    // (sempre injetada, mesmo com system-prompt.txt customizado) explica isso.
+    messages.push({ role: 'system', content: CONTEXT_FORMAT_INSTRUCTION });
+
+    // Contexto da conversa — msgs de gente com prefixo [Nome, há X]:
     messages.push(...ctx.map(m => {
-      const entry: any = { role: m.role, content: m.content };
+      const entry: any = { role: m.role, content: this.formatContextContent(m) };
       if (m.role === 'user' && m.sender) {
         entry.name = m.sender;
       }
@@ -1079,6 +1139,13 @@ export class MarcioBrain {
         role: 'system',
         content: 'Alguém está falando diretamente com você agora. Responda de forma natural e breve.',
       });
+    }
+
+    // CORREÇÃO v1.0.5 — focus hint (usado pelo Retroactive):
+    // diz EXATAMENTE qual mensagem o bot decidiu responder, pra IA não
+    // responder outra coisa do contexto no lugar.
+    if (focusHint) {
+      messages.push({ role: 'system', content: focusHint });
     }
 
     // Info do vault de figurinhas (se StickerVault existir na Fase 3)
@@ -2635,6 +2702,24 @@ export class MarcioBrain {
           this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, msg.body ?? (isAudio ? '[audio]' : ''), 'skip');
         }
         return;
+      }
+
+      // CORREÇÃO v1.0.5 — msg que CITA outra pessoa (não o bot) é conversa
+      // entre terceiros. O bot não deve entrar por sorte em resposta alheia
+      // (era uma das causas de "responder perguntas nada a ver no chat").
+      // Marca pending — o retroativo ainda pode reconsiderar depois se a
+      // conversa realmente interessar.
+      if (msg.hasQuotedMsg) {
+        try {
+          const quotedThird = await msg.getQuotedMessage();
+          if (quotedThird && !quotedThird.fromMe) {
+            this.app.debug('AI-CHANCE', `msg cita terceiro (não o bot) — pulando sorteio de resposta`);
+            if (this.app.retroactive && msg.id?._serialized) {
+              this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, msg.body ?? '', 'pending');
+            }
+            return;
+          }
+        } catch { /* sem a citação — segue o fluxo normal */ }
       }
 
       const last = this.lastAutoResponse.get(chatId) || 0;

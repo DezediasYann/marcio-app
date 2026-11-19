@@ -1,0 +1,340 @@
+diff --git a/marcio-app/marcio-app/changelog.json b/marcio-app/marcio-app/changelog.json
+index 4a0e89e..17baa2b 100755
+--- a/marcio-app/marcio-app/changelog.json
++++ b/marcio-app/marcio-app/changelog.json
+@@ -1166,8 +1166,30 @@
+             "Setup Wizard: não perde mais a configuração se você terminar o assistente antes do bot subir — ele espera (até 90s) com feedback no botão",
+             "A lista de comandos do wizard espera o bot responder em vez de mostrar erro seco"
+           ]
++        },
++        {
++          "icon": "🐛",
++          "title": "Fix: versão no Sobre",
++          "items": [
++            "Corrigido: seção Sobre mostrava \"v— · Painel de controle\" — o painel chamava o comando Rust get_app_version, mas ele nunca tinha sido implementado (o invoke falhava com command not found)",
++            "Comando get_app_version agora existe de verdade no Rust — lê a versão do tauri.conf.json (mesma fonte que o updater usa)",
++            "O servidor do painel injeta a versão direto no HTML ao servir a página — mostra a versão certa até no navegador, sem depender de fetch nem do Tauri",
++            "Fallback mais robusto: se o Tauri e o /api/health falharem, tenta de novo após 3s em vez de deixar o \"v—\" pra sempre"
++          ]
++        },
++        {
++          "icon": "🧠",
++          "title": "Fix: IA \"burra\" — contexto cego + respostas antigas",
++          "items": [
++            "Corrigido: a IA não sabia QUEM falava NEM QUANDO — no Gemini (provider padrão) os nomes eram descartados e as mensagens não tinham marcação de tempo. Ela via textos anônimos: respondia pergunta direcionada a outra pessoa, desenterrava pergunta já respondida e ria de piada que já passou",
++            "Agora cada mensagem do contexto vai como [Nome, há Xmin]: texto — a IA sabe quem fala com quem e se a conversa ainda tá viva (msgs com 3min+ mostram a idade; antigas mostram há Xh/d)",
++            "Instrução de formato injetada sempre (mesmo com system-prompt.txt customizado): não responda no lugar de outra pessoa, não desenterre msg antiga, prefira [SILENCIO] se a conversa esfriou",
++            "Corrigido: bot respondia mensagens antigas sem sentido logo após iniciar — msgs \"pending\" do sistema retroativo sobreviviam o restart e eram respondidas até 60min depois. Agora pendências da sessão anterior são descartadas no boot",
++            "Corrigido: na resposta retroativa, a IA não sabia qual mensagem tinha \"escolhido\" responder — respondia qualquer coisa do contexto. Agora recebe a msg exata (com autor e idade) como foco da resposta",
++            "Corrigido: bot entrava por sorte em conversa entre terceiros — mensagem que cita outra pessoa (não o bot) não entra mais no sorteio de resposta automática"
++          ]
+         }
+       ]
+     }
+   ]
+-}
+\ No newline at end of file
++}
+diff --git a/marcio-app/marcio-app/src-tauri/src/lib.rs b/marcio-app/marcio-app/src-tauri/src/lib.rs
+index 41976f8..dda4ccf 100755
+--- a/marcio-app/marcio-app/src-tauri/src/lib.rs
++++ b/marcio-app/marcio-app/src-tauri/src/lib.rs
+@@ -521,6 +521,17 @@ fn notify(app: tauri::AppHandle, title: String, body: String) {
+     send_notification(&app, &title, &body);
+ }
+ 
++/// Retorna a versão do app (do tauri.conf.json — mesma fonte que o updater usa).
++/// CORREÇÃO v1.0.5: o painel chamava este comando no "Sobre", mas ele nunca
++/// foi implementado/registrado — o invoke falhava com "command not found" e a
++/// versão ficava em "v— · Painel de controle".
++#[tauri::command]
++fn get_app_version(app: tauri::AppHandle) -> String {
++    let version = app.package_info().version.to_string();
++    println!("[TAURI] get_app_version → {}", version);
++    version
++}
++
+ #[tauri::command]
+ fn is_autostart_enabled(app: tauri::AppHandle) -> bool {
+     if let Some(autostart) = app.try_state::<tauri_plugin_autostart::AutoLaunchManager>() {
+@@ -841,6 +852,7 @@ pub fn run() {
+         })
+         .invoke_handler(tauri::generate_handler![
+             notify,
++            get_app_version,
+             is_autostart_enabled,
+             toggle_autostart,
+             open_main_window,
+diff --git a/marcio-app/marcio-app/src/brain/MarcioBrain.ts b/marcio-app/marcio-app/src/brain/MarcioBrain.ts
+index 946f7d2..fdb8086 100755
+--- a/marcio-app/marcio-app/src/brain/MarcioBrain.ts
++++ b/marcio-app/marcio-app/src/brain/MarcioBrain.ts
+@@ -54,10 +54,13 @@ const DEFAULT_SYSTEM_PROMPT = [
+   '',
+   'CONSCIÊNCIA DO CONTEXTO (essencial — leia com atenção):',
+   '- O histórico que você vê contém mensagens antigas. Nem tudo é dirigido a você.',
++  '- Cada mensagem mostra quem falou e quando: [Nome, há Xmin]: texto. Mensagens sem marcador de tempo são de AGORA.',
+   '- ANTES de responder, entenda o que está acontecendo na conversa: quem falou com quem, sobre o que, e se faz sentido você intervir.',
+   '- Se a última mensagem NÃO foi dirigida a você (alguém conversando com outro), não responda sem motivo.',
++  '- Se alguém tá respondendo OUTRA pessoa (msg citando terceiro), não interfira na conversa deles.',
+   '- Se a última mensagem foi dirigida a você (chamou seu nome ou respondeu a você), responda de forma coerente com o que foi perguntado.',
+   '- NUNCA responda uma pergunta que já foi respondida antes no contexto. Se alguém perguntou "qual seu nome?" e você já respondeu, não responda de novo.',
++  '- Pergunta com muito tempo (há 20min+) perdeu o momento — a conversa já passou. Não desenterra msg antiga.',
+   '- NUNCA mude de assunto do nada. Continue o fluxo da conversa.',
+   '',
+   'NÃO ALUCINE (regra crítica):',
+@@ -98,7 +101,7 @@ const DEFAULT_SYSTEM_PROMPT = [
+   '- Exemplo do que fazer: "bom dia" / "vi sim" / "é mesmo" — sem risada, é só uma resposta normal.',
+   '',
+   'REGRAS ABSOLUTAS:',
+-  '- Você VÊ o nome de quem falou no contexto (formato [Nome]: mensagem). Use isso pra entender quem é quem no grupo.',
++  '- O contexto mostra quem falou e quando: [Nome, há X]: mensagem. Use nome e tempo pra entender quem é quem e se a conversa ainda tá viva.',
+   '- NUNCA cite o nome de quem falou na resposta, a menos que faça sentido natural (ex.: alguém perguntou "e o fulano?" — aí pode referenciar). Em geral, responde direto, o WhatsApp já mostra que é resposta.',
+   '- NUNCA comece uma resposta com a palavra "assistant" — isso é erro de formatação. Você é um bot, não "assistant".',
+   '- NUNCA use o formato "[Nome]:" na sua resposta. Esse formato é só do contexto (pra você saber quem falou). Sua resposta é só o texto, sem prefixo.',
+@@ -225,6 +228,23 @@ const AI_DEFAULTS = {
+   stickerVault: true,
+ };
+ 
++// ============================================================================
++// CONTEXT FORMAT INSTRUCTION — CORREÇÃO v1.0.5
++// ============================================================================
++// Injetada SEMPRE em generateResponse (antes do contexto), mesmo quando o
++// usuário tem system-prompt.txt customizado. Explica o formato real das msgs
++// do contexto ([Nome, há X]: texto) — sem isso a IA não sabe distinguir quem
++// fala com quem nem msg nova de msg antiga.
++const CONTEXT_FORMAT_INSTRUCTION = [
++  'FORMATO DO CONTEXTO (leia com atenção):',
++  '- Cada mensagem de gente aparece como: [Nome, há X]: texto. Ex.: [João, há 2min]: e aí galera.',
++  '- Mensagens SEM marcador de tempo (ex.: [Maria]: texto) são recentes — a conversa tá acontecendo AGORA.',
++  '- Mensagens do bot aparecem como mensagens do assistant/model (são suas, não repita o formato [Nome]:).',
++  '- USE o nome pra entender quem fala com quem. Se o João tá perguntando pra Maria, NÃO responda no lugar dela.',
++  '- USE o tempo pra saber se a conversa ainda tá viva. Pergunta de "há 25min" já foi respondida ou perdeu a hora — NÃO a responda de novo.',
++  '- Sua resposta deve se conectar com as mensagens MAIS RECENTES. Se a última msg tem muito tempo e ninguém te chamou, prefira [SILENCIO].',
++].join('\n');
++
+ // ============================================================================
+ // TIPOS
+ // ============================================================================
+@@ -998,6 +1018,36 @@ export class MarcioBrain {
+   // GENERATE RESPONSE — monta o prompt, chama IA, retorna texto limpo
+   // ===========================================================================
+ 
++  /**
++   * CORREÇÃO v1.0.5 — idade relativa de uma msg pro prefixo do contexto.
++   * Retorna '' se a msg é recente (< 3 min) pra não poluir a conversa viva,
++   * ou ', há Xmin' / ', há Xh' / ', há Xd' pra msgs mais velhas.
++   */
++  private formatContextAge(timestamp?: number): string {
++    if (!timestamp) return '';
++    const ageMs = Date.now() - timestamp;
++    if (ageMs < 3 * 60 * 1000) return '';  // conversa acontecendo agora — sem marcador
++    const min = Math.floor(ageMs / 60000);
++    if (min < 60) return `, há ${min}min`;
++    const hours = Math.floor(min / 60);
++    if (hours < 24) return `, há ${hours}h`;
++    const days = Math.floor(hours / 24);
++    return `, há ${days}d`;
++  }
++
++  /**
++   * CORREÇÃO v1.0.5 — formata uma msg do contexto pro prompt.
++   * Msgs de gente: "[Nome, há X]: texto" (a IA finalmente sabe quem fala
++   * e quando). Msgs do próprio bot: texto puro (role assistant/model já
++   * identifica que é o bot falando).
++   */
++  private formatContextContent(m: { role: 'user' | 'assistant'; content: string; sender?: string; timestamp?: number }): string {
++    if (m.role === 'assistant') return m.content;
++    const sender = (m.sender || 'Alguém').trim() || 'Alguém';
++    const age = this.formatContextAge(m.timestamp);
++    return `[${sender}${age}]: ${m.content}`;
++  }
++
+   /**
+    * Gera uma resposta da IA pro chat.
+    *
+@@ -1013,7 +1063,7 @@ export class MarcioBrain {
+    *
+    * @returns Texto limpo (marcadores [MEMORIA:] removidos, [SILENCIO]/[FIGURINHA]/[BREAK] preservados).
+    */
+-  async generateResponse(chatId: string, isDirect: boolean): Promise<string> {
++  async generateResponse(chatId: string, isDirect: boolean, focusHint?: string): Promise<string> {
+     // Reset do contador diário se a data mudou
+     const today = new Date().toDateString();
+     if (today !== this.aiRequestCountDate) {
+@@ -1035,9 +1085,19 @@ export class MarcioBrain {
+       messages.push({ role: 'system', content: directivesText });
+     }
+ 
+-    // Contexto da conversa
++    // CORREÇÃO v1.0.5 — FORMATO DO CONTEXTO:
++    // Antes, as msgs do contexto iam SEM nome e SEM idade (no Gemini o campo
++    // `name` nem era enviado — a API não suporta). A IA via textos anônimos e
++    // sem noção de tempo: não sabia quem falava com quem, se uma pergunta já
++    // tinha sido respondida, ou se a "última" msg era de 30s ou 3h atrás.
++    // Isso era a causa raiz de responder perguntas nada a ver / antigas.
++    // Agora cada msg de gente vai como "[Nome, há X]: texto", e esta instrução
++    // (sempre injetada, mesmo com system-prompt.txt customizado) explica isso.
++    messages.push({ role: 'system', content: CONTEXT_FORMAT_INSTRUCTION });
++
++    // Contexto da conversa — msgs de gente com prefixo [Nome, há X]:
+     messages.push(...ctx.map(m => {
+-      const entry: any = { role: m.role, content: m.content };
++      const entry: any = { role: m.role, content: this.formatContextContent(m) };
+       if (m.role === 'user' && m.sender) {
+         entry.name = m.sender;
+       }
+@@ -1081,6 +1141,13 @@ export class MarcioBrain {
+       });
+     }
+ 
++    // CORREÇÃO v1.0.5 — focus hint (usado pelo Retroactive):
++    // diz EXATAMENTE qual mensagem o bot decidiu responder, pra IA não
++    // responder outra coisa do contexto no lugar.
++    if (focusHint) {
++      messages.push({ role: 'system', content: focusHint });
++    }
++
+     // Info do vault de figurinhas (se StickerVault existir na Fase 3)
+     if (this.app.stickers) {
+       const stickerInfo = this.app.stickers.buildVaultInfo();
+@@ -2637,6 +2704,24 @@ export class MarcioBrain {
+         return;
+       }
+ 
++      // CORREÇÃO v1.0.5 — msg que CITA outra pessoa (não o bot) é conversa
++      // entre terceiros. O bot não deve entrar por sorte em resposta alheia
++      // (era uma das causas de "responder perguntas nada a ver no chat").
++      // Marca pending — o retroativo ainda pode reconsiderar depois se a
++      // conversa realmente interessar.
++      if (msg.hasQuotedMsg) {
++        try {
++          const quotedThird = await msg.getQuotedMessage();
++          if (quotedThird && !quotedThird.fromMe) {
++            this.app.debug('AI-CHANCE', `msg cita terceiro (não o bot) — pulando sorteio de resposta`);
++            if (this.app.retroactive && msg.id?._serialized) {
++              this.app.retroactive.markDecision(chatId, msg.id._serialized, senderName, msg.body ?? '', 'pending');
++            }
++            return;
++          }
++        } catch { /* sem a citação — segue o fluxo normal */ }
++      }
++
+       const last = this.lastAutoResponse.get(chatId) || 0;
+       if (Date.now() - last < AI_DEFAULTS.cooldownMs) {
+         // Cooldown ativo — candidata pra retroativo
+diff --git a/marcio-app/marcio-app/src/brain/Retroactive.ts b/marcio-app/marcio-app/src/brain/Retroactive.ts
+index 5122529..125dad1 100755
+--- a/marcio-app/marcio-app/src/brain/Retroactive.ts
++++ b/marcio-app/marcio-app/src/brain/Retroactive.ts
+@@ -128,12 +128,31 @@ export class Retroactive {
+ 
+   /**
+    * Carrega decision-log.json do disco pro Map. Chamado no boot.
++   *
++   * CORREÇÃO v1.0.5: msgs 'pending' de sessões anteriores viram 'skip'.
++   * Antes, o bot reiniciava e o check() (10min depois do boot) respondia
++   * msgs pendentes de ATÉ 60min antes do desligamento — com o contexto
++   * já evoluiu e o hint isDirect=true (mentira). Era a causa do bot
++   * "responder mensagens antigas de forma sem sentido" logo após iniciar.
++   * O momento de uma msg que o bot perdeu só existe dentro da própria sessão.
+    */
+   load(): void {
+     try {
+       const data = JSON.parse(fs.readFileSync(this.app.dataPath('decision-log.json'), 'utf8'));
++      let stalePendings = 0;
+       for (const [chatId, entries] of Object.entries(data)) {
+-        this.decisionLog.set(chatId, entries as DecisionEntry[]);
++        const list = entries as DecisionEntry[];
++        for (const e of list) {
++          if (e.decision === 'pending') {
++            e.decision = 'skip';
++            stalePendings++;
++          }
++        }
++        this.decisionLog.set(chatId, list);
++      }
++      if (stalePendings > 0) {
++        this.dirty = true;
++        this.app.log('RETRO', `${stalePendings} msg(s) pending da sessão anterior marcadas como skip — bot não responde msg antiga depois de reiniciar`);
+       }
+       this.app.debug('DECISION', `log carregado: ${this.decisionLog.size} chat(s) com decisões`);
+     } catch {
+@@ -910,8 +929,21 @@ export class Retroactive {
+         };
+ 
+         try {
++          // CORREÇÃO v1.0.5 — focus hint: diz EXATAMENTE qual msg foi escolhida.
++          // Antes, generateResponse(chatId, true) era chamado sem a IA saber qual
++          // msg ela "escolheu" — a IA olhava o contexto e respondia qualquer coisa
++          // (às vezes nada a ver com a msg escolhida, às vezes rindo do nada).
++          // Agora a instrução aponta pra msg certa.
++          const chosenMinsAgo = Math.max(1, Math.round((now - chosen.timestamp) / 60000));
++          const focusHint = [
++            `CONTEXTO DA RESPOSTA: você decidiu voltar numa mensagem de ${chosen.senderName || 'alguém'} enviada há ${chosenMinsAgo} min nesta conversa:`,
++            `"${(chosen.text || '').slice(0, 200)}"`,
++            `Responda ESSA mensagem especificamente, de forma natural (pode referenciar o que ela falou).`,
++            `Se ela já perdeu completamente o sentido (a conversa já mudou muito de assunto), responda só [SILENCIO].`,
++          ].join('\n');
++
+           // isDirect=true faz a IA responder naturalmente ao contexto atual
+-          const reply = await this.app.brain.generateResponse(chatId, true);
++          const reply = await this.app.brain.generateResponse(chatId, true, focusHint);
+ 
+           // [SILENCIO] ou vazio: desiste
+           if (reply && /^\s*\[SILENCIO\]\s*$/i.test(reply.trim())) {
+diff --git a/marcio-app/marcio-app/src/control/ControlPanel.ts b/marcio-app/marcio-app/src/control/ControlPanel.ts
+index f983d15..9ad92c3 100755
+--- a/marcio-app/marcio-app/src/control/ControlPanel.ts
++++ b/marcio-app/marcio-app/src/control/ControlPanel.ts
+@@ -2388,7 +2388,16 @@ export class ControlPanel {
+   private serveIndex(res: ServerResponse): void {
+     const filePath = path.join(this.publicDir, 'index.html');
+     try {
+-      const html = fs.readFileSync(filePath, 'utf8');
++      let html = fs.readFileSync(filePath, 'utf8');
++      // CORREÇÃO v1.0.5: injeta a versão real no placeholder do "Sobre" na
++      // hora de servir o HTML — à prova de falhas (mostra a versão certa
++      // mesmo se o invoke do Tauri e o fetch do /api/health falharem no
++      // cliente). O loadAppVersion() do frontend ainda refina depois.
++      const version = this.getCurrentVersion();
++      html = html.replace(
++        /(id="aboutVersion">\s*)v—/,
++        `$1v${version}`
++      );
+       // Cache-Control agressivo: no-store + no-cache + must-revalidate.
+       // Sem isso, o Edge/Tauri WebView2 cacheia o HTML e o usuário roda
+       // versão velha mesmo depois de atualizar o arquivo no disco.
+diff --git a/marcio-app/marcio-app/src/control/public/index.html b/marcio-app/marcio-app/src/control/public/index.html
+index c0def9c..159c2e5 100755
+--- a/marcio-app/marcio-app/src/control/public/index.html
++++ b/marcio-app/marcio-app/src/control/public/index.html
+@@ -4538,7 +4538,11 @@
+     }
+ 
+     // === Versão do app (mostra no Sobre) ===
+-    async function loadAppVersion() {
++    // CORREÇÃO v1.0.5: antes mostrava "v—" porque o comando Rust
++    // get_app_version não existia (invoke falhava) e o fallback do
++    // /api/health não tinha retry. Agora: Tauri → API → retry em 3s.
++    // (O servidor também injeta a versão direto no HTML ao servir a página.)
++    async function loadAppVersion(retry = true) {
+       const el = $('#aboutVersion');
+       if (!el) return;
+       // Tenta via Tauri primeiro (mais confiável — pega do package_info)
+@@ -4560,9 +4564,14 @@
+         if (h.version) {
+           el.textContent = `v${h.version} · Painel de controle`;
+           console.log('[MARCIO] versão do app (API):', h.version);
++          return;
+         }
+       } catch {
+-        console.warn('[MARCIO] não conseguiu obter versão do app');
++        console.warn('[MARCIO] não conseguiu obter versão via /api/health');
++      }
++      // Se ainda tá com o placeholder e não foi retry ainda, tenta de novo em 3s
++      if (retry && el.textContent && el.textContent.startsWith('v—')) {
++        setTimeout(() => loadAppVersion(false), 3000);
+       }
+     }
+ 
